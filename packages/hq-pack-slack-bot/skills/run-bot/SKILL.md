@@ -86,7 +86,9 @@ Examples:
      (emitted on the next channel-refresh tick)
    - `CHANNEL_LEFT channel=<C…>` — bot was removed from a channel
    - `CHANNELS_REFRESHED count=<N> (was <M>)` — count actually changed
-   - `RECOVERED [users.conversations]` — after a previously-emitted `API_ERROR` cleared
+   - `LEFT_CHANNEL channel=<C…> reason=creator_absent` — the creator is no longer a member of this channel, so the bot left it. Per-channel state (cursor, thread cursors, membership sentinel) is cleaned up so a re-invite starts fresh.
+   - `LEAVE_FAILED channel=<C…> error=<slack-error>` — `conversations.leave` rejected the call (most commonly `missing_scope` if `channels:leave`/`groups:leave`/`mpim:leave` haven't been added). The channel is KEPT in the polling set so mentions still flow; add the scope and the next tick will succeed.
+   - `RECOVERED [users.conversations|conversations.members]` — after a previously-emitted `API_ERROR` cleared
 
 3. **Do not narrate every event back to the user verbatim.** The worker
    is the user-facing actor (it posts in Slack). Tell the user once
@@ -131,6 +133,17 @@ Examples:
   schedules per-thread polling via `conversations.replies`. State
   lives in `/tmp/hq-slack-bot.<slug>.threads/<channel>:<thread_ts>`.
   Stale threads are GC'd after `MENTION_THREAD_GC_SECS` (default 24h).
+- **Creator-presence enforcement.** Every channel-refresh tick, the
+  watcher confirms the creator (`creator:` field in `--check` output)
+  is still a member of each non-DM channel via `conversations.members`.
+  If absent, the bot leaves the channel via `conversations.leave`. The
+  check is cached for `MENTION_MEMBERSHIP_CHECK_SECS` (default 300s) to
+  cap API calls. DMs are always kept (the bot can't leave an IM and the
+  worker-side DM gate already silences non-creator DMs). Disable by
+  setting `MENTION_LEAVE_ON_CREATOR_ABSENT=0` — the watcher will still
+  log who's missing, just won't leave. Required scopes are listed under
+  Dependencies; without them the watcher emits `LEAVE_FAILED` once per
+  channel per tick.
 - **Never** spawn more than one worker per `ts`. The watcher dedupes
   via `/tmp/hq-slack-bot.<bot-slug>.spawned/<ts>` sentinels.
 - **Never** include `AskUserQuestion` in the worker's allowed tools.
@@ -166,7 +179,12 @@ creator id, so you can confirm before arming.
   at minimum `channels:history`, `channels:read`, `chat:write`,
   `groups:history`, `groups:read`, `im:history`, `im:read`,
   `mpim:history`, `mpim:read`, `users:read`, `users:read.email`, and
-  `app_mentions:read`). Created by `/hq-new-bot` and installed
+  `app_mentions:read`). For creator-presence enforcement (auto-leave
+  when the creator is absent), the bot ALSO needs `channels:leave`,
+  `groups:leave`, and `mpim:leave` — without these scopes the watcher
+  surfaces a `LEAVE_FAILED error=missing_scope` event each tick and
+  the channel stays in the polling set. Created by `/hq-new-bot` and
+  installed
   per-workspace via the OAuth callback.
 - `personal/tools/claude-worker-template.sh` (synced).
 - `hq` CLI on PATH.

@@ -46,8 +46,19 @@
 # the cursor is initialized to (now - MENTION_BACKFILL_SECS, default 600s)
 # rather than "now". This catches @-mentions that landed in the gap
 # between the bot being invited and the next channel-refresh tick.
-# The spawn-dedupe sentinel ($SPAWN_DIR/<ts>.spawned) guarantees a message
-# is never replied to twice across consecutive arms.
+# The spawn-dedupe sentinel ($SPAWN_DIR/<thread_ts>.spawned) is keyed
+# on thread_ts (not the individual message ts), so subsequent @-mentions
+# in the same thread are handled by the in-flight worker rather than
+# spawning a duplicate.
+#
+# Creator-presence enforcement: every refresh tick, the watcher confirms
+# the creator is still a member of each non-DM channel via
+# conversations.members. If absent — and MENTION_LEAVE_ON_CREATOR_ABSENT
+# is on (default) — the bot leaves the channel via conversations.leave.
+# The check is cached for MENTION_MEMBERSHIP_CHECK_SECS (default 300s).
+# Requires channels:leave / groups:leave / mpim:leave scopes on the
+# Slack app; without them the watcher emits LEAVE_FAILED and keeps the
+# channel in the polling set.
 
 set -u
 set -o pipefail
@@ -170,10 +181,15 @@ CURSOR_DIR="/tmp/hq-slack-bot.${BOT_SLUG}.cursors"
 # content is the reply cursor (numeric ts). mtime tracks the last poll;
 # GC drops threads whose cursor is older than $THREAD_GC_SECS.
 THREAD_DIR="/tmp/hq-slack-bot.${BOT_SLUG}.threads"
+# Per-channel creator-membership cache: mtime = last successful check
+# (creator confirmed present). Re-checked when older than
+# MEMBERSHIP_CHECK_SECS, leaving the channel via conversations.leave
+# if the creator is no longer a member.
+MEMBERSHIP_DIR="/tmp/hq-slack-bot.${BOT_SLUG}.membership"
 LOG_DIR="${MENTION_LOG_DIR:-$HQ_ROOT/workspace/logs/hq-slack-bot/$BOT_SLUG}"
 WATCHER_ALIVE_FILE="${MENTION_WATCHER_ALIVE_FILE:-/tmp/hq-slack-bot.${BOT_SLUG}.alive}"
 
-mkdir -p "$SPAWN_DIR" "$CURSOR_DIR" "$THREAD_DIR" "$LOG_DIR"
+mkdir -p "$SPAWN_DIR" "$CURSOR_DIR" "$THREAD_DIR" "$MEMBERSHIP_DIR" "$LOG_DIR"
 
 # ── Pre-flight: file deps ──────────────────────────────────────────────────
 for f in "$PARSE_MENTIONS"; do
@@ -345,6 +361,14 @@ THREAD_GC_SECS="${MENTION_THREAD_GC_SECS:-86400}"
 # Per-loop cap on threads polled (sorted by cursor mtime, freshest first).
 # Bounds the work each tick at scale; rarely hit in practice.
 THREAD_POLL_CAP="${MENTION_THREAD_POLL_CAP:-50}"
+# Membership verification: every MENTION_MEMBERSHIP_CHECK_SECS, the
+# watcher confirms the creator is still a member of each channel the
+# bot is in. If not — and MENTION_LEAVE_ON_CREATOR_ABSENT is on — the
+# bot leaves the channel via conversations.leave. Skipped for DMs (the
+# bot can't leave an IM and the DM gate already silences non-creator
+# DMs) and when the creator id is unresolved.
+MEMBERSHIP_CHECK_SECS="${MENTION_MEMBERSHIP_CHECK_SECS:-300}"
+LEAVE_ON_CREATOR_ABSENT="${MENTION_LEAVE_ON_CREATOR_ABSENT:-1}"
 
 # ── Pre-flight: sample channel list call ───────────────────────────────────
 # Surface Slack API failures (missing_scope, invalid_auth, ratelimited)
@@ -385,7 +409,13 @@ done <<< "$CHANNELS"
 
 PREV_ERR=""
 PREV_LIST_ERR=""
-LAST_CHANNEL_REFRESH="$(date +%s)"
+PREV_MEMBERSHIP_ERR=""
+# Force the first main-loop iteration to enter the refresh branch
+# immediately, so the creator-presence check runs at arm time instead
+# of waiting a full CHANNEL_REFRESH_SECS interval. The check is cheap
+# (cached for MEMBERSHIP_CHECK_SECS) and gives the bot a chance to
+# leave wrong-room channels before workers can be dispatched.
+LAST_CHANNEL_REFRESH=0
 SCRIPT_HASH="$(sha256sum "$0" 2>/dev/null | awk '{print substr($1,1,12)}')"
 
 echo "WATCHER_ARMED bot=$BOT_SLUG workspace=$WORKSPACE scope=$SCOPE_LABEL user_id=$BOT_USER_ID channels=$CHANNEL_COUNT creator=${CREATOR_ID:-<none>} creator_src=${CREATOR_SRC:-none} hash=$SCRIPT_HASH"
@@ -418,6 +448,131 @@ track_thread() {
   if [ ! -e "$f" ]; then
     printf '%s' "$thread_ts" > "$f"
   fi
+}
+
+# channel_has_creator <channel>
+#   Returns 0 (true)  — creator is a member, cache touched
+#           1 (false) — creator is not a member; channel should be left
+#           2 (skip)  — API error or unresolved creator; do nothing
+# Cache-aware: a fresh sentinel under $MEMBERSHIP_DIR (mtime within
+# MEMBERSHIP_CHECK_SECS) short-circuits the API call.
+channel_has_creator() {
+  local channel="$1"
+  if [ -z "$CREATOR_ID" ]; then
+    return 2
+  fi
+  local sentinel="$MEMBERSHIP_DIR/$channel"
+  if [ -e "$sentinel" ]; then
+    local mtime now
+    mtime="$(stat -c %Y "$sentinel" 2>/dev/null || echo 0)"
+    now="$(date +%s)"
+    if [ "$((now - mtime))" -lt "$MEMBERSHIP_CHECK_SECS" ]; then
+      return 0
+    fi
+  fi
+  local cursor="" found=0 err=""
+  while :; do
+    local url="https://slack.com/api/conversations.members?channel=${channel}&limit=200"
+    if [ -n "$cursor" ]; then url="${url}&cursor=${cursor}"; fi
+    local resp
+    resp="$(curl -fsS -H "Authorization: Bearer $TOKEN" "$url" 2>/dev/null)" || resp=""
+    if [ -z "$resp" ]; then
+      err="curl_failed"
+      break
+    fi
+    local res
+    res="$(printf '%s' "$resp" | CREATOR="$CREATOR_ID" python3 -c '
+import json, os, sys
+try:
+    d = json.JSONDecoder(strict=False).decode(sys.stdin.read())
+except Exception as e:
+    print("err=parse:" + str(e).split("\n",1)[0]); sys.exit(0)
+if not d.get("ok"):
+    print("err=" + (d.get("error") or "unknown")); sys.exit(0)
+creator = os.environ.get("CREATOR", "")
+members = d.get("members") or []
+if creator and creator in members:
+    print("found=1")
+else:
+    print("found=0")
+print("next=" + ((d.get("response_metadata") or {}).get("next_cursor") or ""))
+' 2>/dev/null || echo "err=python_failed")"
+    if echo "$res" | grep -q '^err='; then
+      err="$(echo "$res" | sed -n 's/^err=//p' | head -1)"
+      break
+    fi
+    if echo "$res" | grep -q '^found=1$'; then
+      found=1
+      break
+    fi
+    cursor="$(echo "$res" | sed -n 's/^next=//p' | head -1)"
+    [ -z "$cursor" ] && break
+  done
+  if [ -n "$err" ]; then
+    # Be conservative: surface error but don't leave on a transient
+    # failure (a network blip would otherwise evict the bot).
+    if [ "$err" != "$PREV_MEMBERSHIP_ERR" ]; then
+      echo "API_ERROR conversations.members:${err} channel=$channel"
+      PREV_MEMBERSHIP_ERR="$err"
+    fi
+    return 2
+  fi
+  if [ "$found" -eq 1 ]; then
+    touch "$sentinel"
+    if [ -n "$PREV_MEMBERSHIP_ERR" ]; then
+      echo "RECOVERED conversations.members"
+      PREV_MEMBERSHIP_ERR=""
+    fi
+    return 0
+  fi
+  # Creator confirmed absent. Remove any stale sentinel so a re-invite
+  # forces a fresh check on the next refresh tick.
+  rm -f "$sentinel"
+  return 1
+}
+
+# leave_channel <channel>  → 0 on success, 1 on API failure.
+# Emits LEFT_CHANNEL on success and LEAVE_FAILED with the Slack error
+# code (likely `missing_scope` if the app lacks channels:leave /
+# groups:leave / mpim:leave).
+leave_channel() {
+  local channel="$1"
+  local resp
+  resp="$(curl -fsS -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/x-www-form-urlencoded" \
+    -X POST \
+    --data "channel=${channel}" \
+    "https://slack.com/api/conversations.leave" 2>/dev/null)" || resp=""
+  local ok err
+  ok="$(printf '%s' "$resp" | python3 -c '
+import json, sys
+try:
+    d = json.JSONDecoder(strict=False).decode(sys.stdin.read())
+    print("true" if d.get("ok") else "false")
+except Exception:
+    print("false")
+' 2>/dev/null)"
+  if [ "$ok" = "true" ]; then
+    echo "LEFT_CHANNEL channel=$channel reason=creator_absent"
+    # Clean up channel-scoped state so a future re-invite starts fresh
+    # rather than resuming a stale cursor.
+    rm -f "$CURSOR_DIR/$channel" "$MEMBERSHIP_DIR/$channel"
+    # Drop any thread cursors anchored to this channel.
+    if [ -d "$THREAD_DIR" ]; then
+      rm -f "$THREAD_DIR/${channel}:"*
+    fi
+    return 0
+  fi
+  err="$(printf '%s' "$resp" | python3 -c '
+import json, sys
+try:
+    d = json.JSONDecoder(strict=False).decode(sys.stdin.read())
+    print(d.get("error") or "unknown")
+except Exception as e:
+    print("parse:" + str(e).split("\n",1)[0])
+' 2>/dev/null)"
+  echo "LEAVE_FAILED channel=$channel error=${err:-unknown}"
+  return 1
 }
 
 # gc_threads — remove tracked threads whose cursor is stale or whose
@@ -609,6 +764,46 @@ while true; do
         cf="$CURSOR_DIR/$ch"
         [ -e "$cf" ] || printf '%s' "$BACKFILL_TS" > "$cf"
       done <<< "$CHANNELS"
+
+      # ── Creator-presence enforcement ───────────────────────────────────
+      # For each non-DM channel, confirm the creator is still a member.
+      # If not, leave the channel — the bot represents the creator's
+      # identity and shouldn't operate in rooms they've left or were
+      # never in. DMs are always kept (the worker's DM gate already
+      # silences non-creator DMs, and conversations.leave doesn't apply
+      # to IMs anyway). Skipped when the creator id is unresolved or
+      # MENTION_LEAVE_ON_CREATOR_ABSENT=0.
+      if [ "$LEAVE_ON_CREATOR_ABSENT" = "1" ] && [ -n "$CREATOR_ID" ]; then
+        KEEP_LIST=""
+        while IFS= read -r ch; do
+          [ -z "$ch" ] && continue
+          case "$ch" in
+            D*) KEEP_LIST="${KEEP_LIST}${ch}"$'\n'; continue ;;
+          esac
+          channel_has_creator "$ch"
+          mrc=$?
+          case "$mrc" in
+            0) KEEP_LIST="${KEEP_LIST}${ch}"$'\n' ;;
+            1)
+              # Creator absent — leave.
+              if ! leave_channel "$ch"; then
+                # Leave failed (likely missing scope). Keep polling
+                # rather than churn the channel state on transient
+                # errors; user can add channels:leave/groups:leave/
+                # mpim:leave scopes and the next tick will succeed.
+                KEEP_LIST="${KEEP_LIST}${ch}"$'\n'
+              fi
+              ;;
+            *)
+              # API error or unresolved creator — leave the channel
+              # in the polling set; we'll re-check next tick.
+              KEEP_LIST="${KEEP_LIST}${ch}"$'\n'
+              ;;
+          esac
+        done <<< "$CHANNELS"
+        CHANNELS="$(printf '%s' "$KEEP_LIST" | awk 'NF')"
+        CHANNEL_COUNT="$(printf '%s\n' "$CHANNELS" | awk 'NF' | wc -l)"
+      fi
     fi
     LAST_CHANNEL_REFRESH="$NOW_SEC"
   fi

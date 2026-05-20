@@ -160,6 +160,21 @@ source it came from, so you can confirm before arming.
   first) starts the worker; subsequent @-mentions in the same thread
   are handled by the in-flight worker's own `poll-thread.py` loop and
   do NOT spawn another instance.
+- **Creator-presence enforcement.** Every channel-refresh tick, the
+  watcher confirms the creator is still a member of each non-DM
+  channel via `conversations.members`. If absent, the bot leaves the
+  channel via `conversations.leave` — the bot represents the
+  creator's identity and shouldn't operate in rooms they've left or
+  were never in. The check is cached for `MENTION_MEMBERSHIP_CHECK_SECS`
+  (default `300s`) to bound API calls. Sentinel files live under
+  `/tmp/hq-slack-bot.<slug>.membership/<channel>` (mtime = last
+  successful check). DMs are skipped (bot can't leave an IM and the
+  worker-side DM gate already covers non-creator DMs). Set
+  `MENTION_LEAVE_ON_CREATOR_ABSENT=0` to disable leaving (events
+  still fire, just without the side-effect). Required Slack scopes:
+  `channels:leave`, `groups:leave`, `mpim:leave` — without them, the
+  watcher surfaces `LEAVE_FAILED ... error=missing_scope` events and
+  keeps the channel in the polling set.
 
 ## Forking guide
 
