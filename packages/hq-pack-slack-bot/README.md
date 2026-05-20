@@ -60,12 +60,13 @@ script dependencies beyond the `claude` CLI itself.
 
 ```
 bash core/packages/hq-pack-slack-bot/scripts/watch.sh \
-  <bot-slug> { -c <company-slug> | --personal } [-w <workspace>] [--check]
+  <bot-slug> { -c <company-slug> | --personal } -u <prs_personUid> [-w <workspace>] [--check]
 ```
 
 | Arg | What it does |
 |-----|--------------|
-| `<bot-slug>` | Lowercase-dashed bot name (e.g. `hassaan`). Combined with workspace to resolve vault secret `HQ_SLACK_BOT_TOKEN_<NAME>_<WORKSPACE>`. |
+| `<bot-slug>` | Lowercase-dashed bot name (e.g. `hassaan`). Combined with workspace + personUid to resolve vault secret `<personUid>/HQ_SLACK_BOT_TOKEN_<NAME>_<WORKSPACE>`. |
+| `-u <prs_personUid>` | **Required.** Creator's HQ personUid — the SSM-hierarchy prefix on the vault secret keys. Copy from your `/hq-new-bot` Slack response. |
 | `-c <company-slug>` | Pull the token from that company's HQ vault. `-c personal` is an alias for `--personal`. |
 | `--personal` | Pull the token from the operator's personal vault. |
 | `-w <workspace>` | Slack `team_domain` the bot is installed in (e.g. `indigo-ai`). Required for company scope; optional for `--personal` (auto-derived from `SLACK_CREDENTIALS_JSON.team_domain`). |
@@ -126,7 +127,7 @@ The bot is a personal/company identity surface; it must not respond to
 DMs from arbitrary users. The watcher tries to infer the creator's
 Slack user_id at startup, in this order:
 
-1. Companion vault secret `HQ_SLACK_BOT_CREATOR_<NAME>_<WORKSPACE>`
+1. Companion vault secret `<personUid>/HQ_SLACK_BOT_CREATOR_<NAME>_<WORKSPACE>`
    in the same vault scope as the token. Written by hq-pro's
    install-callback at OAuth-completion time.
 2. `--personal` scope only: parse `SLACK_CREDENTIALS_JSON.user_id` in

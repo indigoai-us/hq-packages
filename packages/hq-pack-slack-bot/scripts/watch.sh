@@ -71,6 +71,17 @@ COMPANY=""
 USE_PERSONAL=0
 CHECK_ONLY=0
 WORKSPACE=""
+# Operator's HQ personUid (`prs_*`). Required — there's no on-disk
+# discovery shortcut today, so the operator has to pass `-u prs_…` or
+# the watcher refuses to arm. The personUid is the SSM-hierarchy
+# prefix on the vault secret keys (`prs_*/HQ_SLACK_BOT_TOKEN_…`)
+# written by hq-pro's install-callback, and the granteeId on the
+# company-vault ACL row that lets the operator read their own
+# secrets back from a shared company vault. Find your personUid in
+# the post-create Slack response from `/hq-new-bot`, or by
+# inspecting any existing personal-vault path (it's the `prs_*`
+# segment in `/hq/prs_…/secrets/…`).
+PERSON_UID=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     -c)
@@ -80,9 +91,12 @@ while [ "$#" -gt 0 ]; do
     -w)
       [ "$#" -ge 2 ] || { echo "FATAL: -w requires a workspace slug (Slack team_domain)" >&2; exit 64; }
       WORKSPACE="$2"; shift 2 ;;
+    -u)
+      [ "$#" -ge 2 ] || { echo "FATAL: -u requires an HQ personUid (prs_…)" >&2; exit 64; }
+      PERSON_UID="$2"; shift 2 ;;
     --check) CHECK_ONLY=1; shift ;;
     -h|--help)
-      echo "usage: $0 <bot-slug> { -c <company-slug> | --personal } [-w <workspace>] [--check]" >&2
+      echo "usage: $0 <bot-slug> { -c <company-slug> | --personal } -u <prs_personUid> [-w <workspace>] [--check]" >&2
       exit 0 ;;
     -*) echo "FATAL: unknown flag: $1" >&2; exit 64 ;;
     *)
@@ -94,9 +108,21 @@ while [ "$#" -gt 0 ]; do
 done
 
 if [ -z "$BOT_SLUG" ]; then
-  echo "usage: $0 <bot-slug> { -c <company-slug> | --personal } [-w <workspace>] [--check]" >&2
+  echo "usage: $0 <bot-slug> { -c <company-slug> | --personal } -u <prs_personUid> [-w <workspace>] [--check]" >&2
   exit 64
 fi
+if [ -z "$PERSON_UID" ]; then
+  echo "FATAL: must specify -u <prs_personUid> (the creator's HQ personUid)" >&2
+  echo "       Find it in your /hq-new-bot Slack response, or any" >&2
+  echo '       existing personal-vault path (/hq/prs_<uid>/secrets/...).' >&2
+  exit 64
+fi
+case "$PERSON_UID" in
+  prs_*) ;;
+  *)
+    echo "FATAL: -u $PERSON_UID has unexpected shape (expected prs_…)" >&2
+    exit 64 ;;
+esac
 
 # Allow `-c personal` as an alias for --personal.
 if [ "$COMPANY" = "personal" ]; then
@@ -163,13 +189,18 @@ if [ -z "$WORKSPACE" ]; then
   exit 64
 fi
 
-# Slug + workspace → vault secret names. Mirrors botSecretKey() /
-# botCreatorKey() in hq-pro src/slack-apps/normalize-name.ts — keep in sync.
+# Slug + workspace + personUid → vault secret names. Mirrors
+# botSecretKey() / botCreatorKey() in hq-pro
+# src/slack-apps/normalize-name.ts — keep in sync.
 _norm() { echo "$1" | tr '[:lower:]-.' '[:upper:]__' | tr -cd 'A-Z0-9_'; }
 BOT_UC="$(_norm "$BOT_SLUG")"
 WS_UC="$(_norm "$WORKSPACE")"
-SECRET_NAME="HQ_SLACK_BOT_TOKEN_${BOT_UC}_${WS_UC}"
-CREATOR_SECRET="HQ_SLACK_BOT_CREATOR_${BOT_UC}_${WS_UC}"
+# `<prs_…>/HQ_SLACK_BOT_TOKEN_<NAME>_<WORKSPACE>` — slash is the SSM
+# hierarchy separator so multiple operators can share a company vault
+# without colliding. personUid passes through verbatim (HQ uids
+# include lowercase + underscores, both SSM-legal).
+SECRET_NAME="${PERSON_UID}/HQ_SLACK_BOT_TOKEN_${BOT_UC}_${WS_UC}"
+CREATOR_SECRET="${PERSON_UID}/HQ_SLACK_BOT_CREATOR_${BOT_UC}_${WS_UC}"
 
 # ── Resolve paths ──────────────────────────────────────────────────────────
 # Everything the watcher dispatches is vendored inside the pack — no
@@ -226,15 +257,16 @@ if [ "$CHECK_ONLY" -eq 0 ]; then
 fi
 
 # ── Load token from vault (scope picked by --personal or -c <slug>) ────────
-# NOTE: do not use `source <(hq …)` — process substitution races with hq's
-# (Node) stdout close and silently yields zero bytes. Capture then eval.
-_hq_env="$(HQ_NO_UPDATE_CHECK=1 hq secrets "${HQ_SCOPE_ARGS[@]}" env --only "$SECRET_NAME" 2>/dev/null | grep '^export ')"
-eval "$_hq_env" || true
-unset _hq_env
-TOKEN="$(eval "echo \${$SECRET_NAME:-}")"
+# `hq secrets env --only <name>` exports `<name>=…` — but slash chars in
+# the name (the SSM-hierarchy `<U…>/…` prefix introduced for multi-
+# operator vaults) aren't valid POSIX env-var characters. Use the
+# `get --reveal` form + parse the `Value:` line out of the output,
+# same pattern as the SLACK_CREDENTIALS_JSON read below.
+TOKEN="$(HQ_NO_UPDATE_CHECK=1 hq secrets "${HQ_SCOPE_ARGS[@]}" get --reveal "$SECRET_NAME" 2>/dev/null \
+          | sed -n '/^  Value:/,$p' | sed '1s/^  Value: *//' | head -n 1)"
 if [ -z "$TOKEN" ]; then
   echo "FATAL: $SECRET_NAME not loadable from $SCOPE_LABEL vault" >&2
-  echo "       try: hq secrets ${HQ_SCOPE_ARGS[*]} get $SECRET_NAME" >&2
+  echo "       try: hq secrets ${HQ_SCOPE_ARGS[*]} get --reveal $SECRET_NAME" >&2
   exit 1
 fi
 
@@ -249,21 +281,21 @@ if [ -z "$BOT_USER_ID" ]; then
 fi
 
 # ── Infer creator (for DM gate) ────────────────────────────────────────────
-# 1. Companion vault secret HQ_SLACK_BOT_CREATOR_<NAME>_<WORKSPACE> if
-#    hq-pro install-callback wrote one.
+# 1. Companion vault secret `<U…>/HQ_SLACK_BOT_CREATOR_<NAME>_<WORKSPACE>`
+#    if hq-pro install-callback wrote one.
 # 2. Personal scope: SLACK_CREDENTIALS_JSON has a stable user_id baked in.
 # 3. Otherwise: empty → bot ignores all DMs.
-# CREATOR_SECRET name is computed up at the workspace-resolution step.
+# CREATOR_SECRET name is computed up at the operator-resolution step.
+# Same `--reveal` fetch pattern as the token — env-var form can't
+# carry slashes.
 CREATOR_ID=""
 CREATOR_SRC=""
 
-_creator_env="$(HQ_NO_UPDATE_CHECK=1 hq secrets "${HQ_SCOPE_ARGS[@]}" env --only "$CREATOR_SECRET" 2>/dev/null | grep '^export ')"
-if [ -n "$_creator_env" ]; then
-  eval "$_creator_env" || true
-  CREATOR_ID="$(eval "echo \${$CREATOR_SECRET:-}")"
-  [ -n "$CREATOR_ID" ] && CREATOR_SRC="vault:$CREATOR_SECRET"
+CREATOR_ID="$(HQ_NO_UPDATE_CHECK=1 hq secrets "${HQ_SCOPE_ARGS[@]}" get --reveal "$CREATOR_SECRET" 2>/dev/null \
+              | sed -n '/^  Value:/,$p' | sed '1s/^  Value: *//' | head -n 1)"
+if [ -n "$CREATOR_ID" ]; then
+  CREATOR_SRC="vault:$CREATOR_SECRET"
 fi
-unset _creator_env
 
 # Personal-scope fallback: vault owner's slack user_id baked into
 # SLACK_CREDENTIALS_JSON. Multi-line value → use the `get --reveal` form
@@ -398,6 +430,7 @@ if [ "$CHECK_ONLY" -eq 1 ]; then
   echo "  bot_slug:     $BOT_SLUG"
   echo "  workspace:    $WORKSPACE${WORKSPACE_SRC:+ (source: $WORKSPACE_SRC)}"
   echo "  scope:        $SCOPE_LABEL"
+  echo "  person_uid:   $PERSON_UID"
   echo "  secret:       $SECRET_NAME"
   echo "  bot_user_id:  $BOT_USER_ID"
   echo "  channels:     $CHANNEL_COUNT"
@@ -430,7 +463,7 @@ PREV_MEMBERSHIP_ERR=""
 LAST_CHANNEL_REFRESH=0
 SCRIPT_HASH="$(sha256sum "$0" 2>/dev/null | awk '{print substr($1,1,12)}')"
 
-echo "WATCHER_ARMED bot=$BOT_SLUG workspace=$WORKSPACE scope=$SCOPE_LABEL user_id=$BOT_USER_ID channels=$CHANNEL_COUNT creator=${CREATOR_ID:-<none>} creator_src=${CREATOR_SRC:-none} hash=$SCRIPT_HASH"
+echo "WATCHER_ARMED bot=$BOT_SLUG workspace=$WORKSPACE scope=$SCOPE_LABEL person_uid=$PERSON_UID user_id=$BOT_USER_ID channels=$CHANNEL_COUNT creator=${CREATOR_ID:-<none>} creator_src=${CREATOR_SRC:-none} hash=$SCRIPT_HASH"
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 # Spawn dedupe is keyed on the THREAD's ts (the parent message's ts for
