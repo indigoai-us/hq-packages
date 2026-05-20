@@ -110,8 +110,15 @@ Examples:
 
 ## Rules
 
-- **Never** initialize the per-channel cursors to anything other than
-  "now". Backfilling would spawn workers on already-resolved threads.
+- **First-arm cursor init is "now".** Backfilling the bot's entire
+  history would spawn workers on long-resolved conversations across
+  every channel it already belongs to.
+- **Mid-run channel joins backfill `MENTION_BACKFILL_SECS` (default
+  600s).** When the bot is invited to a new channel after arm, the
+  refresh tick initializes that channel's cursor to `(now - 600s)`,
+  not `now`, so @-mentions that landed in the invite → refresh gap
+  get picked up on the next poll. Spawn-dedupe ensures no double
+  reply.
 - **Never** spawn more than one worker per `ts`. The watcher dedupes
   via `/tmp/hq-slack-bot.<bot-slug>.spawned/<ts>` sentinels.
 - **Never** include `AskUserQuestion` in the worker's allowed tools.

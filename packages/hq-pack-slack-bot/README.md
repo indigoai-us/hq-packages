@@ -134,12 +134,19 @@ source it came from, so you can confirm before arming.
 - Per-channel `oldest=` cursors are maintained in
   `/tmp/hq-slack-bot.<bot-slug>.cursors/<channel_id>`, so the watcher
   only re-fetches new messages per channel.
-- The watcher initializes channel cursors to `now` — backfilling old
-  `@`-mentions would spawn workers on conversations that have long
-  since resolved.
-- The channel list is re-polled periodically (set diff, not just
-  count) — newly-added channels start polling automatically with no
-  restart.
+- On first arm, the watcher initializes existing channel cursors to
+  `now` — backfilling the bot's entire history would spawn workers on
+  long-resolved conversations across every channel it already belongs
+  to.
+- The channel list is re-polled every `MENTION_CHANNEL_REFRESH_SECS`
+  (default `60s`, set diff not just count) — newly-added channels
+  start polling automatically with no restart.
+- For channels joined MID-RUN, the cursor is initialized to
+  `(now - MENTION_BACKFILL_SECS)` (default `600s`) rather than `now`,
+  so `@`-mentions that landed in the gap between the bot being
+  invited and the next refresh tick get picked up on the very next
+  poll. Spawn-dedupe via `$SPAWN_DIR/<ts>.spawned` ensures a message
+  is never replied to twice across consecutive arms.
 
 ## Forking guide
 
