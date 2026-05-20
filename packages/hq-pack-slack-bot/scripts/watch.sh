@@ -122,7 +122,13 @@ if [ -z "$WORKSPACE" ] && [ "$USE_PERSONAL" -eq 1 ]; then
 import json, sys
 try:
     d = json.loads(sys.stdin.read())
+    # SLACK_CREDENTIALS_JSON has team entries (dicts) mixed with scalar
+    # metadata at the top level (e.g. user_id) — skip non-dict values
+    # so a scalar appearing before any team entry does not blow up the
+    # whole parse via .get() on a string.
     for team, v in d.items():
+        if not isinstance(v, dict):
+            continue
         td = v.get("team_domain") or ""
         if td:
             print(td); break
@@ -258,36 +264,65 @@ if [ -n "$CREATOR_ID" ]; then
 fi
 
 # ── List bot's channels (paginated) ────────────────────────────────────────
+# Returns rc=0 with channel ids on stdout (one per line, dedup+sorted).
+# Returns rc=1 with empty stdout and LAST_LIST_ERR set when the Slack API
+# returns ok=false (e.g. missing_scope, invalid_auth, ratelimited) or the
+# HTTP response is unparseable. Callers MUST distinguish "no channels"
+# from "API error" — silently arming with zero channels means @-mentions
+# go undelivered while pre-flight still prints OK.
+LAST_LIST_ERR=""
 list_bot_channels() {
   local cursor=""
   local out=""
+  LAST_LIST_ERR=""
   while :; do
     local url="https://slack.com/api/users.conversations?types=public_channel,private_channel,im,mpim&limit=200"
     if [ -n "$cursor" ]; then url="${url}&cursor=${cursor}"; fi
-    local resp
-    resp="$(curl -fsS -H "Authorization: Bearer $TOKEN" "$url" 2>/dev/null || echo '{}')"
-    local page_ids
+    local resp curl_rc
+    resp="$(curl -fsS -H "Authorization: Bearer $TOKEN" "$url" 2>/dev/null)"; curl_rc=$?
+    if [ "$curl_rc" -ne 0 ] || [ -z "$resp" ]; then
+      LAST_LIST_ERR="curl_failed:rc=$curl_rc"
+      return 1
+    fi
+    local err_file page_ids py_rc
+    err_file="$(mktemp)"
     page_ids="$(printf '%s' "$resp" | python3 -c '
 import json, sys
-d = json.JSONDecoder(strict=False).decode(sys.stdin.read())
+try:
+    d = json.JSONDecoder(strict=False).decode(sys.stdin.read())
+except Exception as e:
+    sys.stderr.write("json_decode:" + str(e).split("\n",1)[0] + "\n")
+    sys.exit(2)
 if not d.get("ok"):
-    sys.exit(0)
+    sys.stderr.write((d.get("error") or "unknown") + "\n")
+    sys.exit(2)
 for c in d.get("channels") or []:
     if c.get("id"):
         print(c["id"])
-' 2>/dev/null || echo "")"
+' 2>"$err_file")"; py_rc=$?
+    if [ "$py_rc" -ne 0 ]; then
+      LAST_LIST_ERR="$(tr -d '\n' < "$err_file")"
+      rm -f "$err_file"
+      [ -n "$LAST_LIST_ERR" ] || LAST_LIST_ERR="parser_exit_${py_rc}"
+      return 1
+    fi
+    rm -f "$err_file"
     if [ -n "$page_ids" ]; then
       out="${out}${page_ids}
 "
     fi
     cursor="$(printf '%s' "$resp" | python3 -c '
 import json, sys
-d = json.JSONDecoder(strict=False).decode(sys.stdin.read())
+try:
+    d = json.JSONDecoder(strict=False).decode(sys.stdin.read())
+except Exception:
+    sys.exit(0)
 print((d.get("response_metadata") or {}).get("next_cursor") or "")
 ' 2>/dev/null || echo "")"
     [ -z "$cursor" ] && break
   done
   printf '%s' "$out" | awk 'NF' | sort -u
+  return 0
 }
 
 # ── Config ─────────────────────────────────────────────────────────────────
@@ -300,7 +335,14 @@ SPAWN_PROBE_SECS="${MENTION_SPAWN_PROBE_SECS:-8}"
 BACKFILL_SECS="${MENTION_BACKFILL_SECS:-600}"
 
 # ── Pre-flight: sample channel list call ───────────────────────────────────
-CHANNELS="$(list_bot_channels)"
+# Surface Slack API failures (missing_scope, invalid_auth, ratelimited)
+# loudly instead of arming with zero channels and silently dropping every
+# subsequent @-mention.
+if ! CHANNELS="$(list_bot_channels)"; then
+  echo "FATAL: users.conversations failed: ${LAST_LIST_ERR:-unknown}" >&2
+  echo "       (token scope or auth issue — bot would otherwise arm with 0 channels)" >&2
+  exit 65
+fi
 CHANNEL_COUNT="$(printf '%s\n' "$CHANNELS" | awk 'NF' | wc -l)"
 
 if [ "$CHECK_ONLY" -eq 1 ]; then
@@ -330,6 +372,7 @@ while IFS= read -r ch; do
 done <<< "$CHANNELS"
 
 PREV_ERR=""
+PREV_LIST_ERR=""
 LAST_CHANNEL_REFRESH="$(date +%s)"
 SCRIPT_HASH="$(sha256sum "$0" 2>/dev/null | awk '{print substr($1,1,12)}')"
 
@@ -472,8 +515,21 @@ while true; do
   # on the very next pass.
   NOW_SEC="$(date +%s)"
   if [ $((NOW_SEC - LAST_CHANNEL_REFRESH)) -ge "$CHANNEL_REFRESH_SECS" ]; then
-    NEW_CHANNELS="$(list_bot_channels)"
-    if [ -n "$NEW_CHANNELS" ]; then
+    NEW_CHANNELS="$(list_bot_channels)"; LIST_RC=$?
+    if [ "$LIST_RC" -ne 0 ]; then
+      # Slack API failed mid-run (token revoked, scope removed, ratelimit).
+      # Emit a deduped event and keep polling existing channels — transient
+      # errors recover on the next tick. Do NOT overwrite $CHANNELS so we
+      # keep polling with last-known-good state.
+      if [ "${LAST_LIST_ERR:-}" != "$PREV_LIST_ERR" ]; then
+        echo "API_ERROR users.conversations:${LAST_LIST_ERR:-unknown}"
+        PREV_LIST_ERR="$LAST_LIST_ERR"
+      fi
+    elif [ -n "$NEW_CHANNELS" ]; then
+      if [ -n "$PREV_LIST_ERR" ]; then
+        echo "RECOVERED users.conversations"
+        PREV_LIST_ERR=""
+      fi
       diff_channels "$NEW_CHANNELS" "$CHANNELS"
       NEW_COUNT="$(printf '%s\n' "$NEW_CHANNELS" | awk 'NF' | wc -l)"
       if [ "$NEW_COUNT" != "$CHANNEL_COUNT" ]; then
