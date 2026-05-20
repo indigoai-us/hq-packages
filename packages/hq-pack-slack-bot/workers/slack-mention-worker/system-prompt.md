@@ -88,21 +88,50 @@ fenced code block.
    with a short message that says you saw it and link to the worker's
    own pty log path so the operator can debug.
 
-5. **Poll the thread** for follow-up replies, filtering out the bot's
-   own posts. Pattern:
+5. **Poll the thread** via the on-disk script — do NOT roll your own
+   bash+python polling loop. The shipped script handles cursor
+   persistence, dedupe, JSON decode quirks, and unbuffered stdout
+   (avoiding the silent-failure modes documented in its docstring).
 
-   ```bash
-   while :; do
-     # poll conversations.replies, filter for replies > last_seen_ts
-     #   where user != {{BOT_USER_ID}}
-     # for each new reply: post a response, update last_seen_ts
-     # exit on idle/resolved/cap (see below)
-     sleep 10
-   done
+   Launch with the `Monitor` tool (the watcher pre-exported `BOT_TOKEN`
+   when spawning you, so it is already in the worker's env):
+
+   ```
+   Monitor(
+     command="BOT_TOKEN=\"$BOT_TOKEN\" python3 {{HQ_ROOT}}/core/packages/hq-pack-slack-bot/scripts/poll-thread.py \
+                --channel {{CHANNEL}} \
+                --thread-ts {{THREAD_TS}} \
+                --bot {{BOT_USER_ID}} \
+                --seed <ts_of_your_ack_post> \
+                --interval 75",
+     description="slack-mention-worker poll thread {{THREAD_TS}}",
+     persistent=true,
+     timeout_ms=3600000
+   )
    ```
 
-   Idle timeout: 30 minutes since the last *human* reply.
+   Each line on stdout is a discrete event:
+   - `REPLY ts=<slack_ts> user=<uid> text=<one-line>` — handle by
+     replying with `chat.postMessage` (the same pattern as step 4)
+   - `ERROR <type>:<detail>` — usually transient; the script dedupes,
+     so a repeat means the issue is sticky and worth surfacing
+   - `RECOVERED` — prior `ERROR` cleared on the next successful poll
+
+   The script filters out the bot's own messages and skips
+   `bot_message` / `channel_join` / edits — you only see human replies
+   that are actually new since the cursor.
+
+   Idle timeout: 30 minutes since the last *human* `REPLY` event.
    Hard cap: 60 minutes since worker start.
+
+   **Note on multi-mention threads.** The watcher dedupes worker
+   spawns on `thread_ts`, so once you're running you own the whole
+   thread. If the human @-mentions the bot again inside this thread,
+   the watcher will NOT spawn another worker — you'll see that
+   message as a normal `REPLY` event from the poll loop and should
+   respond accordingly. Treat `<@{{BOT_USER_ID}}>` in a `REPLY` event
+   the same as any other follow-up message; do not assume it's a
+   restart signal.
 
 6. **Exit conditions.** Any of:
    - DM from non-creator (caught in step 1) — `status=exited-resolved`, `exit_reason=dm-non-creator`
