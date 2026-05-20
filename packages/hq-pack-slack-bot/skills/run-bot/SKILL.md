@@ -1,6 +1,6 @@
 ---
 name: run-bot
-description: Run an HQ-issued Slack bot — arm a per-bot @-mention watcher that spawns an autonomous Claude worker per mention. Pass the bot's slug (e.g. `hassaan`), a scope flag (`-c <company-slug>` or `--personal`), and optionally a workspace (`-w <slack-team-domain>`; auto-derived for `--personal` from SLACK_CREDENTIALS_JSON). The watcher resolves `HQ_SLACK_BOT_TOKEN_<NAME>_<WORKSPACE>` from the chosen vault, infers the creator's Slack user_id (used as a DM gate), enumerates the bot's channels (periodically re-polled so newly-added channels start polling automatically), and dispatches workers. Workers respond in-thread, ignore DMs from non-creators, and never call AskUserQuestion.
+description: Run an HQ-issued Slack bot — arm a per-bot @-mention watcher that spawns an autonomous Claude worker per mention. Pass the bot's slug (e.g. `hassaan`), a scope flag (`-c <company-slug>` or `--personal`), the creator's HQ personUid (`-u <prs_…>` — required; copy from the /hq-new-bot Slack response), and optionally a workspace (`-w <slack-team-domain>`; auto-derived for `--personal` from SLACK_CREDENTIALS_JSON). The watcher resolves `<personUid>/HQ_SLACK_BOT_TOKEN_<NAME>_<WORKSPACE>` from the chosen vault, infers the creator's Slack user_id (used as a DM gate), enumerates the bot's channels (periodically re-polled so newly-added channels start polling automatically), and dispatches workers. Workers respond in-thread, ignore DMs from non-creators, and never call AskUserQuestion.
 allowed-tools: Bash, Read, Monitor, TaskStop
 ---
 
@@ -27,25 +27,40 @@ Required arguments:
   via `/hq-new-bot`).
 - A **vault scope** — either `-c <company-slug>` or `--personal`. (Use
   `-c personal` as an alias for `--personal` if you want a single flag
-  style.)
+  style.) Should match the `<company>` the operator passed to
+  `/hq-new-bot` at create time — that's the scope where the token landed.
 - A **workspace** — the Slack `team_domain` the bot is installed in
   (e.g. `indigo-ai`). Optional `-w <workspace>` flag; in `--personal`
   scope the watcher auto-derives it from `SLACK_CREDENTIALS_JSON` in
   the personal vault.
+- The **creator's HQ personUid** (`-u <prs_…>`). Required. The vault
+  secret key is namespaced by the personUid that created the bot —
+  `<prs_…>/HQ_SLACK_BOT_TOKEN_<NAME>_<WORKSPACE>` — so a shared
+  company vault can hold the same bot slug under multiple operators
+  without colliding. Copy it from the `/hq-new-bot` response in Slack
+  (the prompt block includes `-u prs_…` baked into the run-bot
+  command). If you don't have that response handy, inspect any
+  existing personal-vault path: the `prs_*` segment in
+  `/hq/prs_<uid>/secrets/...` is your personUid.
 
-The slug + workspace + scope resolve to a vault entry named
-`HQ_SLACK_BOT_TOKEN_<NAME>_<WORKSPACE>` (dashes → underscores, same
-convention as the slack-app-factory in hq-pro). The workspace
-component lets the same bot slug live in multiple workspaces without
-colliding on vault keys.
+The slug + workspace + scope + personUid resolve to a vault entry named
+`<personUid>/HQ_SLACK_BOT_TOKEN_<NAME>_<WORKSPACE>` (dashes → underscores
+in name/workspace; SSM hierarchy slash separates the personUid prefix
+from the rest). The workspace component lets the same bot slug live in
+multiple workspaces without colliding on vault keys; the personUid
+prefix lets a shared company vault hold the same bot slug under
+multiple operators. On company installs the install-callback also
+writes an ACL row at `(cmp_X, <personUid>/*)` granting the operator
+admin, so they can read their own secrets back.
 
-Examples:
+Examples (assuming the operator's HQ personUid is `prs_01HASSAAN`):
 
 | Args | Vault secret read |
 |------|-------------------|
-| `hassaan --personal` | personal vault → `HQ_SLACK_BOT_TOKEN_HASSAAN_INDIGO_AI` (workspace auto-derived) |
-| `support-bot -c indigo -w indigo-ai` | indigo company vault → `HQ_SLACK_BOT_TOKEN_SUPPORT_BOT_INDIGO_AI` |
-| `my-cool-bot -c personal -w acme-co` | personal vault (alias) → `HQ_SLACK_BOT_TOKEN_MY_COOL_BOT_ACME_CO` |
+| `hassaan --personal -u prs_01HASSAAN` | personal vault → `prs_01HASSAAN/HQ_SLACK_BOT_TOKEN_HASSAAN_INDIGO_AI` (workspace auto-derived) |
+| `support-bot -c indigo -w indigo-ai -u prs_01HASSAAN` | indigo company vault → `prs_01HASSAAN/HQ_SLACK_BOT_TOKEN_SUPPORT_BOT_INDIGO_AI` |
+| `my-cool-bot -c personal -w acme-co -u prs_01HASSAAN` | personal vault (alias) → `prs_01HASSAAN/HQ_SLACK_BOT_TOKEN_MY_COOL_BOT_ACME_CO` |
+| `shared-bot -c indigo -u prs_01ALICE` | indigo company vault, Alice's bot → `prs_01ALICE/HQ_SLACK_BOT_TOKEN_SHARED_BOT_INDIGO_AI` (only works if Alice already granted you ACL admin on `prs_01ALICE/*`) |
 
 ## Procedure
 
@@ -54,7 +69,7 @@ Examples:
 
    ```bash
    bash core/packages/hq-pack-slack-bot/scripts/watch.sh \
-     <bot-slug> { -c <company> | --personal } [-w <workspace>] --check
+     <bot-slug> { -c <company> | --personal } -u <prs_personUid> [-w <workspace>] --check
    ```
 
    `--check` runs the startup pre-flight (workspace resolution, token
@@ -68,7 +83,7 @@ Examples:
 
    ```
    Monitor(
-     command="bash core/packages/hq-pack-slack-bot/scripts/watch.sh <bot-slug> { -c <company> | --personal } [-w <workspace>]",
+     command="bash core/packages/hq-pack-slack-bot/scripts/watch.sh <bot-slug> { -c <company> | --personal } -u <prs_personUid> [-w <workspace>]",
      description="@-mention watcher for <bot-slug> + worker spawner",
      persistent=true,
      timeout_ms=3600000
@@ -77,7 +92,7 @@ Examples:
 
    Events you'll receive on stdout:
 
-   - `WATCHER_ARMED bot=<slug> workspace=<slug> scope=<…> user_id=<U…> channels=<N> creator=<U…|<none>> creator_src=<…> hash=<sha12>` — startup
+   - `WATCHER_ARMED bot=<slug> workspace=<slug> scope=<…> person_uid=<prs_…> user_id=<U…> channels=<N> creator=<U…|<none>> creator_src=<…> hash=<sha12>` — startup
    - `MENTION channel=<C…|D…|G…> ts=<ts> thread_ts=<ts> user=<U…> text=<first 200 chars> [(thread-reply)]` — every new @-mention. The `(thread-reply)` suffix means the mention was found in a thread REPLY (not the parent), via the watcher's per-thread polling pass. Dedupe is keyed on `thread_ts`, not `ts`, so each thread spawns at most one worker.
    - `SPAWN agent=mention:<ts> channel=<…> thread_ts=<…> log=<path> pid=<pid>` — worker dispatched
    - `SPAWN_FAILED ts=<ts> reason=<…>` — worker dispatch failed
@@ -161,8 +176,9 @@ The bot answers DM @-mentions ONLY from its creator. The watcher
 resolves the creator's Slack user_id in this order:
 
 1. Companion vault secret
-   `HQ_SLACK_BOT_CREATOR_<NAME>_<WORKSPACE>` in the chosen scope.
-   Written by hq-pro's install-callback at OAuth-completion time.
+   `<personUid>/HQ_SLACK_BOT_CREATOR_<NAME>_<WORKSPACE>` in
+   the chosen scope. Written by hq-pro's install-callback at
+   OAuth-completion time.
 2. `--personal` scope fallback: `SLACK_CREDENTIALS_JSON` in the
    personal vault has a stable baked-in `user_id` field (the vault
    owner). Watcher parses that.
@@ -175,7 +191,7 @@ creator id, so you can confirm before arming.
 
 ## Dependencies
 
-- Vault secret `HQ_SLACK_BOT_TOKEN_<NAME>_<WORKSPACE>` (xoxb-, with
+- Vault secret `<personUid>/HQ_SLACK_BOT_TOKEN_<NAME>_<WORKSPACE>` (xoxb-, with
   at minimum `channels:history`, `channels:read`, `chat:write`,
   `groups:history`, `groups:read`, `im:history`, `im:read`,
   `mpim:history`, `mpim:read`, `users:read`, `users:read.email`, and
