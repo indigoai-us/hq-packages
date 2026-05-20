@@ -1,0 +1,68 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "slack-mention-worker final message",
+  "description": "Schema the slack-mention-worker's last assistant message MUST match. The worker handles a single @-mention in a Slack thread, responds in-thread, polls for follow-up replies until idle / resolved / cap, then exits.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "summary", "issues_faced", "details"],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["complete", "exited-idle", "exited-resolved", "exited-timeout", "blocked"],
+      "description": "Terminal state. 'complete' = mention handled, replies posted, no pending follow-ups. 'exited-idle' = thread went quiet for 30 minutes. 'exited-resolved' = human posted a resolved keyword. 'exited-timeout' = 60-minute hard cap reached. 'blocked' = could not even respond (missing token, chat.postMessage rejected, etc.); summary MUST say what blocked you."
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 400,
+      "description": "One-sentence wrap-up of what the worker did during this run."
+    },
+    "issues_faced": {
+      "type": "array",
+      "description": "Problems THIS worker hit WHILE handling the mention — chat.postMessage returned not_in_channel, conversation.replies pagination edge cases, etc. Empty if smooth.",
+      "items": { "type": "string" }
+    },
+    "details": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["channel", "thread_ts", "mention_ts", "bot_user_id", "exit_reason", "slack_posts"],
+      "properties": {
+        "channel": {
+          "type": "string",
+          "description": "Slack channel id the worker operated in."
+        },
+        "thread_ts": {
+          "type": "string",
+          "description": "Thread the worker posted into. Echoes the THREAD_TS from the initial prompt."
+        },
+        "mention_ts": {
+          "type": "string",
+          "description": "ts of the original @-mention message that spawned this worker."
+        },
+        "bot_user_id": {
+          "type": "string",
+          "description": "Slack user id of the bot whose @-mention was being handled. Echoes BOT_USER_ID."
+        },
+        "exit_reason": {
+          "type": "string",
+          "description": "Free-text or canonical reason: 'mention-handled' | 'idle-30min' | 'resolved-keyword' | 'time-cap-60min' | 'dm-non-creator' | '<blocked-reason>'."
+        },
+        "slack_posts": {
+          "type": "array",
+          "description": "Every chat.postMessage the worker made during the run. Useful for forensics + replay.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["ts", "channel", "thread_ts", "text_preview"],
+            "properties": {
+              "ts": { "type": "string" },
+              "channel": { "type": "string" },
+              "thread_ts": { "type": "string" },
+              "text_preview": { "type": "string", "maxLength": 280 }
+            }
+          }
+        }
+      }
+    }
+  }
+}

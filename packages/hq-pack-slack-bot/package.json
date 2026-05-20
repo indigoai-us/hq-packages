@@ -1,0 +1,29 @@
+{
+  "name": "@indigoai-us/hq-pack-slack-bot",
+  "version": "1.0.0",
+  "description": "HQ content pack: per-bot Slack mention watcher + spawned-worker template. Pairs with hq-pro slack-app-factory (/hq-new-bot).",
+  "files": [
+    "workers",
+    "skills",
+    "scripts",
+    "package.yaml",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/indigoai-us/hq-packages.git",
+    "directory": "packages/hq-pack-slack-bot"
+  },
+  "keywords": [
+    "hq",
+    "hq-pack",
+    "slack",
+    "bot",
+    "workers",
+    "mentions"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
+}

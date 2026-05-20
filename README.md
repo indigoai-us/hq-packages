@@ -12,6 +12,7 @@ Content packs for [HQ by Indigo](https://github.com/indigoai-us/hq-core) — the
 | [`hq-pack-design-quality`](./packages/hq-pack-design-quality) | Typography, color, spatial, and motion quality references for design-audit skills |
 | [`hq-pack-gemini`](./packages/hq-pack-gemini) | Six Gemini CLI workers (coder, reviewer, frontend, designer, stylist, ux-auditor) + `gemini-cli` knowledge. Conditional — skipped when `gemini` is not on `PATH` |
 | [`hq-pack-gstack`](./packages/hq-pack-gstack) | gstack-team workers (26 g-* skills) + `scripts/gstack-bridge.sh` |
+| [`hq-pack-slack-bot`](./packages/hq-pack-slack-bot) | Per-bot Slack mention watcher + spawned-worker template. Pairs with hq-pro `/hq-new-bot`. |
 
 ## Install a pack
 

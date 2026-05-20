@@ -1,0 +1,28 @@
+name: hq-pack-slack-bot
+version: 1.0.0
+publisher: '@indigoai-us'
+access: public
+description: 'Per-bot Slack mention watcher + spawned-worker template. Watches every channel a chosen HQ-issued Slack bot is a member of, dispatches one autonomous Claude worker per @-mention. Pairs with hq-pro slack-app-factory (/hq-new-bot).'
+requires:
+  hqCore: '>=12.0.0'
+  # Runtime prerequisites:
+  #   - `hq` CLI on PATH
+  #   - `curl`, `jq`, `awk`, `python3`
+  #   - HQ vault holding HQ_SLACK_BOT_TOKEN_<NAME>_<WORKSPACE> (+ optional
+  #     HQ_SLACK_BOT_CREATOR_<NAME>_<WORKSPACE> companion) for each bot
+  #     you want to run. Created by hq-pro's /hq-new-bot flow.
+contributes:
+  workers:
+    - slack-mention-worker
+  knowledge: []
+  skills:
+    - run-bot
+  hooks: []
+  policies: []
+  commands: []
+  # scripts/ payload ships the watcher (watch.sh) + parser
+  # (parse-mentions.py). scan-packages.sh (S3) symlinks these into the
+  # host instance's scripts/ directory at install time.
+  scripts:
+    - watch.sh
+    - parse-mentions.py
