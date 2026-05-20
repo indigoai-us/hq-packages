@@ -164,10 +164,16 @@ PARSE_MENTIONS="$SCRIPT_DIR/parse-mentions.py"
 
 SPAWN_DIR="/tmp/hq-slack-bot.${BOT_SLUG}.spawned"
 CURSOR_DIR="/tmp/hq-slack-bot.${BOT_SLUG}.cursors"
+# THREAD_DIR holds per-thread reply cursors for top-level messages with
+# reply_count > 0 that the watcher is actively polling for in-thread
+# @-mentions. One file per thread: <channel>:<thread_ts>. The file
+# content is the reply cursor (numeric ts). mtime tracks the last poll;
+# GC drops threads whose cursor is older than $THREAD_GC_SECS.
+THREAD_DIR="/tmp/hq-slack-bot.${BOT_SLUG}.threads"
 LOG_DIR="${MENTION_LOG_DIR:-$HQ_ROOT/workspace/logs/hq-slack-bot/$BOT_SLUG}"
 WATCHER_ALIVE_FILE="${MENTION_WATCHER_ALIVE_FILE:-/tmp/hq-slack-bot.${BOT_SLUG}.alive}"
 
-mkdir -p "$SPAWN_DIR" "$CURSOR_DIR" "$LOG_DIR"
+mkdir -p "$SPAWN_DIR" "$CURSOR_DIR" "$THREAD_DIR" "$LOG_DIR"
 
 # ── Pre-flight: file deps ──────────────────────────────────────────────────
 for f in "$PARSE_MENTIONS"; do
@@ -333,6 +339,12 @@ SPAWN_PROBE_SECS="${MENTION_SPAWN_PROBE_SECS:-8}"
 # Backfill window for channels the bot joins mid-run (NOT applied at first
 # arm). Catches @-mentions that landed between invite and refresh tick.
 BACKFILL_SECS="${MENTION_BACKFILL_SECS:-600}"
+# Drop tracked threads (replies-without-mention-yet) from the watch list
+# once their reply cursor is this old. 24h default.
+THREAD_GC_SECS="${MENTION_THREAD_GC_SECS:-86400}"
+# Per-loop cap on threads polled (sorted by cursor mtime, freshest first).
+# Bounds the work each tick at scale; rarely hit in practice.
+THREAD_POLL_CAP="${MENTION_THREAD_POLL_CAP:-50}"
 
 # ── Pre-flight: sample channel list call ───────────────────────────────────
 # Surface Slack API failures (missing_scope, invalid_auth, ratelimited)
@@ -379,12 +391,61 @@ SCRIPT_HASH="$(sha256sum "$0" 2>/dev/null | awk '{print substr($1,1,12)}')"
 echo "WATCHER_ARMED bot=$BOT_SLUG workspace=$WORKSPACE scope=$SCOPE_LABEL user_id=$BOT_USER_ID channels=$CHANNEL_COUNT creator=${CREATOR_ID:-<none>} creator_src=${CREATOR_SRC:-none} hash=$SCRIPT_HASH"
 
 # ── Helpers ────────────────────────────────────────────────────────────────
+# Spawn dedupe is keyed on the THREAD's ts (the parent message's ts for
+# replies, the message's own ts for top-level posts). One worker per
+# thread — subsequent @-mentions in the same thread are handled by that
+# worker via its own poll loop, not by spawning another instance.
 already_spawned() {
   [ -e "$SPAWN_DIR/$1.spawned" ]
 }
 
 mark_spawned() {
   : > "$SPAWN_DIR/$1.spawned"
+}
+
+# track_thread <channel> <thread_ts> <latest_reply>
+# Ensure we have a reply-cursor file for this thread. First-sight cursor
+# is the parent ts itself (oldest=parent_ts in conversations.replies
+# returns ALL replies, which is exactly the backfill we want — Slack
+# threads are short-lived and this catches the "@-mention landed in a
+# reply seconds before we noticed the parent" case).
+track_thread() {
+  local channel="$1" thread_ts="$2" latest_reply="$3"
+  if already_spawned "$thread_ts"; then
+    return 0
+  fi
+  local f="$THREAD_DIR/${channel}:${thread_ts}"
+  if [ ! -e "$f" ]; then
+    printf '%s' "$thread_ts" > "$f"
+  fi
+}
+
+# gc_threads — remove tracked threads whose cursor is stale or whose
+# thread has since been spawned-for. Cheap: stat + arithmetic.
+gc_threads() {
+  local now cutoff
+  now="$(date +%s)"
+  cutoff=$((now - THREAD_GC_SECS))
+  local f base channel thread_ts mtime
+  for f in "$THREAD_DIR"/*; do
+    [ -e "$f" ] || continue
+    base="$(basename "$f")"
+    channel="${base%%:*}"
+    thread_ts="${base#*:}"
+    if [ "$channel" = "$base" ] || [ -z "$thread_ts" ]; then
+      # Malformed name — drop it rather than crash later.
+      rm -f "$f"
+      continue
+    fi
+    if already_spawned "$thread_ts"; then
+      rm -f "$f"
+      continue
+    fi
+    mtime="$(stat -c %Y "$f" 2>/dev/null || echo 0)"
+    if [ "$mtime" -lt "$cutoff" ]; then
+      rm -f "$f"
+    fi
+  done
 }
 
 # diff_channels <new> <old>  →  emits CHANNEL_JOINED / CHANNEL_LEFT events.
@@ -566,11 +627,15 @@ while true; do
     RESP="$(curl -fsS -H "Authorization: Bearer $TOKEN" \
       "https://slack.com/api/conversations.history?channel=${CHANNEL}&oldest=${LAST_TS}&limit=50" 2>/dev/null || true)"
 
-    PARSED="$(printf '%s' "$RESP" | "$PARSE_MENTIONS" --last-ts "$LAST_TS" --bot "$BOT_USER_ID" 2>/dev/null || true)"
+    # --emit-threads asks the parser to also surface T-rows for top-level
+    # messages with reply_count > 0, so we can schedule per-thread polling
+    # for in-thread @-mentions (mentions that land in REPLIES, not the
+    # parent — invisible to conversations.history).
+    PARSED="$(printf '%s' "$RESP" | "$PARSE_MENTIONS" --last-ts "$LAST_TS" --bot "$BOT_USER_ID" --emit-threads 2>/dev/null || true)"
     OK="$(printf '%s' "$PARSED" | sed -n 's/^OK=//p' | head -1)"
     ERR="$(printf '%s' "$PARSED" | sed -n 's/^ERR=//p' | head -1)"
     NEW_LAST="$(printf '%s' "$PARSED" | sed -n 's/^MAX_TS=//p' | head -1)"
-    ROWS="$(printf '%s' "$PARSED" | awk 'p{print} /^$/{p=1}')"
+    BODY="$(printf '%s' "$PARSED" | awk 'p{print} /^$/{p=1}')"
 
     if [ "$OK" != "true" ]; then
       if [ "$ERR" != "$PREV_ERR" ]; then
@@ -584,23 +649,119 @@ while true; do
       PREV_ERR=""
     fi
 
+    # Two row types interleave in BODY:
+    #   M\t<ts>\t<user>\t<thread_ts>\t<text>   → @-mention to dispatch
+    #   T\t<thread_ts>\t<reply_count>\t<latest_reply>  → thread to track
+    M_ROWS="$(printf '%s\n' "$BODY" | awk -F'\t' '$1=="M"{sub(/^M\t/,""); print}')"
+    T_ROWS="$(printf '%s\n' "$BODY" | awk -F'\t' '$1=="T"{sub(/^T\t/,""); print}')"
+
     while IFS=$'\t' read -r TS SLACK_USER THREAD_TS TEXT; do
       [ -z "$TS" ] && continue
-      if already_spawned "$TS"; then
+      # Dedupe on THREAD_TS (one worker per thread). If the parent
+      # message itself contains an @-mention, parent_ts == thread_ts so
+      # this still spawns exactly once.
+      if already_spawned "$THREAD_TS"; then
         continue
       fi
       PREVIEW="$(printf '%s' "$TEXT" | tr '\n\r' '  ' | cut -c 1-200)"
-      echo "MENTION channel=$CHANNEL ts=$TS user=$SLACK_USER text=$PREVIEW"
-      mark_spawned "$TS"
+      echo "MENTION channel=$CHANNEL ts=$TS thread_ts=$THREAD_TS user=$SLACK_USER text=$PREVIEW"
+      mark_spawned "$THREAD_TS"
+      # Parent had a mention → no need to track this thread for replies;
+      # the worker now owns it. Remove any tracker file we may have set
+      # earlier from a previous reply-count tick.
+      rm -f "$THREAD_DIR/${CHANNEL}:${THREAD_TS}"
       if ! spawn_worker "$CHANNEL" "$TS" "$SLACK_USER" "$THREAD_TS" "$TEXT"; then
         echo "SPAWN_FAILED ts=$TS reason=spawn_worker_returned_nonzero"
       fi
-    done <<< "$ROWS"
+    done <<< "$M_ROWS"
+
+    # Track every thread with replies that we haven't spawned for. The
+    # next loop iteration's thread-poll pass will look for @-mentions in
+    # those replies.
+    while IFS=$'\t' read -r T_THREAD_TS T_REPLY_COUNT T_LATEST_REPLY; do
+      [ -z "$T_THREAD_TS" ] && continue
+      track_thread "$CHANNEL" "$T_THREAD_TS" "$T_LATEST_REPLY"
+    done <<< "$T_ROWS"
 
     if [ -n "$NEW_LAST" ] && [ "$NEW_LAST" != "null" ]; then
       printf '%s' "$NEW_LAST" > "$cf"
     fi
   done <<< "$CHANNELS"
+
+  # ── Thread polling pass ─────────────────────────────────────────────────
+  # For every thread we're actively tracking, fetch its replies since
+  # our cursor and run the same mention parser against them. Spawn dedupe
+  # is keyed on thread_ts so we'll still only ever spawn once per thread,
+  # whether the mention lands in the parent or a reply.
+  #
+  # GC first to keep state bounded; ordering doesn't matter — newly
+  # tracked threads were added in this very iteration above and will
+  # not be expired here.
+  gc_threads
+  THREAD_COUNT=0
+  for tf in $(ls -t "$THREAD_DIR" 2>/dev/null); do
+    [ "$THREAD_COUNT" -ge "$THREAD_POLL_CAP" ] && break
+    THREAD_COUNT=$((THREAD_COUNT + 1))
+    T_CHANNEL="${tf%%:*}"
+    T_THREAD_TS="${tf#*:}"
+    [ "$T_CHANNEL" = "$tf" ] && continue
+    [ -z "$T_THREAD_TS" ] && continue
+    # Belt-and-suspenders: if the thread was spawned-for between gc and
+    # now, skip it.
+    if already_spawned "$T_THREAD_TS"; then
+      rm -f "$THREAD_DIR/$tf"
+      continue
+    fi
+    T_CURSOR_FILE="$THREAD_DIR/$tf"
+    T_CURSOR="$(cat "$T_CURSOR_FILE" 2>/dev/null || echo "$T_THREAD_TS")"
+
+    T_RESP="$(curl -fsS -H "Authorization: Bearer $TOKEN" \
+      "https://slack.com/api/conversations.replies?channel=${T_CHANNEL}&ts=${T_THREAD_TS}&oldest=${T_CURSOR}&limit=50" 2>/dev/null || true)"
+    T_PARSED="$(printf '%s' "$T_RESP" | "$PARSE_MENTIONS" --last-ts "$T_CURSOR" --bot "$BOT_USER_ID" 2>/dev/null || true)"
+    T_OK="$(printf '%s' "$T_PARSED" | sed -n 's/^OK=//p' | head -1)"
+    T_ERR="$(printf '%s' "$T_PARSED" | sed -n 's/^ERR=//p' | head -1)"
+    T_NEW_LAST="$(printf '%s' "$T_PARSED" | sed -n 's/^MAX_TS=//p' | head -1)"
+    T_BODY="$(printf '%s' "$T_PARSED" | awk 'p{print} /^$/{p=1}')"
+
+    if [ "$T_OK" != "true" ]; then
+      if [ "$T_ERR" = "thread_not_found" ]; then
+        # Thread was deleted; stop tracking.
+        rm -f "$T_CURSOR_FILE"
+      fi
+      # Non-fatal — keep polling next tick. Errors get surfaced once via
+      # the existing PREV_ERR dedupe.
+      if [ "$T_ERR" != "$PREV_ERR" ]; then
+        echo "API_ERROR thread:${T_ERR:-unknown} channel=$T_CHANNEL thread_ts=$T_THREAD_TS"
+        PREV_ERR="$T_ERR"
+      fi
+      continue
+    fi
+
+    while IFS=$'\t' read -r T_PFX T_TS T_USER T_INNER_THREAD T_TEXT; do
+      [ "$T_PFX" = "M" ] || continue
+      [ -z "$T_TS" ] && continue
+      if already_spawned "$T_THREAD_TS"; then
+        break
+      fi
+      PREVIEW="$(printf '%s' "$T_TEXT" | tr '\n\r' '  ' | cut -c 1-200)"
+      echo "MENTION channel=$T_CHANNEL ts=$T_TS thread_ts=$T_THREAD_TS user=$T_USER text=$PREVIEW (thread-reply)"
+      mark_spawned "$T_THREAD_TS"
+      if ! spawn_worker "$T_CHANNEL" "$T_TS" "$T_USER" "$T_THREAD_TS" "$T_TEXT"; then
+        echo "SPAWN_FAILED ts=$T_TS reason=spawn_worker_returned_nonzero"
+      fi
+      rm -f "$T_CURSOR_FILE"
+      break
+    done <<< "$T_BODY"
+
+    # Advance the thread cursor (and touch the file for liveness/GC)
+    # even if no mentions found — that's the whole point of tracking,
+    # otherwise we'd re-fetch the same replies every tick forever.
+    if [ -n "$T_NEW_LAST" ] && [ "$T_NEW_LAST" != "null" ] && [ -e "$T_CURSOR_FILE" ]; then
+      printf '%s' "$T_NEW_LAST" > "$T_CURSOR_FILE"
+    elif [ -e "$T_CURSOR_FILE" ]; then
+      touch "$T_CURSOR_FILE"
+    fi
+  done
 
   touch "$WATCHER_ALIVE_FILE" 2>/dev/null || true
   sleep "$POLL_INTERVAL"

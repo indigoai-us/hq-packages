@@ -145,8 +145,21 @@ source it came from, so you can confirm before arming.
   `(now - MENTION_BACKFILL_SECS)` (default `600s`) rather than `now`,
   so `@`-mentions that landed in the gap between the bot being
   invited and the next refresh tick get picked up on the very next
-  poll. Spawn-dedupe via `$SPAWN_DIR/<ts>.spawned` ensures a message
-  is never replied to twice across consecutive arms.
+  poll.
+- **Thread polling.** `conversations.history` only returns top-level
+  messages, so the watcher additionally polls `conversations.replies`
+  for any top-level message it sees with `reply_count > 0` that
+  doesn't already have a worker spawned for it. Per-thread reply
+  cursors live in `/tmp/hq-slack-bot.<bot-slug>.threads/<channel>:<thread_ts>`.
+  Stale threads (`MENTION_THREAD_GC_SECS`, default 24h) are GC'd to
+  bound state; per-tick poll cap is `MENTION_THREAD_POLL_CAP`
+  (default 50).
+- **One worker per thread.** Spawn dedupe is keyed on `thread_ts`,
+  not the individual message ts: `$SPAWN_DIR/<thread_ts>.spawned`.
+  The first @-mention in a thread (parent OR a reply, whichever lands
+  first) starts the worker; subsequent @-mentions in the same thread
+  are handled by the in-flight worker's own `poll-thread.py` loop and
+  do NOT spawn another instance.
 
 ## Forking guide
 

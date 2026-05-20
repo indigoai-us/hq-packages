@@ -78,14 +78,15 @@ Examples:
    Events you'll receive on stdout:
 
    - `WATCHER_ARMED bot=<slug> workspace=<slug> scope=<…> user_id=<U…> channels=<N> creator=<U…|<none>> creator_src=<…> hash=<sha12>` — startup
-   - `MENTION channel=<C…|D…|G…> ts=<ts> user=<U…> text=<first 200 chars>` — every new @-mention
-   - `SPAWN agent=mention:<ts> channel=<…> log=<path>` — worker dispatched
+   - `MENTION channel=<C…|D…|G…> ts=<ts> thread_ts=<ts> user=<U…> text=<first 200 chars> [(thread-reply)]` — every new @-mention. The `(thread-reply)` suffix means the mention was found in a thread REPLY (not the parent), via the watcher's per-thread polling pass. Dedupe is keyed on `thread_ts`, not `ts`, so each thread spawns at most one worker.
+   - `SPAWN agent=mention:<ts> channel=<…> thread_ts=<…> log=<path> pid=<pid>` — worker dispatched
    - `SPAWN_FAILED ts=<ts> reason=<…>` — worker dispatch failed
-   - `API_ERROR <slack-error>` — polling failed (e.g. invalid_auth)
+   - `API_ERROR <slack-error>` — polling failed (e.g. invalid_auth). For thread-poll errors the prefix is `API_ERROR thread:<error>` and includes `thread_ts=`.
    - `CHANNEL_JOINED channel=<C…>` — bot was added to a new channel
      (emitted on the next channel-refresh tick)
    - `CHANNEL_LEFT channel=<C…>` — bot was removed from a channel
    - `CHANNELS_REFRESHED count=<N> (was <M>)` — count actually changed
+   - `RECOVERED [users.conversations]` — after a previously-emitted `API_ERROR` cleared
 
 3. **Do not narrate every event back to the user verbatim.** The worker
    is the user-facing actor (it posts in Slack). Tell the user once
@@ -119,6 +120,17 @@ Examples:
   not `now`, so @-mentions that landed in the invite → refresh gap
   get picked up on the next poll. Spawn-dedupe ensures no double
   reply.
+- **Spawn dedupe is per-thread, not per-message.** Sentinel lives at
+  `$SPAWN_DIR/<thread_ts>.spawned`. The first @-mention in a thread
+  starts a worker; if the human @-mentions the bot again later in the
+  same thread, the watcher does NOT spawn another worker — the
+  in-flight worker sees it as a normal `REPLY` event from its
+  `poll-thread.py` loop and responds in-place.
+- **Thread reply polling is automatic.** For every top-level message
+  with `reply_count > 0` that hasn't been spawned-for, the watcher
+  schedules per-thread polling via `conversations.replies`. State
+  lives in `/tmp/hq-slack-bot.<slug>.threads/<channel>:<thread_ts>`.
+  Stale threads are GC'd after `MENTION_THREAD_GC_SECS` (default 24h).
 - **Never** spawn more than one worker per `ts`. The watcher dedupes
   via `/tmp/hq-slack-bot.<bot-slug>.spawned/<ts>` sentinels.
 - **Never** include `AskUserQuestion` in the worker's allowed tools.
