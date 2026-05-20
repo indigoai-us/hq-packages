@@ -34,12 +34,20 @@
 # in-flight workers — they own their thread until their own exit
 # conditions fire. Worker logs land at $HQ_ROOT/workspace/workers/runs/<id>/.
 #
-# Per-channel cursors are initialized to "now" — backfilling old mentions
-# would spawn workers on resolved conversations.
+# On first arm, per-channel cursors are initialized to "now" — backfilling
+# the entire history on startup would spawn workers on long-resolved
+# conversations across every channel the bot already belongs to.
 #
 # Channel list is re-polled every MENTION_CHANNEL_REFRESH_SECS (default
-# 300s) and compared as a set — newly-joined channels start polling
+# 60s) and compared as a set — newly-joined channels start polling
 # immediately, no restart needed.
+#
+# When a channel is newly joined MID-RUN (i.e. not present at first arm),
+# the cursor is initialized to (now - MENTION_BACKFILL_SECS, default 600s)
+# rather than "now". This catches @-mentions that landed in the gap
+# between the bot being invited and the next channel-refresh tick.
+# The spawn-dedupe sentinel ($SPAWN_DIR/<ts>.spawned) guarantees a message
+# is never replied to twice across consecutive arms.
 
 set -u
 set -o pipefail
@@ -284,9 +292,12 @@ print((d.get("response_metadata") or {}).get("next_cursor") or "")
 
 # ── Config ─────────────────────────────────────────────────────────────────
 POLL_INTERVAL="${MENTION_POLL_INTERVAL:-15}"
-CHANNEL_REFRESH_SECS="${MENTION_CHANNEL_REFRESH_SECS:-300}"
+CHANNEL_REFRESH_SECS="${MENTION_CHANNEL_REFRESH_SECS:-60}"
 WORKER_TIMEOUT_SECS="${MENTION_WORKER_TIMEOUT:-7200}"
 SPAWN_PROBE_SECS="${MENTION_SPAWN_PROBE_SECS:-8}"
+# Backfill window for channels the bot joins mid-run (NOT applied at first
+# arm). Catches @-mentions that landed between invite and refresh tick.
+BACKFILL_SECS="${MENTION_BACKFILL_SECS:-600}"
 
 # ── Pre-flight: sample channel list call ───────────────────────────────────
 CHANNELS="$(list_bot_channels)"
@@ -470,11 +481,16 @@ while true; do
       fi
       CHANNELS="$NEW_CHANNELS"
       CHANNEL_COUNT="$NEW_COUNT"
-      # Initialize cursors for any newly-joined channels to "now".
+      # Initialize cursors for newly-joined channels. Set the cursor to
+      # (now - BACKFILL_SECS) so any @-mention that landed in the gap
+      # between the bot being invited and this refresh tick gets picked
+      # up on the very next poll. Spawn-dedupe via $SPAWN_DIR ensures we
+      # never reply to the same ts twice.
+      BACKFILL_TS="$(awk -v now="$(date +%s)" -v back="$BACKFILL_SECS" 'BEGIN{printf "%d.000000", now-back}')"
       while IFS= read -r ch; do
         [ -z "$ch" ] && continue
         cf="$CURSOR_DIR/$ch"
-        [ -e "$cf" ] || printf '%s' "$(date +%s).000000" > "$cf"
+        [ -e "$cf" ] || printf '%s' "$BACKFILL_TS" > "$cf"
       done <<< "$CHANNELS"
     fi
     LAST_CHANNEL_REFRESH="$NOW_SEC"
