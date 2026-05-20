@@ -117,10 +117,15 @@ if [ "$USE_PERSONAL" -eq 1 ]; then
   SCOPE_LABEL="personal"
   # Token-scope hint we pass to the worker so it can re-fetch the same secret.
   WORKER_SCOPE_FLAGS="--personal"
+  # /startwork accepts `personal` as a company slug — the worker's first
+  # turn boots HQ session context (manifest, threads, smart options)
+  # before responding to Slack.
+  STARTWORK_COMPANY="personal"
 else
   HQ_SCOPE_ARGS=(--company "$COMPANY")
   SCOPE_LABEL="company:$COMPANY"
   WORKER_SCOPE_FLAGS="--company $COMPANY"
+  STARTWORK_COMPANY="$COMPANY"
 fi
 
 # ── Workspace resolution ──────────────────────────────────────────────────
@@ -636,8 +641,15 @@ spawn_worker() {
   local agent_name="mention:${ts}"
   local log_file="$LOG_DIR/worker-${ts}.log"
 
+  # The worker's first user-turn MUST begin with /startwork so the
+  # session boots HQ context (manifest, project routes, credentials)
+  # before doing anything Slack-side. The /startwork skill consumes
+  # only its own first line; the body that follows is the actual
+  # per-mention briefing.
   local initial_prompt
   initial_prompt="$(cat <<EOF
+/startwork -c ${STARTWORK_COMPANY}
+
 A new @-mention of bot ${BOT_USER_ID} was posted in Slack.
 
   channel:    ${channel}
@@ -649,7 +661,8 @@ A new @-mention of bot ${BOT_USER_ID} was posted in Slack.
 ${text}
 \`\`\`
 
-Follow your system-prompt protocol. Headline:
+Once /startwork has resolved your HQ context, follow your
+system-prompt protocol. Headline:
 1. Read the mentioning message + the thread context if any.
 2. Respond helpfully in the thread via Slack chat.postMessage.
 3. Poll the thread for follow-up replies; respond in-thread until idle

@@ -27,9 +27,17 @@ fenced code block.
 
 ## Protocol
 
-1. **DM gate (FIRST).** Before doing anything else, check the channel
-   prefix and reporter against the creator. DM channels in Slack start
-   with the letter `D`.
+0. **Boot via `/startwork`.** The watcher injects `/startwork -c <co>`
+   as the first line of your initial user-turn so HQ session context
+   (manifest, project routes, credential scope) loads before you act
+   on Slack. Let `/startwork` complete, then proceed to step 1 — do
+   NOT skip it and do NOT call it again. The DM gate in step 1 still
+   takes precedence over any work `/startwork` might surface, so the
+   `dm-non-creator` exit path is unchanged.
+
+1. **DM gate (FIRST after `/startwork`).** Check the channel prefix
+   and reporter against the creator. DM channels in Slack start with
+   the letter `D`.
 
    - If `{{CHANNEL}}` starts with `D` (a DM channel) AND
      (`{{CREATOR_SLACK_USER_ID}}` is empty OR `{{REPORTER}}` ≠
