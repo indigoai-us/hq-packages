@@ -38,7 +38,11 @@ packages/hq-pack-slack-bot/
 │       └── SKILL.md                       ← the /run-bot skill
 ├── scripts/
 │   ├── watch.sh                           ← bash watcher loop
-│   └── parse-mentions.py                  ← strict=False JSON parse + @-mention filter
+│   ├── parse-mentions.py                  ← strict=False JSON parse + @-mention filter
+│   ├── poll-thread.py                     ← in-thread reply polling helper
+│   ├── claude-worker-template.sh          ← vendored: var-substitute + dispatch
+│   ├── claude-worker.sh                   ← vendored: Claude SDK + Remote Control + Stop hook
+│   └── claude-pty-spawn.py                ← vendored: pty wrapper for the claude CLI
 └── workers/
     └── slack-mention-worker/
         ├── meta.yaml
@@ -46,6 +50,11 @@ packages/hq-pack-slack-bot/
         ├── schema.json                    ← JSON envelope for final message
         └── system-prompt.md               ← worker behavior contract
 ```
+
+The `scripts/claude-*` files are vendored from `personal/tools/` so the
+pack is self-contained — installing it gives you a complete
+@-mention-watcher + worker-spawner with no `personal/` or HQ-core
+script dependencies beyond the `claude` CLI itself.
 
 ## Watcher CLI
 
@@ -80,10 +89,13 @@ bash core/packages/hq-pack-slack-bot/scripts/watch.sh \
    `CHANNEL_JOINED` / `CHANNEL_LEFT` / `CHANNELS_REFRESHED` events.
 7. Dedupes against `/tmp/hq-slack-bot.<bot-slug>.spawned/<ts>` so
    restarts inside the same session don't re-spawn.
-8. Calls `claude-worker-template.sh -t slack-mention-worker` with
+8. Calls the vendored
+   `scripts/claude-worker-template.sh -t slack-mention-worker` with
    per-spawn `--var` substitutions (channel, thread_ts, mention text,
-   reporter, bot identity, creator id, scope flags). Worker is
-   detached via `nohup ... &`.
+   reporter, bot identity, creator id, scope flags). The runner pulls
+   the worker template from `workers/slack-mention-worker/` inside
+   the pack and hands off to the vendored `scripts/claude-worker.sh`.
+   Worker is detached via `nohup ... &`.
 
 ## What the worker does
 

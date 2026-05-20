@@ -20,9 +20,16 @@ contributes:
   hooks: []
   policies: []
   commands: []
-  # scripts/ payload ships the watcher (watch.sh) + parser
-  # (parse-mentions.py). scan-packages.sh (S3) symlinks these into the
-  # host instance's scripts/ directory at install time.
+  # scripts/ payload ships the watcher + parsers + vendored Claude
+  # worker dispatcher. scan-packages.sh (S3) symlinks these into the
+  # host instance's scripts/ directory at install time. The pack is
+  # self-contained — claude-worker.sh + claude-worker-template.sh +
+  # claude-pty-spawn.py are vendored copies of personal/tools/ originals
+  # so the pack runs without any personal/ symlinks.
   scripts:
     - watch.sh
     - parse-mentions.py
+    - poll-thread.py
+    - claude-worker-template.sh
+    - claude-worker.sh
+    - claude-pty-spawn.py

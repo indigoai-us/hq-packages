@@ -5,7 +5,9 @@
 # spawn one slack-mention-worker per new mention. Emits events on stdout
 # so a parent Monitor task in Claude can stream them as notifications.
 #
-# Companion package: personal/packages/hq-slack-bot/ — see README.md.
+# Package: hq-pack-slack-bot (self-contained; bundles its own
+# claude-worker-template.sh, claude-worker.sh, claude-pty-spawn.py
+# under scripts/, and the worker template under workers/). See README.md.
 #
 # Secret resolution: <bot-slug> + <workspace> + scope → vault entry
 #     HQ_SLACK_BOT_TOKEN_<UPPER_BOT>_<UPPER_WORKSPACE>
@@ -165,12 +167,18 @@ SECRET_NAME="HQ_SLACK_BOT_TOKEN_${BOT_UC}_${WS_UC}"
 CREATOR_SECRET="HQ_SLACK_BOT_CREATOR_${BOT_UC}_${WS_UC}"
 
 # ── Resolve paths ──────────────────────────────────────────────────────────
+# Everything the watcher dispatches is vendored inside the pack — no
+# personal/tools/ or personal/workers/ symlink dance. HQ_ROOT is still
+# computed (worker spawn cd's into it so relative `hq` invocations from
+# inside the worker land in HQ's tree) but it's no longer a resolution
+# path for the runner or template. Override with `HQ_ROOT=…` if the
+# pack lives at a non-default depth.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PACKAGE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-HQ_ROOT="$(cd "$PACKAGE_DIR/../../.." && pwd)"
-TEMPLATE_RUNNER="$HQ_ROOT/personal/tools/claude-worker-template.sh"
+HQ_ROOT="${HQ_ROOT:-$(cd "$PACKAGE_DIR/../../.." && pwd)}"
+TEMPLATE_RUNNER="$SCRIPT_DIR/claude-worker-template.sh"
 WORKER_TEMPLATE="slack-mention-worker"
-TEMPLATE_DIR="$HQ_ROOT/personal/workers/$WORKER_TEMPLATE"
+TEMPLATE_DIR="$PACKAGE_DIR/workers/$WORKER_TEMPLATE"
 PARSE_MENTIONS="$SCRIPT_DIR/parse-mentions.py"
 
 SPAWN_DIR="/tmp/hq-slack-bot.${BOT_SLUG}.spawned"
@@ -200,15 +208,14 @@ if [ ! -x "$PARSE_MENTIONS" ]; then
 fi
 if [ "$CHECK_ONLY" -eq 0 ]; then
   if [ ! -e "$TEMPLATE_RUNNER" ]; then
-    echo "FATAL: missing $TEMPLATE_RUNNER (run: hq sync pull --all)" >&2
+    echo "FATAL: missing $TEMPLATE_RUNNER — pack install incomplete (scripts/ not synced)?" >&2
     exit 1
   fi
   if [ ! -x "$TEMPLATE_RUNNER" ]; then
-    echo "FATAL: $TEMPLATE_RUNNER is not executable (chmod +x it first)" >&2
-    exit 1
+    chmod +x "$TEMPLATE_RUNNER" || { echo "FATAL: cannot chmod $TEMPLATE_RUNNER" >&2; exit 1; }
   fi
   if [ ! -e "$TEMPLATE_DIR/system-prompt.md" ]; then
-    echo "FATAL: missing $TEMPLATE_DIR/system-prompt.md — worker symlink missing? See README." >&2
+    echo "FATAL: missing $TEMPLATE_DIR/system-prompt.md — pack workers/ tree corrupt?" >&2
     exit 1
   fi
 fi

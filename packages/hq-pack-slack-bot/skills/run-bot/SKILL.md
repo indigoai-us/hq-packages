@@ -186,8 +186,12 @@ creator id, so you can confirm before arming.
   the channel stays in the polling set. Created by `/hq-new-bot` and
   installed
   per-workspace via the OAuth callback.
-- `personal/tools/claude-worker-template.sh` (synced).
 - `hq` CLI on PATH.
+- `claude` CLI on PATH. The pack vendors its own worker dispatcher
+  (`scripts/claude-worker.sh` + `scripts/claude-pty-spawn.py` +
+  `scripts/claude-worker-template.sh`) so no `personal/tools/` or
+  `personal/workers/` symlinks are required — Claude Code is the
+  only external runtime expected.
 - `curl`, `jq`, `awk`, `python3`.
 
 If the vault token comes from an app created via `/hq-new-bot`, the
