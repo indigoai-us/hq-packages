@@ -539,15 +539,62 @@ echo "WATCHER_ARMED bot=$BOT_SLUG workspace=$WORKSPACE scope=$SCOPE_LABEL person
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 # Spawn dedupe is keyed on the THREAD's ts (the parent message's ts for
-# replies, the message's own ts for top-level posts). One worker per
+# replies, the message's own ts for top-level posts). One LIVE worker per
 # thread — subsequent @-mentions in the same thread are handled by that
 # worker via its own poll loop, not by spawning another instance.
+#
+# Liveness check: the dedupe sentinel ($SPAWN_DIR/<thread_ts>.spawned)
+# carries the worker's PID once spawn_worker has forked. already_spawned
+# reads the PID and verifies the process is still alive via `kill -0`.
+# When the worker exits (resolved-keyword, idle, time-cap, etc.), the
+# next @-mention in the same thread finds a dead PID, GCs the sentinel,
+# and a fresh worker spawns.
+#
+# Before the PID is written (the few ms between mark_spawned and the
+# fork completing), the file is empty — treated as "spawn in progress,
+# don't double-spawn". If a spawn crashes before writing its PID, the
+# stale empty sentinel is GC'd after $STALE_MARK_SECS (default 300s)
+# so the thread isn't permanently silenced.
+STALE_MARK_SECS="${STALE_MARK_SECS:-300}"
+
 already_spawned() {
-  [ -e "$SPAWN_DIR/$1.spawned" ]
+  local f="$SPAWN_DIR/$1.spawned"
+  [ -e "$f" ] || return 1
+  local pid
+  pid="$(cat "$f" 2>/dev/null | tr -d '[:space:]')"
+  # Numeric PID present → check liveness.
+  if [ -n "$pid" ] && [ "$pid" -eq "$pid" ] 2>/dev/null; then
+    if kill -0 "$pid" 2>/dev/null; then
+      return 0
+    fi
+    # Worker process is gone → GC sentinel, allow respawn for a new
+    # @-mention landing in this thread after the worker exited.
+    rm -f "$f"
+    return 1
+  fi
+  # Empty / non-numeric sentinel — spawn in flight, OR a crashed spawn
+  # left a stale empty stub. Treat as deduped until $STALE_MARK_SECS,
+  # then GC so the thread isn't permanently silenced.
+  local mtime now age
+  mtime="$(stat -c %Y "$f" 2>/dev/null || echo 0)"
+  now="$(date +%s)"
+  age=$(( now - mtime ))
+  if [ "$age" -gt "$STALE_MARK_SECS" ]; then
+    rm -f "$f"
+    return 1
+  fi
+  return 0
 }
 
 mark_spawned() {
   : > "$SPAWN_DIR/$1.spawned"
+}
+
+# Called from inside spawn_worker's subshell once the worker PID is
+# known. Atomically replaces the empty sentinel from mark_spawned with
+# the PID, so subsequent already_spawned calls can check liveness.
+record_spawn_pid() {
+  printf '%s\n' "$2" > "$SPAWN_DIR/$1.spawned"
 }
 
 # track_thread <channel> <thread_ts> <latest_reply>
@@ -955,8 +1002,15 @@ EOF
       --var HQ_ROOT="$HQ_ROOT" \
       "$initial_prompt" \
       >"$log_file" 2>&1 &
+    worker_pid=$!
     disown
-    echo "SPAWN agent=$agent_name channel=$channel thread_ts=$thread_ts log=$log_file pid=$!"
+    # Stamp the PID into the dedupe sentinel so already_spawned can
+    # check liveness on future @-mentions in this thread. Without this,
+    # the sentinel is permanent and the thread silently rejects every
+    # follow-up mention after the worker exits (resolved-keyword / idle
+    # / timeout).
+    record_spawn_pid "$thread_ts" "$worker_pid"
+    echo "SPAWN agent=$agent_name channel=$channel thread_ts=$thread_ts log=$log_file pid=$worker_pid"
   )
 
   # Post-spawn pty.log probe — same pattern as monitor-liveops.
