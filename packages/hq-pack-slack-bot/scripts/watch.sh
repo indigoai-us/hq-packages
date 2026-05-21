@@ -810,10 +810,25 @@ poll_search() {
   # installer's full workspace view — channels the bot is NOT in are
   # silently dropped here so the search grant doesn't widen the bot's
   # effective reach beyond rooms it's been invited into.
+  #
+  # Fetch a FRESH channel list right before filtering. The main loop's
+  # channel-refresh runs on a 60s cadence; search runs on 30s. Without
+  # this, a channel the bot was just invited to may not be in $CHANNELS
+  # yet when an @-mention in it lands in the search index — filter
+  # drops the hit, cursor advances past it, the mention is permanently
+  # lost. One extra users.conversations call per 30s is negligible cost
+  # and the only reliable way to close the race.
+  local CHANNELS_FRESH
+  CHANNELS_FRESH="$(list_bot_channels 2>/dev/null || true)"
+  if [ -z "$CHANNELS_FRESH" ]; then
+    # API blip — fall back to the cached set so we don't lose all hits
+    # on a transient failure.
+    CHANNELS_FRESH="$CHANNELS"
+  fi
   while IFS=$'\t' read -r S_PFX S_TS S_CHANNEL S_USER S_THREAD_TS S_TEXT; do
     [ "$S_PFX" = "M" ] || continue
     [ -z "$S_TS" ] && continue
-    if ! printf '%s\n' "$CHANNELS" | awk 'NF' | grep -qxF "$S_CHANNEL"; then
+    if ! printf '%s\n' "$CHANNELS_FRESH" | awk 'NF' | grep -qxF "$S_CHANNEL"; then
       # Channel the BOT isn't in — drop the hit (installer can see it,
       # bot can't act in it).
       continue
