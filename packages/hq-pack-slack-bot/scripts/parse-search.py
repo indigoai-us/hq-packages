@@ -92,10 +92,41 @@ def main() -> int:
         if not channel:
             continue
 
-        # For thread replies, thread_ts is the canonical thread parent ts.
-        # For top-level posts, the result item has no thread_ts and the
-        # message ts IS the thread parent.
-        thread_ts = m.get("thread_ts") or ts_str
+        # Resolve the canonical thread parent ts. Slack's search.messages
+        # response is bizarre here: the top-level `thread_ts` field is
+        # often null even when the match IS a thread reply — but the
+        # `permalink` URL embeds the real thread_ts as a query param.
+        # Fall back to the message's own ts only for genuine top-level
+        # mentions (no thread membership).
+        #
+        # Without the permalink extraction, a reply mention spawns a
+        # worker whose poll-thread.py watches a non-existent thread
+        # (keyed on the reply's own ts, which isn't a thread parent),
+        # so subsequent in-thread follow-ups never reach the worker.
+        thread_ts = m.get("thread_ts")
+        if not thread_ts:
+            permalink = m.get("permalink") or ""
+            # Extract `thread_ts=<...>` from the URL's query string.
+            # Don't trust full URL parsing libs here — the value can
+            # contain unusual chars in fuzz cases; cheap substring grab
+            # is sufficient for the well-formed Slack URLs we see.
+            marker = "thread_ts="
+            idx = permalink.find(marker)
+            if idx >= 0:
+                tail = permalink[idx + len(marker):]
+                # Stop at next `&` or end of string.
+                end = tail.find("&")
+                candidate = tail if end < 0 else tail[:end]
+                # Cheap validation: must look numeric (slack ts shape).
+                try:
+                    float(candidate)
+                    thread_ts = candidate
+                except ValueError:
+                    thread_ts = None
+        if not thread_ts:
+            # Genuine top-level mention — thread parent IS this message.
+            thread_ts = ts_str
+
         clean_text = text.replace("\n", " ").replace("\r", " ")
         rows.append((ts_num, ts_str, channel, author, thread_ts, clean_text))
 
