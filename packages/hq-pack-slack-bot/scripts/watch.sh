@@ -210,6 +210,12 @@ WS_UC="$(_norm "$WORKSPACE")"
 # without colliding. personUid passes through verbatim (HQ uids
 # include lowercase + underscores, both SSM-legal).
 SECRET_NAME="${PERSON_UID}/HQ_SLACK_BOT_TOKEN_${BOT_UC}_${WS_UC}"
+# xoxp- user token written by hq-pro install-callback when the OAuth
+# flow requested user_scope (added 2026-05). Optional — older bots
+# don't have one; the watcher disables the search backstop gracefully
+# when absent. Used ONLY for the search.messages call (a user-token-
+# only API even when bot scopes claim to support it).
+USER_TOKEN_SECRET="${PERSON_UID}/HQ_SLACK_USER_TOKEN_${BOT_UC}_${WS_UC}"
 CREATOR_SECRET="${PERSON_UID}/HQ_SLACK_BOT_CREATOR_${BOT_UC}_${WS_UC}"
 
 # ── Resolve paths ──────────────────────────────────────────────────────────
@@ -290,6 +296,10 @@ fi
 # same pattern as the SLACK_CREDENTIALS_JSON read below.
 TOKEN="$(HQ_NO_UPDATE_CHECK=1 hq secrets "${HQ_SCOPE_ARGS[@]}" get --reveal "$SECRET_NAME" 2>/dev/null \
           | sed -n '/^  Value:/,$p' | sed '1s/^  Value: *//' | head -n 1)"
+# xoxp- user token — best-effort load. Empty = older bot pre-user_scope
+# rollout; poll_search() detects this at the first tick and disables.
+USER_TOKEN="$(HQ_NO_UPDATE_CHECK=1 hq secrets "${HQ_SCOPE_ARGS[@]}" get --reveal "$USER_TOKEN_SECRET" 2>/dev/null \
+              | sed -n '/^  Value:/,$p' | sed '1s/^  Value: *//' | head -n 1)"
 if [ -z "$TOKEN" ]; then
   echo "FATAL: $SECRET_NAME not loadable from $SCOPE_LABEL vault" >&2
   echo "       try: hq secrets ${HQ_SCOPE_ARGS[*]} get --reveal $SECRET_NAME" >&2
@@ -471,6 +481,11 @@ if [ "$CHECK_ONLY" -eq 1 ]; then
   echo "  scope:        $SCOPE_LABEL"
   echo "  person_uid:   $PERSON_UID (source: $PERSON_UID_SRC)"
   echo "  secret:       $SECRET_NAME"
+  if [ -n "${USER_TOKEN:-}" ]; then
+    echo "  user_token:   $USER_TOKEN_SECRET (loaded; search backstop available)"
+  else
+    echo "  user_token:   $USER_TOKEN_SECRET (NOT found — re-install bot to grant user_scope=search:read.*)"
+  fi
   echo "  bot_user_id:  $BOT_USER_ID"
   echo "  channels:     $CHANNEL_COUNT"
   if [ -n "$CREATOR_ID" ]; then
@@ -519,6 +534,7 @@ SCRIPT_HASH="$(sha256sum "$0" 2>/dev/null | awk '{print substr($1,1,12)}')"
 SEARCH_INIT_TS_DISPLAY="$(cat "$SEARCH_CURSOR_FILE" 2>/dev/null || echo "<unset>")"
 SEARCH_STATE_DISPLAY="enabled"
 [ "$SEARCH_POLL_ENABLE" = "1" ] || SEARCH_STATE_DISPLAY="disabled-by-config"
+[ -n "${USER_TOKEN:-}" ] || SEARCH_STATE_DISPLAY="no-user-token"
 echo "WATCHER_ARMED bot=$BOT_SLUG workspace=$WORKSPACE scope=$SCOPE_LABEL person_uid=$PERSON_UID user_id=$BOT_USER_ID channels=$CHANNEL_COUNT creator=${CREATOR_ID:-<none>} creator_src=${CREATOR_SRC:-none} search=${SEARCH_STATE_DISPLAY} search_cursor=${SEARCH_INIT_TS_DISPLAY} hash=$SCRIPT_HASH"
 
 # ── Helpers ────────────────────────────────────────────────────────────────
@@ -711,12 +727,31 @@ gc_threads() {
 # pollers). Run on its own cadence (SEARCH_POLL_INTERVAL_SECS) since
 # search has ~30–60s indexing lag.
 #
+# Slack `search.messages` is a USER-token-only API at runtime — even when
+# the bot manifest declares the granular `search:read.*` scopes, calls
+# with a bot xoxb- token return `not_allowed_token_type`. So this helper
+# uses the companion xoxp- USER_TOKEN written by the install-callback
+# when the OAuth flow requested `user_scope`. To keep the bot's
+# effective reach unchanged, results are POST-FILTERED to channels the
+# bot is a member of ($CHANNELS, the same set the channel-poll uses).
+#
 # Returns 0 on success (or skipped), 1 on transient API error.
-# On missing_scope / not_allowed_token_type → touches $SEARCH_DISABLED_FILE
-# and never retries until the next arm (cleared at state init).
+# On missing_scope / not_allowed_token_type / etc. → touches
+# $SEARCH_DISABLED_FILE and never retries until the next arm.
 poll_search() {
   [ "$SEARCH_POLL_ENABLE" = "1" ] || return 0
   [ -e "$SEARCH_DISABLED_FILE" ] && return 0
+
+  # No user token in vault → search backstop unavailable. Touch the
+  # sentinel so we don't probe Slack every tick; emit a single line so
+  # the operator can spot it. Re-installing the bot (which now requests
+  # `user_scope=search:read.*` at OAuth time) populates the secret and
+  # the next watcher arm picks it up automatically.
+  if [ -z "${USER_TOKEN:-}" ]; then
+    touch "$SEARCH_DISABLED_FILE"
+    echo "SEARCH_DISABLED reason=no_user_token (re-install bot to grant search:read.* via user_scope)"
+    return 0
+  fi
 
   local cursor
   cursor="$(cat "$SEARCH_CURSOR_FILE" 2>/dev/null || echo 0)"
@@ -728,7 +763,7 @@ poll_search() {
   # sort=timestamp + sort_dir=desc gives newest-first; we paginate only
   # within the first page (count up to SEARCH_RESULT_LIMIT) — beyond
   # that the search index isn't reliable for liveness anyway.
-  resp="$(curl -fsS -H "Authorization: Bearer $TOKEN" \
+  resp="$(curl -fsS -H "Authorization: Bearer $USER_TOKEN" \
     "https://slack.com/api/search.messages?query=${q}&sort=timestamp&sort_dir=desc&count=${SEARCH_RESULT_LIMIT}" \
     2>/dev/null || echo "")"
   if [ -z "$resp" ]; then
@@ -748,12 +783,12 @@ poll_search() {
 
   if [ "$ok" != "true" ]; then
     case "$err" in
-      missing_scope|not_allowed_token_type|invalid_auth|not_authed)
-        # Permanent — bot wasn't installed with search:read.* scopes.
-        # Stop trying for the lifetime of this watcher; channel + thread
-        # pollers continue to work.
+      missing_scope|not_allowed_token_type|invalid_auth|not_authed|token_revoked)
+        # Permanent — user token doesn't carry search scopes or got
+        # revoked. Stop trying for the lifetime of this watcher; channel
+        # + thread pollers continue to work.
         touch "$SEARCH_DISABLED_FILE"
-        echo "SEARCH_DISABLED reason=${err} (re-install bot with search:read.* scopes to enable)"
+        echo "SEARCH_DISABLED reason=${err} (re-install bot with user_scope=search:read.* to re-enable)"
         return 0
         ;;
       *)
@@ -771,9 +806,18 @@ poll_search() {
   fi
 
   # Each row: M\t<ts>\t<channel>\t<user>\t<thread_ts>\t<text>
+  # Post-filter to the bot's channel set. The xoxp- user token sees the
+  # installer's full workspace view — channels the bot is NOT in are
+  # silently dropped here so the search grant doesn't widen the bot's
+  # effective reach beyond rooms it's been invited into.
   while IFS=$'\t' read -r S_PFX S_TS S_CHANNEL S_USER S_THREAD_TS S_TEXT; do
     [ "$S_PFX" = "M" ] || continue
     [ -z "$S_TS" ] && continue
+    if ! printf '%s\n' "$CHANNELS" | awk 'NF' | grep -qxF "$S_CHANNEL"; then
+      # Channel the BOT isn't in — drop the hit (installer can see it,
+      # bot can't act in it).
+      continue
+    fi
     if already_spawned "$S_THREAD_TS"; then
       continue
     fi
