@@ -368,7 +368,7 @@ list_bot_channels() {
   local out=""
   LAST_LIST_ERR=""
   while :; do
-    local url="https://slack.com/api/users.conversations?types=public_channel,private_channel,im,mpim&limit=200"
+    local url="https://slack.com/api/users.conversations?types=public_channel,private_channel&limit=200"
     if [ -n "$cursor" ]; then url="${url}&cursor=${cursor}"; fi
     local resp curl_rc
     resp="$(curl -fsS -H "Authorization: Bearer $TOKEN" "$url" 2>/dev/null)"; curl_rc=$?
