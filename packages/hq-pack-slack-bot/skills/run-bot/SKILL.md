@@ -1,6 +1,6 @@
 ---
 name: run-bot
-description: Run an HQ-issued Slack bot — arm a per-bot @-mention watcher that spawns an autonomous Claude worker per mention. Pass the bot's slug (e.g. `hassaan`), a scope flag (`-c <company-slug>` or `--personal`), the creator's HQ personUid (`-u <prs_…>` — required; copy from the /hq-new-bot Slack response), and optionally a workspace (`-w <slack-team-domain>`; auto-derived for `--personal` from SLACK_CREDENTIALS_JSON). The watcher resolves `<personUid>/HQ_SLACK_BOT_TOKEN_<NAME>_<WORKSPACE>` from the chosen vault, infers the creator's Slack user_id (used as a DM gate), enumerates the bot's channels (periodically re-polled so newly-added channels start polling automatically), and dispatches workers. Workers respond in-thread, ignore DMs from non-creators, and never call AskUserQuestion.
+description: Run an HQ-issued Slack bot — arm a per-bot @-mention watcher that spawns an autonomous Claude worker per mention. Pass the bot's slug (e.g. `hassaan`), a scope flag (`-c <company-slug>` or `--personal`), and optionally a workspace (`-w <slack-team-domain>`; auto-derived for `--personal` from SLACK_CREDENTIALS_JSON). The operator's HQ personUid is auto-derived from `~/.hq/secrets-cache/prs_*/` (the dir name IS the personUid); pass `-u <prs_…>` only to override (e.g. for cross-operator company-vault setups). The watcher resolves `<personUid>/HQ_SLACK_BOT_TOKEN_<NAME>_<WORKSPACE>` from the chosen vault, infers the creator's Slack user_id (used as a DM gate), enumerates the bot's channels (periodically re-polled so newly-added channels start polling automatically), and dispatches workers. Workers respond in-thread, ignore DMs from non-creators, and never call AskUserQuestion.
 allowed-tools: Bash, Read, Monitor, TaskStop
 ---
 
@@ -33,15 +33,16 @@ Required arguments:
   (e.g. `indigo-ai`). Optional `-w <workspace>` flag; in `--personal`
   scope the watcher auto-derives it from `SLACK_CREDENTIALS_JSON` in
   the personal vault.
-- The **creator's HQ personUid** (`-u <prs_…>`). Required. The vault
-  secret key is namespaced by the personUid that created the bot —
+- The **creator's HQ personUid** (`-u <prs_…>`). Optional —
+  auto-derived from `~/.hq/secrets-cache/prs_*/` (the directory `hq`
+  creates the first time you touch a personal-vault secret; the dir
+  name IS the personUid). Pass `-u` explicitly only when running a
+  watcher for a bot created by someone else in a shared company
+  vault, or on a machine where the cache directory doesn't exist
+  yet. The vault secret key is namespaced by this personUid —
   `<prs_…>/HQ_SLACK_BOT_TOKEN_<NAME>_<WORKSPACE>` — so a shared
   company vault can hold the same bot slug under multiple operators
-  without colliding. Copy it from the `/hq-new-bot` response in Slack
-  (the prompt block includes `-u prs_…` baked into the run-bot
-  command). If you don't have that response handy, inspect any
-  existing personal-vault path: the `prs_*` segment in
-  `/hq/prs_<uid>/secrets/...` is your personUid.
+  without colliding.
 
 The slug + workspace + scope + personUid resolve to a vault entry named
 `<personUid>/HQ_SLACK_BOT_TOKEN_<NAME>_<WORKSPACE>` (dashes → underscores
@@ -53,14 +54,16 @@ multiple operators. On company installs the install-callback also
 writes an ACL row at `(cmp_X, <personUid>/*)` granting the operator
 admin, so they can read their own secrets back.
 
-Examples (assuming the operator's HQ personUid is `prs_01HASSAAN`):
+Examples (operator's HQ personUid `prs_01HASSAAN` is auto-derived
+from `~/.hq/secrets-cache/prs_01HASSAAN/`, so `-u` is omitted in the
+common case):
 
 | Args | Vault secret read |
 |------|-------------------|
-| `hassaan --personal -u prs_01HASSAAN` | personal vault → `prs_01HASSAAN/HQ_SLACK_BOT_TOKEN_HASSAAN_INDIGO_AI` (workspace auto-derived) |
-| `support-bot -c indigo -w indigo-ai -u prs_01HASSAAN` | indigo company vault → `prs_01HASSAAN/HQ_SLACK_BOT_TOKEN_SUPPORT_BOT_INDIGO_AI` |
-| `my-cool-bot -c personal -w acme-co -u prs_01HASSAAN` | personal vault (alias) → `prs_01HASSAAN/HQ_SLACK_BOT_TOKEN_MY_COOL_BOT_ACME_CO` |
-| `shared-bot -c indigo -u prs_01ALICE` | indigo company vault, Alice's bot → `prs_01ALICE/HQ_SLACK_BOT_TOKEN_SHARED_BOT_INDIGO_AI` (only works if Alice already granted you ACL admin on `prs_01ALICE/*`) |
+| `hassaan --personal` | personal vault → `prs_01HASSAAN/HQ_SLACK_BOT_TOKEN_HASSAAN_INDIGO_AI` (workspace + personUid auto-derived) |
+| `support-bot -c indigo -w indigo-ai` | indigo company vault → `prs_01HASSAAN/HQ_SLACK_BOT_TOKEN_SUPPORT_BOT_INDIGO_AI` |
+| `my-cool-bot -c personal -w acme-co` | personal vault (alias) → `prs_01HASSAAN/HQ_SLACK_BOT_TOKEN_MY_COOL_BOT_ACME_CO` |
+| `shared-bot -c indigo -u prs_01ALICE` | indigo company vault, Alice's bot → `prs_01ALICE/HQ_SLACK_BOT_TOKEN_SHARED_BOT_INDIGO_AI` (requires Alice already granted you ACL admin on `prs_01ALICE/*`) |
 
 ## Procedure
 
@@ -69,7 +72,7 @@ Examples (assuming the operator's HQ personUid is `prs_01HASSAAN`):
 
    ```bash
    bash core/packages/hq-pack-slack-bot/scripts/watch.sh \
-     <bot-slug> { -c <company> | --personal } -u <prs_personUid> [-w <workspace>] --check
+     <bot-slug> { -c <company> | --personal } [-w <workspace>] [-u <prs_personUid>] --check
    ```
 
    `--check` runs the startup pre-flight (workspace resolution, token
@@ -83,7 +86,7 @@ Examples (assuming the operator's HQ personUid is `prs_01HASSAAN`):
 
    ```
    Monitor(
-     command="bash core/packages/hq-pack-slack-bot/scripts/watch.sh <bot-slug> { -c <company> | --personal } -u <prs_personUid> [-w <workspace>]",
+     command="bash core/packages/hq-pack-slack-bot/scripts/watch.sh <bot-slug> { -c <company> | --personal } [-w <workspace>] [-u <prs_personUid>]",
      description="@-mention watcher for <bot-slug> + worker spawner",
      persistent=true,
      timeout_ms=3600000

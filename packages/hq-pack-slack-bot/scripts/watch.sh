@@ -71,17 +71,15 @@ COMPANY=""
 USE_PERSONAL=0
 CHECK_ONLY=0
 WORKSPACE=""
-# Operator's HQ personUid (`prs_*`). Required — there's no on-disk
-# discovery shortcut today, so the operator has to pass `-u prs_…` or
-# the watcher refuses to arm. The personUid is the SSM-hierarchy
-# prefix on the vault secret keys (`prs_*/HQ_SLACK_BOT_TOKEN_…`)
-# written by hq-pro's install-callback, and the granteeId on the
-# company-vault ACL row that lets the operator read their own
-# secrets back from a shared company vault. Find your personUid in
-# the post-create Slack response from `/hq-new-bot`, or by
-# inspecting any existing personal-vault path (it's the `prs_*`
-# segment in `/hq/prs_…/secrets/…`).
+# Operator's HQ personUid (`prs_*`). Optional — when omitted, we
+# auto-derive from `~/.hq/secrets-cache/prs_*/` (the directory `hq`
+# creates the first time you touch a personal-vault secret; its name
+# IS the operator's personUid). Pass `-u prs_…` explicitly to
+# override (e.g. when running a watcher for a bot created by someone
+# else in a shared company vault, or on a machine where the cache
+# directory doesn't exist yet).
 PERSON_UID=""
+PERSON_UID_SRC=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     -c)
@@ -96,7 +94,7 @@ while [ "$#" -gt 0 ]; do
       PERSON_UID="$2"; shift 2 ;;
     --check) CHECK_ONLY=1; shift ;;
     -h|--help)
-      echo "usage: $0 <bot-slug> { -c <company-slug> | --personal } -u <prs_personUid> [-w <workspace>] [--check]" >&2
+      echo "usage: $0 <bot-slug> { -c <company-slug> | --personal } [-w <workspace>] [-u <prs_personUid>] [--check]" >&2
       exit 0 ;;
     -*) echo "FATAL: unknown flag: $1" >&2; exit 64 ;;
     *)
@@ -108,21 +106,33 @@ while [ "$#" -gt 0 ]; do
 done
 
 if [ -z "$BOT_SLUG" ]; then
-  echo "usage: $0 <bot-slug> { -c <company-slug> | --personal } -u <prs_personUid> [-w <workspace>] [--check]" >&2
+  echo "usage: $0 <bot-slug> { -c <company-slug> | --personal } [-w <workspace>] [-u <prs_personUid>] [--check]" >&2
   exit 64
 fi
+
+# Auto-derive personUid from the operator's `hq` CLI secrets cache when
+# `-u` wasn't passed. The `~/.hq/secrets-cache/<scopeUid>/` directories
+# are created on first vault touch; the personal-scope one is named
+# exactly with the operator's `prs_*` personUid (the SSM-hierarchy
+# scope prefix). Fall back to a clear error with override hint if
+# nothing's there (fresh machine that's never touched personal vault).
 if [ -z "$PERSON_UID" ]; then
-  echo "FATAL: must specify -u <prs_personUid> (the creator's HQ personUid)" >&2
-  echo "       Find it in your /hq-new-bot Slack response, or any" >&2
-  echo '       existing personal-vault path (/hq/prs_<uid>/secrets/...).' >&2
+  PERSON_UID="$(ls -d "$HOME"/.hq/secrets-cache/prs_* 2>/dev/null | head -1 | xargs -n1 basename 2>/dev/null || true)"
+  [ -n "$PERSON_UID" ] && PERSON_UID_SRC="cache:~/.hq/secrets-cache/$PERSON_UID/"
+fi
+if [ -z "$PERSON_UID" ]; then
+  echo "FATAL: could not auto-derive your HQ personUid from ~/.hq/secrets-cache/" >&2
+  echo "       Run any personal-vault command once (e.g. \`hq secrets --personal list\`) and retry," >&2
+  echo "       or pass -u <prs_personUid> explicitly." >&2
   exit 64
 fi
 case "$PERSON_UID" in
   prs_*) ;;
   *)
-    echo "FATAL: -u $PERSON_UID has unexpected shape (expected prs_…)" >&2
+    echo "FATAL: personUid '$PERSON_UID' has unexpected shape (expected prs_…)" >&2
     exit 64 ;;
 esac
+[ -n "$PERSON_UID_SRC" ] || PERSON_UID_SRC="arg:-u"
 
 # Allow `-c personal` as an alias for --personal.
 if [ "$COMPANY" = "personal" ]; then
@@ -430,7 +440,7 @@ if [ "$CHECK_ONLY" -eq 1 ]; then
   echo "  bot_slug:     $BOT_SLUG"
   echo "  workspace:    $WORKSPACE${WORKSPACE_SRC:+ (source: $WORKSPACE_SRC)}"
   echo "  scope:        $SCOPE_LABEL"
-  echo "  person_uid:   $PERSON_UID"
+  echo "  person_uid:   $PERSON_UID (source: $PERSON_UID_SRC)"
   echo "  secret:       $SECRET_NAME"
   echo "  bot_user_id:  $BOT_USER_ID"
   echo "  channels:     $CHANNEL_COUNT"
