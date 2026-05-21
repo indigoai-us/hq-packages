@@ -226,9 +226,22 @@ TEMPLATE_RUNNER="$SCRIPT_DIR/claude-worker-template.sh"
 WORKER_TEMPLATE="slack-mention-worker"
 TEMPLATE_DIR="$PACKAGE_DIR/workers/$WORKER_TEMPLATE"
 PARSE_MENTIONS="$SCRIPT_DIR/parse-mentions.py"
+PARSE_SEARCH="$SCRIPT_DIR/parse-search.py"
 
 SPAWN_DIR="/tmp/hq-slack-bot.${BOT_SLUG}.spawned"
 CURSOR_DIR="/tmp/hq-slack-bot.${BOT_SLUG}.cursors"
+# Workspace-wide search.messages cursor — high-water-mark across ALL
+# @-mentions of the bot found via the search index. Backstops the
+# channel-poll + thread-poll loops: catches in-thread mentions whose
+# parent message predates arm time (so the parent never appears in
+# conversations.history → no T-row → thread never tracked → reply
+# invisible). Search has ~30-60s indexing lag, so this is a secondary
+# (not primary) detection path.
+SEARCH_CURSOR_FILE="/tmp/hq-slack-bot.${BOT_SLUG}.search-cursor"
+# Sentinel touched when search.messages returns missing_scope / not_allowed_token_type
+# so we skip further attempts for the lifetime of this watcher. Cleared
+# on a fresh arm (e.g. after re-installing the bot with new scopes).
+SEARCH_DISABLED_FILE="/tmp/hq-slack-bot.${BOT_SLUG}.search-disabled"
 # THREAD_DIR holds per-thread reply cursors for top-level messages with
 # reply_count > 0 that the watcher is actively polling for in-thread
 # @-mentions. One file per thread: <channel>:<thread_ts>. The file
@@ -246,11 +259,14 @@ WATCHER_ALIVE_FILE="${MENTION_WATCHER_ALIVE_FILE:-/tmp/hq-slack-bot.${BOT_SLUG}.
 mkdir -p "$SPAWN_DIR" "$CURSOR_DIR" "$THREAD_DIR" "$MEMBERSHIP_DIR" "$LOG_DIR"
 
 # ── Pre-flight: file deps ──────────────────────────────────────────────────
-for f in "$PARSE_MENTIONS"; do
+for f in "$PARSE_MENTIONS" "$PARSE_SEARCH"; do
   if [ ! -e "$f" ]; then echo "FATAL: missing $f" >&2; exit 1; fi
 done
 if [ ! -x "$PARSE_MENTIONS" ]; then
   chmod +x "$PARSE_MENTIONS" || { echo "FATAL: cannot chmod $PARSE_MENTIONS" >&2; exit 1; }
+fi
+if [ ! -x "$PARSE_SEARCH" ]; then
+  chmod +x "$PARSE_SEARCH" || { echo "FATAL: cannot chmod $PARSE_SEARCH" >&2; exit 1; }
 fi
 if [ "$CHECK_ONLY" -eq 0 ]; then
   if [ ! -e "$TEMPLATE_RUNNER" ]; then
@@ -423,6 +439,19 @@ THREAD_POLL_CAP="${MENTION_THREAD_POLL_CAP:-50}"
 # DMs) and when the creator id is unresolved.
 MEMBERSHIP_CHECK_SECS="${MENTION_MEMBERSHIP_CHECK_SECS:-300}"
 LEAVE_ON_CREATOR_ABSENT="${MENTION_LEAVE_ON_CREATOR_ABSENT:-1}"
+# Workspace-wide search.messages poll. Backstops the channel + thread
+# pollers — catches in-thread @-mentions whose parent thread isn't in
+# the channel-history window, or arrived during a watcher restart.
+# Disable with MENTION_SEARCH_POLL_ENABLE=0. Indexing lag (~30–60s)
+# means this is a slower fallback, not a primary path.
+SEARCH_POLL_ENABLE="${MENTION_SEARCH_POLL_ENABLE:-1}"
+SEARCH_POLL_INTERVAL="${MENTION_SEARCH_POLL_INTERVAL:-30}"
+# How far back to look on first arm when the search cursor file doesn't
+# exist yet. Default 1h catches @-mentions that landed during a short
+# watcher outage. Set to 0 to start "from now" (only future mentions).
+SEARCH_INITIAL_BACKFILL_SECS="${MENTION_SEARCH_INITIAL_BACKFILL_SECS:-3600}"
+# How many results to fetch per search call. Capped by Slack at 100.
+SEARCH_RESULT_LIMIT="${MENTION_SEARCH_RESULT_LIMIT:-50}"
 
 # ── Pre-flight: sample channel list call ───────────────────────────────────
 # Surface Slack API failures (missing_scope, invalid_auth, ratelimited)
@@ -462,7 +491,21 @@ while IFS= read -r ch; do
   [ -e "$cf" ] || printf '%s' "$NOW_TS" > "$cf"
 done <<< "$CHANNELS"
 
+# Initialize search.messages cursor on first arm: now - SEARCH_INITIAL_BACKFILL_SECS.
+# Subsequent watcher restarts resume from the existing file so we don't
+# re-process the same mentions every restart.
+if [ ! -e "$SEARCH_CURSOR_FILE" ]; then
+  SEARCH_INIT_TS="$(awk -v now="$(date +%s)" -v back="$SEARCH_INITIAL_BACKFILL_SECS" 'BEGIN{printf "%d.000000", now-back}')"
+  printf '%s' "$SEARCH_INIT_TS" > "$SEARCH_CURSOR_FILE"
+fi
+# Clear any stale "disabled" sentinel from a previous arm; we re-probe
+# the search endpoint on each arm so a re-installed bot with new scopes
+# activates without manual intervention.
+rm -f "$SEARCH_DISABLED_FILE"
+LAST_SEARCH_POLL=0
+
 PREV_ERR=""
+PREV_SEARCH_ERR=""
 PREV_LIST_ERR=""
 PREV_MEMBERSHIP_ERR=""
 # Force the first main-loop iteration to enter the refresh branch
@@ -473,7 +516,10 @@ PREV_MEMBERSHIP_ERR=""
 LAST_CHANNEL_REFRESH=0
 SCRIPT_HASH="$(sha256sum "$0" 2>/dev/null | awk '{print substr($1,1,12)}')"
 
-echo "WATCHER_ARMED bot=$BOT_SLUG workspace=$WORKSPACE scope=$SCOPE_LABEL person_uid=$PERSON_UID user_id=$BOT_USER_ID channels=$CHANNEL_COUNT creator=${CREATOR_ID:-<none>} creator_src=${CREATOR_SRC:-none} hash=$SCRIPT_HASH"
+SEARCH_INIT_TS_DISPLAY="$(cat "$SEARCH_CURSOR_FILE" 2>/dev/null || echo "<unset>")"
+SEARCH_STATE_DISPLAY="enabled"
+[ "$SEARCH_POLL_ENABLE" = "1" ] || SEARCH_STATE_DISPLAY="disabled-by-config"
+echo "WATCHER_ARMED bot=$BOT_SLUG workspace=$WORKSPACE scope=$SCOPE_LABEL person_uid=$PERSON_UID user_id=$BOT_USER_ID channels=$CHANNEL_COUNT creator=${CREATOR_ID:-<none>} creator_src=${CREATOR_SRC:-none} search=${SEARCH_STATE_DISPLAY} search_cursor=${SEARCH_INIT_TS_DISPLAY} hash=$SCRIPT_HASH"
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 # Spawn dedupe is keyed on the THREAD's ts (the parent message's ts for
@@ -656,6 +702,97 @@ gc_threads() {
       rm -f "$f"
     fi
   done
+}
+
+# poll_search — workspace-wide search.messages backstop. Catches
+# in-thread @-mentions whose parent thread the watcher has never seen
+# (parent predates arm time, never appears in conversations.history, so
+# no T-row → thread never tracked → reply invisible to channel + thread
+# pollers). Run on its own cadence (SEARCH_POLL_INTERVAL_SECS) since
+# search has ~30–60s indexing lag.
+#
+# Returns 0 on success (or skipped), 1 on transient API error.
+# On missing_scope / not_allowed_token_type → touches $SEARCH_DISABLED_FILE
+# and never retries until the next arm (cleared at state init).
+poll_search() {
+  [ "$SEARCH_POLL_ENABLE" = "1" ] || return 0
+  [ -e "$SEARCH_DISABLED_FILE" ] && return 0
+
+  local cursor
+  cursor="$(cat "$SEARCH_CURSOR_FILE" 2>/dev/null || echo 0)"
+  # Slack search query — literal `<@U…>` token gets indexed as-is.
+  # URL-encode the angle brackets so they survive the GET line.
+  local raw_q="<@${BOT_USER_ID}>"
+  local q="%3C%40${BOT_USER_ID}%3E"
+  local resp
+  # sort=timestamp + sort_dir=desc gives newest-first; we paginate only
+  # within the first page (count up to SEARCH_RESULT_LIMIT) — beyond
+  # that the search index isn't reliable for liveness anyway.
+  resp="$(curl -fsS -H "Authorization: Bearer $TOKEN" \
+    "https://slack.com/api/search.messages?query=${q}&sort=timestamp&sort_dir=desc&count=${SEARCH_RESULT_LIMIT}" \
+    2>/dev/null || echo "")"
+  if [ -z "$resp" ]; then
+    if [ "transport_failure" != "$PREV_SEARCH_ERR" ]; then
+      echo "API_ERROR search.messages:transport_failure"
+      PREV_SEARCH_ERR="transport_failure"
+    fi
+    return 1
+  fi
+
+  local parsed ok err new_last body
+  parsed="$(printf '%s' "$resp" | "$PARSE_SEARCH" --last-ts "$cursor" --bot "$BOT_USER_ID" 2>/dev/null || true)"
+  ok="$(printf '%s' "$parsed" | sed -n 's/^OK=//p' | head -1)"
+  err="$(printf '%s' "$parsed" | sed -n 's/^ERR=//p' | head -1)"
+  new_last="$(printf '%s' "$parsed" | sed -n 's/^MAX_TS=//p' | head -1)"
+  body="$(printf '%s' "$parsed" | awk 'p{print} /^$/{p=1}')"
+
+  if [ "$ok" != "true" ]; then
+    case "$err" in
+      missing_scope|not_allowed_token_type|invalid_auth|not_authed)
+        # Permanent — bot wasn't installed with search:read.* scopes.
+        # Stop trying for the lifetime of this watcher; channel + thread
+        # pollers continue to work.
+        touch "$SEARCH_DISABLED_FILE"
+        echo "SEARCH_DISABLED reason=${err} (re-install bot with search:read.* scopes to enable)"
+        return 0
+        ;;
+      *)
+        if [ "$err" != "$PREV_SEARCH_ERR" ]; then
+          echo "API_ERROR search.messages:${err:-unknown}"
+          PREV_SEARCH_ERR="$err"
+        fi
+        return 1
+        ;;
+    esac
+  fi
+  if [ -n "$PREV_SEARCH_ERR" ]; then
+    echo "RECOVERED search.messages"
+    PREV_SEARCH_ERR=""
+  fi
+
+  # Each row: M\t<ts>\t<channel>\t<user>\t<thread_ts>\t<text>
+  while IFS=$'\t' read -r S_PFX S_TS S_CHANNEL S_USER S_THREAD_TS S_TEXT; do
+    [ "$S_PFX" = "M" ] || continue
+    [ -z "$S_TS" ] && continue
+    if already_spawned "$S_THREAD_TS"; then
+      continue
+    fi
+    PREVIEW="$(printf '%s' "$S_TEXT" | tr '\n\r' '  ' | cut -c 1-200)"
+    echo "MENTION channel=$S_CHANNEL ts=$S_TS thread_ts=$S_THREAD_TS user=$S_USER text=$PREVIEW (via search)"
+    mark_spawned "$S_THREAD_TS"
+    # Drop any in-flight thread-tracker — the worker now owns this thread.
+    rm -f "$THREAD_DIR/${S_CHANNEL}:${S_THREAD_TS}"
+    if ! spawn_worker "$S_CHANNEL" "$S_TS" "$S_USER" "$S_THREAD_TS" "$S_TEXT"; then
+      echo "SPAWN_FAILED ts=$S_TS reason=spawn_worker_returned_nonzero source=search"
+    fi
+  done <<< "$body"
+
+  if [ -n "$new_last" ] && [ "$new_last" != "null" ]; then
+    printf '%s' "$new_last" > "$SEARCH_CURSOR_FILE"
+  fi
+  # Reference unused locals to keep `set -u` happy if no rows were emitted.
+  : "${raw_q}"
+  return 0
 }
 
 # diff_channels <new> <old>  →  emits CHANNEL_JOINED / CHANNEL_LEFT events.
@@ -1020,6 +1157,17 @@ while true; do
       touch "$T_CURSOR_FILE"
     fi
   done
+
+  # ── Workspace-wide search backstop ──────────────────────────────────────
+  # Catches in-thread @-mentions whose parent thread isn't (yet) being
+  # tracked by the channel/thread pollers — typically because the parent
+  # predates arm time and never appears in conversations.history. Runs on
+  # its own cadence (slower than channel poll; search has indexing lag).
+  NOW_SEC="$(date +%s)"
+  if [ $((NOW_SEC - LAST_SEARCH_POLL)) -ge "$SEARCH_POLL_INTERVAL" ]; then
+    poll_search || true
+    LAST_SEARCH_POLL="$NOW_SEC"
+  fi
 
   touch "$WATCHER_ALIVE_FILE" 2>/dev/null || true
   sleep "$POLL_INTERVAL"

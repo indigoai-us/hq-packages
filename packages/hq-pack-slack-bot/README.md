@@ -90,7 +90,20 @@ bash core/packages/hq-pack-slack-bot/scripts/watch.sh \
    `CHANNEL_JOINED` / `CHANNEL_LEFT` / `CHANNELS_REFRESHED` events.
 7. Dedupes against `/tmp/hq-slack-bot.<bot-slug>.spawned/<ts>` so
    restarts inside the same session don't re-spawn.
-8. Calls the vendored
+8. **Workspace-wide search backstop.** Periodically (default 30s) calls
+   `search.messages` for the literal `<@BOT_USER_ID>` token and dispatches
+   workers for any newly-indexed hits not already spawned. This catches
+   in-thread @-mentions in threads the channel + thread pollers never
+   tracked — typically when the thread's parent message predates arm
+   time and so never appears in `conversations.history`. Requires the
+   granular `search:read.public` / `search:read.private` /
+   `search:read.im` / `search:read.mpim` scopes; bots created via
+   `/hq-new-bot` after 2026-05 ship with them. If the bot was installed
+   without them, `search.messages` returns `missing_scope` and the
+   watcher emits `SEARCH_DISABLED` once then skips for the lifetime of
+   the watcher (re-install the bot to enable). Disable entirely with
+   `MENTION_SEARCH_POLL_ENABLE=0`.
+9. Calls the vendored
    `scripts/claude-worker-template.sh -t slack-mention-worker` with
    per-spawn `--var` substitutions (channel, thread_ts, mention text,
    reporter, bot identity, creator id, scope flags). The runner pulls
