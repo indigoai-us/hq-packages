@@ -81,27 +81,66 @@ fenced code block.
    the parent has `reply_count`. Read every message — your response
    should reflect the full conversation, not just the mention sentence.
 
-4. **Respond helpfully** in-thread via `chat.postMessage`:
+4. **Respond helpfully** — Slack-first, but PUSH LONG OUTPUT TO `/deploy`.
 
-   ```bash
-   curl -fsS -X POST "https://slack.com/api/chat.postMessage" \
-     -H "Authorization: Bearer $BOT_TOKEN" \
-     -H "Content-Type: application/json; charset=utf-8" \
-     --data "$(jq -nc \
-       --arg ch "{{CHANNEL}}" \
-       --arg ts "{{THREAD_TS}}" \
-       --arg text "<your response here>" \
-       '{channel:$ch, thread_ts:$ts, text:$text}')"
-   ```
+   Slack threads are a terrible place for long-form output: code blocks
+   wrap badly, tables don't render, lists clutter the channel, and the
+   ephemeral history makes the answer hard to reference later. Your
+   default response pattern is:
 
-   The worker template is intentionally generic. What "respond
-   helpfully" means is up to the *fork* of this template — replace
-   this section in your specialized package with the real behavior
-   (look up an answer, run a script, file a ticket, whatever).
+   - **Short answer (≤ ~600 chars, no tables, no code blocks)** —
+     post directly inline via `chat.postMessage`. Same pattern as
+     before:
 
-   The placeholder shipped behavior is to acknowledge the mention
-   with a short message that says you saw it and link to the worker's
-   own pty log path so the operator can debug.
+     ```bash
+     curl -fsS -X POST "https://slack.com/api/chat.postMessage" \
+       -H "Authorization: Bearer $BOT_TOKEN" \
+       -H "Content-Type: application/json; charset=utf-8" \
+       --data "$(jq -nc \
+         --arg ch "{{CHANNEL}}" \
+         --arg ts "{{THREAD_TS}}" \
+         --arg text "<short answer here>" \
+         '{channel:$ch, thread_ts:$ts, text:$text}')"
+     ```
+
+   - **Anything longer, structured, or worth re-reading** — write your
+     full answer as a static HTML page and ship it via the `/deploy`
+     skill. Then post a one-line summary + the deployed URL in-thread.
+
+     Why deploy:
+     1. Tables, code blocks, headings, diagrams all render correctly.
+     2. The link is durable — the user can revisit it tomorrow.
+     3. The Slack thread stays scannable.
+
+     How:
+     1. Render the response as a single self-contained HTML file
+        (inline CSS; no external deps). Default to dark theme + a
+        clean serif/mono mix so it reads well on phones too.
+     2. Save to a tempdir, e.g. `/tmp/hq-mention-{{MENTION_TS}}.html`.
+     3. Invoke the `/deploy` skill on that file. The skill picks the
+        right Vercel team / project, picks a subdomain off the bot's
+        company context (resolved by your earlier `/startwork`), and
+        applies the appropriate access gate. Capture the resulting
+        URL from its output — the URL is the one user-visible artifact.
+     4. Post a tight summary + link via `chat.postMessage`. Example
+        body: `"<one-sentence headline>. Full write-up: <url>"`. NEVER
+        paste the deployed page's body content back into Slack —
+        that defeats the entire point.
+
+   Decision rule of thumb:
+   - ≤ 600 chars plain prose → inline.
+   - Any code, command sequence, file listing, table, multi-step plan,
+     more-than-a-paragraph answer, or anything the user might want to
+     screenshot / share later → deploy.
+
+   The worker template is otherwise generic. What "respond helpfully"
+   means in DOMAIN terms is up to the *fork* of this template (look
+   up an answer, run a script, file a ticket, etc.) — but the
+   short-vs-deploy split above applies regardless of fork.
+
+   The placeholder shipped behavior, when no domain logic is wired,
+   is to acknowledge the mention with a short inline message and a
+   link to the worker's own pty log path so the operator can debug.
 
 5. **Poll the thread** via the on-disk script — do NOT roll your own
    bash+python polling loop. The shipped script handles cursor
@@ -155,7 +194,23 @@ fenced code block.
    - 60 minutes elapsed total — `status=exited-timeout`, `exit_reason=time-cap-60min`
    - Mention handled and operator-defined "complete" condition met — `status=complete`, `exit_reason=mention-handled`
 
-## Final Message (JSON envelope)
+7. **Stand down via `/handoff`.** Before emitting the final JSON
+   envelope, invoke the `/handoff` skill. This persists everything
+   you did — files touched, commits made, decisions reached, the
+   Slack thread context, and the next-steps you'd hand the next
+   operator — into `workspace/threads/T-*.json` + `handoff.json`. A
+   later session (you, the human, another worker) can resume the
+   thread cold by reading those files.
+
+   Skip ONLY for the `dm-non-creator` exit path: that exit means
+   you did nothing and have nothing to persist. For every other exit
+   reason (`exited-idle` / `exited-resolved` / `exited-timeout` /
+   `complete` / any `blocked` variant) call `/handoff` first.
+
+   Don't paste the handoff URL or thread-id into Slack — `/handoff`
+   writes to local HQ state, not a public artifact, and surfacing
+   internal paths in the bot's response is noise. The handoff is for
+   *future-you*, not the human in the thread.
 
 **Your last assistant message must be exactly the JSON envelope below —
 no prose, no fenced code block, just the object.** The Stop hook (via
