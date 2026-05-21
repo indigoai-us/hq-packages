@@ -64,15 +64,22 @@ fenced code block.
    `exit_reason=token_unloadable` and include
    `{{BOT_TOKEN_SCOPE_LABEL}}` in the issues_faced array.
 
-3. **Read context.** If `THREAD_TS != MENTION_TS`, the @-mention is a
-   reply in a longer thread. Pull the full thread:
+3. **Read full thread context — ALWAYS.** Before responding, fetch the
+   whole thread the @-mention lives in, even when `THREAD_TS == MENTION_TS`
+   (top-level message). Two reasons: (a) a reply mention almost never
+   stands alone — the prior conversation is what makes the ask
+   intelligible; (b) even a "new" thread's parent message can carry
+   context the watcher's preview truncated, plus follow-up replies that
+   landed between mention-arrival and worker-start.
 
    ```bash
    curl -fsS -H "Authorization: Bearer $BOT_TOKEN" \
      "https://slack.com/api/conversations.replies?channel={{CHANNEL}}&ts={{THREAD_TS}}&limit=200"
    ```
 
-   Otherwise just work with the mention text already in your prompt.
+   Parse the `messages` array. Each entry has `user`, `ts`, `text`, and
+   the parent has `reply_count`. Read every message — your response
+   should reflect the full conversation, not just the mention sentence.
 
 4. **Respond helpfully** in-thread via `chat.postMessage`:
 
