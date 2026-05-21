@@ -51,17 +51,42 @@ fenced code block.
 
 2. **Load the bot token.** The watcher resolved a secret name in
    `{{BOT_TOKEN_SECRET}}` and a scope in `{{BOT_TOKEN_SCOPE_FLAGS}}`.
-   Pull the token into the shell once at start:
+
+   **Do NOT trust any `BOT_TOKEN` / `SLACK_*_TOKEN` you find pre-set in
+   the environment.** The watcher does NOT pre-export the token —
+   anything you find in env is a stale leftover from `.bashrc`, another
+   bot's spawn, or a deleted previous app. A leftover from a deleted
+   app returns `account_inactive` from Slack and burns turns before you
+   notice. Always re-fetch from the vault path the watcher passed you.
+
+   Each `Bash` tool call is a fresh shell, so `export BOT_TOKEN=…` in
+   one call does NOT persist to the next. Cache the token to a per-run
+   tmpfile so subsequent Bash calls (and the Monitor poll command in
+   step 5) can re-read it:
 
    ```bash
-   export BOT_TOKEN="$(hq secrets {{BOT_TOKEN_SCOPE_FLAGS}} get --reveal "{{BOT_TOKEN_SECRET}}" 2>/dev/null \
-                       | awk -F': *' '/^  Value:/ {print $2}' | tr -d '[:space:]')"
+   BOT_TOKEN_FILE="/tmp/bot-token.{{MENTION_TS}}"
+   umask 077
+   hq secrets {{BOT_TOKEN_SCOPE_FLAGS}} get --reveal "{{BOT_TOKEN_SECRET}}" 2>/dev/null \
+     | awk -F': *' '/^  Value:/ {print $2}' | tr -d '[:space:]' > "$BOT_TOKEN_FILE"
+   export BOT_TOKEN="$(cat "$BOT_TOKEN_FILE")"
+   [ -n "$BOT_TOKEN" ] && echo "BOT_TOKEN cached to $BOT_TOKEN_FILE (len=${#BOT_TOKEN})" || echo "EMPTY"
    ```
 
-   If empty: post a brief failure note in-thread (using the watcher's
-   shared token would be wrong — that token is the bot's own identity
-   we're impersonating). Exit with `status=blocked`,
-   `exit_reason=token_unloadable` and include
+   In every subsequent Bash call (including the curls in steps 3-4),
+   start with:
+
+   ```bash
+   BOT_TOKEN="$(cat /tmp/bot-token.{{MENTION_TS}})"
+   ```
+
+   Do NOT inline the token in any command — a detect-secrets hook
+   blocks raw `xoxb-…` strings in Bash args.
+
+   If the fetch returns empty: post a brief failure note in-thread
+   (using the watcher's shared token would be wrong — that token is
+   the bot's own identity we're impersonating). Exit with
+   `status=blocked`, `exit_reason=token_unloadable` and include
    `{{BOT_TOKEN_SCOPE_LABEL}}` in the issues_faced array.
 
 3. **Read full thread context — ALWAYS.** Before responding, fetch the
@@ -147,12 +172,13 @@ fenced code block.
    persistence, dedupe, JSON decode quirks, and unbuffered stdout
    (avoiding the silent-failure modes documented in its docstring).
 
-   Launch with the `Monitor` tool (the watcher pre-exported `BOT_TOKEN`
-   when spawning you, so it is already in the worker's env):
+   Launch with the `Monitor` tool. The Monitor process is also a fresh
+   shell, so re-read `BOT_TOKEN` from the cache file you wrote in
+   step 2:
 
    ```
    Monitor(
-     command="BOT_TOKEN=\"$BOT_TOKEN\" python3 {{HQ_ROOT}}/core/packages/hq-pack-slack-bot/scripts/poll-thread.py \
+     command="BOT_TOKEN=\"$(cat /tmp/bot-token.{{MENTION_TS}})\" python3 {{HQ_ROOT}}/core/packages/hq-pack-slack-bot/scripts/poll-thread.py \
                 --channel {{CHANNEL}} \
                 --thread-ts {{THREAD_TS}} \
                 --bot {{BOT_USER_ID}} \
