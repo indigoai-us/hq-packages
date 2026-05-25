@@ -12,11 +12,23 @@ the child, waits briefly, then SIGKILLs if still alive.
 """
 import os
 import pty
+import re
 import select
 import signal
 import sys
 import termios
 import time
+
+# Claude Code shows a one-time interactive "Bypass Permissions mode" acceptance
+# gate on every fresh --remote-control launch (claude >= ~2.1.x). Neither the
+# ~/.claude.json `bypassPermissionsModeAccepted` flag nor IS_SANDBOX=1 suppress
+# it in remote-control mode, and pty-spawn has no human to click it -> workers
+# hang forever. Detect the gate in the output stream and send the accept
+# keystroke once. ANSI cursor-positioning interleaves the menu text, so match on
+# an ESC-stripped rolling buffer.
+_ANSI_RE = re.compile(rb'\x1b\[[0-9;?]*[a-zA-Z]')
+_GATE_ACCEPT_RE = re.compile(rb'(?i)yes.{0,4}i.{0,4}accept')
+_GATE_CANCEL_RE = re.compile(rb'(?i)esc.{0,4}to.{0,4}cancel')
 
 
 def set_raw_ish(fd):
@@ -59,6 +71,9 @@ def main():
 
     set_raw_ish(fd)
 
+    gate_accepted = False
+    gate_buf = b''
+
     exit_code = 0
     try:
         while True:
@@ -75,6 +90,23 @@ def main():
                     break
                 out_f.write(data)
                 out_f.flush()
+                if not gate_accepted:
+                    gate_buf = (gate_buf + data)[-8192:]
+                    stripped = _ANSI_RE.sub(b'', gate_buf)
+                    if _GATE_ACCEPT_RE.search(stripped) and \
+                            _GATE_CANCEL_RE.search(stripped):
+                        # Menu defaults to option 1 ("No, exit"); move the
+                        # selection down to option 2 ("Yes, I accept") then
+                        # confirm. Number-jump is unreliable for this prompt.
+                        try:
+                            time.sleep(0.3)
+                            os.write(fd, b'\x1b[B')
+                            time.sleep(0.2)
+                            os.write(fd, b'\r')
+                        except OSError:
+                            pass
+                        gate_accepted = True
+                        gate_buf = b''
             wpid, status = os.waitpid(pid, os.WNOHANG)
             if wpid == pid:
                 if os.WIFEXITED(status):
