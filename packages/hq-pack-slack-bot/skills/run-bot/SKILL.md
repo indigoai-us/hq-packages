@@ -177,22 +177,41 @@ Monitor(
 2. **DM gate.** If `channel` starts with `D` (a DM) and `user` is not the
    creator (`creator:` from `--check`), ignore it. Channel/group mentions
    are always handled.
-3. **Launch a background subagent** (`Agent`, `run_in_background: true`)
-   with a self-contained prompt giving it: the channel, thread_ts,
-   mention text, the bot-token secret name + vault scope flags, and the
-   instruction to --
-   - fetch the bot xoxb token via `hq secrets <scope-flags> get --reveal
-     <BOT_TOKEN_SECRET>` into a shell var **without ever printing it**,
-   - read the thread with `conversations.replies`,
-   - compose a helpful reply and post it **in-thread**
-     (`chat.postMessage` with `thread_ts`),
-   - return a one-line summary of what it posted.
-   The subagent MUST NOT call `AskUserQuestion`.
-4. One subagent (one reply) per thread -- the watcher's dedupe sentinel
-   keeps a thread from re-firing. Follow-up mentions in an
-   already-handled thread are not re-dispatched in v1.
+3. **Launch a persistent background thread agent** (`Agent`,
+   `run_in_background: true`) that OWNS this one thread end-to-end —
+   mirroring the headless worker's poll-until-idle behavior, but in-app
+   under the host's OAuth. Give it a self-contained prompt with: the
+   channel, thread_ts, the bot user id, the creator user id, the
+   bot-token secret name + vault scope flags, and the instruction to —
+   - **Fetch the bot xoxb token without printing it.** `hq secrets
+     <scope-flags> get --reveal <BOT_TOKEN_SECRET>` prints a multi-line
+     block whose last line is `  Value:  <token>` — NOT a bare token, so
+     `tail -1` is wrong. Extract robustly:
+     `TOKEN="$(HQ_NO_UPDATE_CHECK=1 hq secrets <scope-flags> get --reveal
+     <BOT_TOKEN_SECRET> 2>/dev/null | grep -oE 'xoxb-[A-Za-z0-9-]+' | head -1)"`.
+     Reference `$TOKEN` only; never echo it. (env doesn't persist across
+     the agent's separate bash calls — re-fetch, or stash in a `umask
+     077` temp file and delete it before exit.)
+   - Read the thread (`conversations.replies`), find human messages with
+     no bot reply after them (ignore messages where `user` == the bot id
+     or `bot_id` is set), and answer each **in-thread**
+     (`chat.postMessage` with `thread_ts`). Use whatever tools the
+     request needs — subagents inherit the session's tool surface,
+     including MCP servers (e.g. a company DB MCP). Never fabricate data;
+     if a needed tool is unavailable, say so.
+   - **Poll until idle.** After answering, loop: bounded poll
+     (`conversations.replies?oldest=<last_ts>`, short `sleep`s, no leading
+     sleep) for the next human reply; answer it; repeat. Exit on idle
+     (~7 min no human reply), a hard cap (~30 min), or a closer keyword
+     (thanks/resolved/done). Return a summary (replies posted + their ts,
+     exit reason). The agent MUST NOT call `AskUserQuestion`.
+4. **One persistent agent per thread.** The watcher's dedupe sentinel
+   keeps the thread from re-firing, so exactly one thread agent owns it
+   for the agent's lifetime. After it exits on idle, the thread is done;
+   a brand-new @-mention in that same thread will not re-fire in v1 (the
+   sentinel persists) — start a new thread to re-engage.
 
-Do not narrate each subagent back to the user; surface only failures.
+Do not narrate each agent back to the user; surface only failures.
 
 ## Rules
 
