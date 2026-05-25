@@ -129,6 +129,71 @@ common case):
 
    Ask the user first.
 
+## Modes: headless (default) vs in-session
+
+The watcher runs in one of two dispatch modes. The Slack detection,
+creator inference, channel polling, and dedupe are identical; only what
+happens on a new `@-mention` differs.
+
+### Headless (default)
+
+Per mention the watcher detaches an autonomous `claude` CLI worker
+(`claude-worker.sh` -> pty -> `claude --remote-control
+--dangerously-skip-permissions`). The worker survives the watcher being
+killed, so the bot keeps answering unattended (server / always-on box).
+
+**Requires standalone model auth** -- either a standalone `claude login`
+whose OAuth can refresh in a detached process, or an `ANTHROPIC_API_KEY`
+in the environment. On a **host-managed (desktop-app) Claude**, a
+detached worker can reach **neither** the desktop's OAuth broker nor an
+API key, so it fails with `401 Invalid authentication credentials /
+Please run /login`. Use in-session mode on such machines (or supply an
+API key).
+
+### In-session (`--in-session`)
+
+Per mention the watcher only **emits the `MENTION` event** -- it does NOT
+spawn a detached worker (no pty, no bypass-permissions gate, no
+standalone credential). The **pinned `Monitor` session reacts to each
+`MENTION` event** and dispatches an autonomous in-app subagent that
+handles that one thread, running under the host session's OAuth. No API
+key, no acceptance gates. Tradeoff: the bot only answers while the pinned
+session is open (laptop awake), and there is no `SPAWN` event.
+
+Arm it with the flag:
+
+```
+Monitor(
+  command="bash core/packages/hq-pack-slack-bot/scripts/watch.sh <bot-slug> { -c <company> | --personal } [-w <workspace>] [-u <prs_personUid>] --in-session",
+  description="@-mention watcher for <bot-slug> (in-session)",
+  persistent=true,
+  timeout_ms=3600000
+)
+```
+
+**Per-`MENTION` dispatch procedure (what the pinned session does):**
+
+1. Parse `channel`, `ts`, `thread_ts`, `user`, `text` from the event.
+2. **DM gate.** If `channel` starts with `D` (a DM) and `user` is not the
+   creator (`creator:` from `--check`), ignore it. Channel/group mentions
+   are always handled.
+3. **Launch a background subagent** (`Agent`, `run_in_background: true`)
+   with a self-contained prompt giving it: the channel, thread_ts,
+   mention text, the bot-token secret name + vault scope flags, and the
+   instruction to --
+   - fetch the bot xoxb token via `hq secrets <scope-flags> get --reveal
+     <BOT_TOKEN_SECRET>` into a shell var **without ever printing it**,
+   - read the thread with `conversations.replies`,
+   - compose a helpful reply and post it **in-thread**
+     (`chat.postMessage` with `thread_ts`),
+   - return a one-line summary of what it posted.
+   The subagent MUST NOT call `AskUserQuestion`.
+4. One subagent (one reply) per thread -- the watcher's dedupe sentinel
+   keeps a thread from re-firing. Follow-up mentions in an
+   already-handled thread are not re-dispatched in v1.
+
+Do not narrate each subagent back to the user; surface only failures.
+
 ## Rules
 
 - **First-arm cursor init is "now".** Backfilling the bot's entire

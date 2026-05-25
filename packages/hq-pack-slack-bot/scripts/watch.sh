@@ -70,6 +70,7 @@ BOT_SLUG=""
 COMPANY=""
 USE_PERSONAL=0
 CHECK_ONLY=0
+IN_SESSION=0
 WORKSPACE=""
 # Operator's HQ personUid (`prs_*`). Optional — when omitted, we
 # auto-derive from `~/.hq/secrets-cache/prs_*/` (the directory `hq`
@@ -93,8 +94,9 @@ while [ "$#" -gt 0 ]; do
       [ "$#" -ge 2 ] || { echo "FATAL: -u requires an HQ personUid (prs_…)" >&2; exit 64; }
       PERSON_UID="$2"; shift 2 ;;
     --check) CHECK_ONLY=1; shift ;;
+    --in-session) IN_SESSION=1; shift ;;
     -h|--help)
-      echo "usage: $0 <bot-slug> { -c <company-slug> | --personal } [-w <workspace>] [-u <prs_personUid>] [--check]" >&2
+      echo "usage: $0 <bot-slug> { -c <company-slug> | --personal } [-w <workspace>] [-u <prs_personUid>] [--check] [--in-session]" >&2
       exit 0 ;;
     -*) echo "FATAL: unknown flag: $1" >&2; exit 64 ;;
     *)
@@ -274,7 +276,7 @@ fi
 if [ ! -x "$PARSE_SEARCH" ]; then
   chmod +x "$PARSE_SEARCH" || { echo "FATAL: cannot chmod $PARSE_SEARCH" >&2; exit 1; }
 fi
-if [ "$CHECK_ONLY" -eq 0 ]; then
+if [ "$CHECK_ONLY" -eq 0 ] && [ "$IN_SESSION" -eq 0 ]; then
   if [ ! -e "$TEMPLATE_RUNNER" ]; then
     echo "FATAL: missing $TEMPLATE_RUNNER — pack install incomplete (scripts/ not synced)?" >&2
     exit 1
@@ -926,6 +928,15 @@ spawn_worker() {
   local channel="$1" ts="$2" user="$3" thread_ts="$4" text="$5"
   local agent_name="mention:${ts}"
   local log_file="$LOG_DIR/worker-${ts}.log"
+
+  # --in-session mode: do NOT spawn a detached headless worker. The MENTION
+  # event has already been emitted (and the thread marked spawned) by the
+  # caller; the pinned Monitor session reacts to that event by launching an
+  # autonomous in-app subagent under the host's OAuth. No pty, no acceptance
+  # gates, no standalone API key. One reply per thread (dedupe sentinel).
+  if [ "${IN_SESSION:-0}" -eq 1 ]; then
+    return 0
+  fi
 
   # The worker's first user-turn MUST begin with /startwork so the
   # session boots HQ context (manifest, project routes, credentials)

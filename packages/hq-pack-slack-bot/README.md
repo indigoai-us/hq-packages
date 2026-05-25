@@ -26,6 +26,25 @@ agent=mention:<ts>` on the event stream and detaches a worker per
 mention. Workers respond in-thread, ignore DMs from anyone other than
 the bot's creator, and never call `AskUserQuestion`.
 
+## Modes
+
+Two dispatch modes share identical Slack detection; they differ only in
+how a new `@-mention` is handled.
+
+- **Headless (default)** -- detaches an autonomous `claude` CLI worker per
+  mention. Survives the watcher dying, so the bot answers unattended.
+  Requires standalone model auth (a standalone `claude login` that can
+  refresh in a detached process, or `ANTHROPIC_API_KEY`). On a
+  host-managed (desktop-app) Claude a detached worker can reach neither,
+  and fails with `401 / Please run /login`.
+- **In-session (`--in-session`)** -- the watcher only emits `MENTION`
+  events; the pinned `Monitor` session dispatches an autonomous in-app
+  subagent per mention under the host session's OAuth. No pty, no
+  bypass-permissions gate, no standalone credential, no API key. The bot
+  answers only while the pinned session is open. Recommended for
+  desktop-app machines. See `skills/run-bot/SKILL.md` -> "Modes" for the
+  per-mention dispatch procedure.
+
 ## Layout
 
 ```
