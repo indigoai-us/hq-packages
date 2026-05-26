@@ -1,0 +1,69 @@
+{
+  "_comment": "Example allowlist for a secure capability-bridge sidecar. Copy and replace placeholders. Paths are relative to the sensitive tree root; the tree root itself is NEVER an allowed root. Each allowed root names the capability that justifies it. The deny list is enforced even inside allowed roots (defense in depth).",
+  "treeRoot": "~/path/to/sensitive-tree",
+  "allowedRoots": [
+    {
+      "path": "status",
+      "access": "read",
+      "justifyingCapability": "read_status"
+    },
+    {
+      "path": "records",
+      "access": "read-write",
+      "justifyingCapability": "create_record"
+    },
+    {
+      "path": "docs",
+      "access": "read",
+      "justifyingCapability": "lookup, search"
+    }
+  ],
+  "statusRoot": "status",
+  "mutationScope": "records",
+  "createRecordConfirmationPhrase": "confirm create record",
+  "deniedPathPatterns": [
+    ".aws",
+    ".bash_profile",
+    ".bashrc",
+    ".docker",
+    ".env",
+    ".gnupg",
+    ".gpg",
+    ".kube",
+    ".netrc",
+    ".npmrc",
+    ".profile",
+    ".pypirc",
+    ".ssh",
+    ".zprofile",
+    ".zshenv",
+    ".zshrc",
+    "api_key",
+    "credential",
+    "id_ed25519",
+    "id_rsa",
+    "private_key",
+    "secret",
+    "settings",
+    "token"
+  ],
+  "deniedActionWords": [
+    "shell",
+    "command",
+    "exec",
+    "bash",
+    "zsh",
+    "terminal",
+    "deploy",
+    "publish",
+    "commit",
+    "push",
+    "merge",
+    "rebase",
+    "install",
+    "curl",
+    "api_mutation"
+  ],
+  "maxFileBytes": 262144,
+  "maxResults": 5
+}

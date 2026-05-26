@@ -1,0 +1,29 @@
+{
+  "name": "@indigoai-us/hq-pack-secure-sidecar",
+  "version": "1.0.0",
+  "description": "HQ content pack: reference pattern + authoring guide for a secure capability-bridge sidecar that exposes a sensitive local tree to a remote chat access point as a named-capability dispatcher — never a remote shell.",
+  "files": [
+    "skills",
+    "knowledge",
+    "package.yaml",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/indigoai-us/hq-packages.git",
+    "directory": "packages/hq-pack-secure-sidecar"
+  },
+  "keywords": [
+    "hq",
+    "hq-pack",
+    "security",
+    "sidecar",
+    "remote-access",
+    "capability-bridge",
+    "audit"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -1,0 +1,30 @@
+name: hq-pack-secure-sidecar
+version: 1.0.0
+publisher: '@indigoai-us'
+access: public
+description: 'Reference pattern + authoring guide for a secure capability-bridge sidecar — expose a sensitive local tree (a repo, a knowledge base, an agent workspace) to a remote chat access point as a named-capability dispatcher, never a remote shell. Config-driven allowlist roots, deny lists, confirmation-gated mutations, append-only JSONL audit, and a dependency-free fixture smoke harness. Generalized from a NanoClaw HQ-sidecar spike.'
+requires:
+  hqCore: '>=12.0.0'
+  # Runtime prerequisites (only to run the reference smoke harness):
+  #   - Node 18+ with `npx tsx`, or Bun. The reference code is otherwise
+  #     dependency-free and meant to be copied into a target project.
+contributes:
+  workers: []
+  knowledge:
+    - secure-sidecar
+  skills:
+    - secure-sidecar
+  hooks: []
+  policies: []
+  commands: []
+  scripts: []
+keywords:
+  - hq
+  - hq-pack
+  - security
+  - sidecar
+  - remote-access
+  - capability-bridge
+  - audit
+license: MIT
+repository: 'https://github.com/indigoai-us/hq-packages'

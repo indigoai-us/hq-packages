@@ -13,6 +13,7 @@ Content packs for [HQ by Indigo](https://github.com/indigoai-us/hq-core) — the
 | [`hq-pack-gemini`](./packages/hq-pack-gemini) | Six Gemini CLI workers (coder, reviewer, frontend, designer, stylist, ux-auditor) + `gemini-cli` knowledge. Conditional — skipped when `gemini` is not on `PATH` |
 | [`hq-pack-gstack`](./packages/hq-pack-gstack) | gstack-team workers (26 g-* skills) + `scripts/gstack-bridge.sh` |
 | [`hq-pack-slack-bot`](./packages/hq-pack-slack-bot) | Per-bot Slack mention watcher + spawned-worker template. Pairs with hq-pro `/hq-new-bot`. |
+| [`hq-pack-secure-sidecar`](./packages/hq-pack-secure-sidecar) | Reference pattern + `/secure-sidecar` authoring guide for a secure capability-bridge sidecar — expose a sensitive local tree to a remote chat surface as a named-capability dispatcher (allowlist roots, deny lists, confirmation-gated writes, append-only audit). |
 
 ## Install a pack
 
