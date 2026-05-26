@@ -1,0 +1,37 @@
+name: hq-pack-nanoclaw
+version: 1.0.0
+publisher: '@indigoai-us'
+access: public
+description: 'NanoClaw integration pack for HQ. Bootstraps a local NanoClaw install (a container-isolated personal Claude assistant) via /setup-nanoclaw, ships HQ-adapted fork-maintenance skills (/update-nanoclaw, /migrate-nanoclaw) that operate on your cloned checkout, and includes the secure capability-bridge sidecar pattern (/secure-sidecar) for safe remote access to a sensitive local tree. The NanoClaw app is cloned from github.com/nanocoai/nanoclaw, not vendored.'
+requires:
+  hqCore: '>=12.0.0'
+  # Runtime prerequisites:
+  #   - git on PATH (to clone the NanoClaw app)
+  #   - NanoClaw setup itself needs Node + pnpm + Docker/Bun + a terminal
+  #     (run `bash nanoclaw.sh` outside Claude Code) — see /setup-nanoclaw
+  #   - the secure-sidecar smoke harness needs `npx tsx` or Bun (otherwise
+  #     the reference code is dependency-free)
+contributes:
+  workers: []
+  knowledge:
+    - nanoclaw
+    - secure-sidecar
+  skills:
+    - setup-nanoclaw
+    - update-nanoclaw
+    - migrate-nanoclaw
+    - secure-sidecar
+  hooks: []
+  policies: []
+  commands: []
+  scripts: []
+keywords:
+  - hq
+  - hq-pack
+  - nanoclaw
+  - claude-agent
+  - sidecar
+  - remote-access
+  - security
+license: MIT
+repository: 'https://github.com/indigoai-us/hq-packages'

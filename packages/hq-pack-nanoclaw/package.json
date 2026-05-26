@@ -1,0 +1,29 @@
+{
+  "name": "@indigoai-us/hq-pack-nanoclaw",
+  "version": "1.0.0",
+  "description": "HQ content pack: bootstrap + maintain a local NanoClaw install and build a secure capability-bridge sidecar for safe remote access to a sensitive local tree.",
+  "files": [
+    "skills",
+    "knowledge",
+    "package.yaml",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/indigoai-us/hq-packages.git",
+    "directory": "packages/hq-pack-nanoclaw"
+  },
+  "keywords": [
+    "hq",
+    "hq-pack",
+    "nanoclaw",
+    "claude-agent",
+    "sidecar",
+    "remote-access",
+    "security"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
+}

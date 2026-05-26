@@ -13,6 +13,7 @@ Content packs for [HQ by Indigo](https://github.com/indigoai-us/hq-core) — the
 | [`hq-pack-gemini`](./packages/hq-pack-gemini) | Six Gemini CLI workers (coder, reviewer, frontend, designer, stylist, ux-auditor) + `gemini-cli` knowledge. Conditional — skipped when `gemini` is not on `PATH` |
 | [`hq-pack-gstack`](./packages/hq-pack-gstack) | gstack-team workers (26 g-* skills) + `scripts/gstack-bridge.sh` |
 | [`hq-pack-slack-bot`](./packages/hq-pack-slack-bot) | Per-bot Slack mention watcher + spawned-worker template. Pairs with hq-pro `/hq-new-bot`. |
+| [`hq-pack-nanoclaw`](./packages/hq-pack-nanoclaw) | Bootstrap + maintain a local [NanoClaw](https://github.com/nanocoai/nanoclaw) install (`/setup-nanoclaw`, `/update-nanoclaw`, `/migrate-nanoclaw`) and build a secure capability-bridge sidecar for safe remote access to a sensitive local tree (`/secure-sidecar`). App is cloned, not vendored. |
 
 ## Install a pack
 

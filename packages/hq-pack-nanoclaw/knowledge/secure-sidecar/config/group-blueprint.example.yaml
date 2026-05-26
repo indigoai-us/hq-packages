@@ -1,0 +1,63 @@
+# Deny-by-default agent-group blueprint for a secure sidecar.
+#
+# This is the constrained context that remote requests land in. It must NOT
+# inherit broad personal-assistant behavior (web browsing, shell, scheduling,
+# tool installs, repo edits, deploys). Copy and adapt to your runtime's
+# group/agent configuration format; the shape — not the exact keys — is what
+# matters.
+
+name: sidecar
+description: >
+  Constrained context for remote capability-bridge access to a sensitive local
+  tree. Read-only capabilities plus a tiny confirmation-gated mutation. No shell,
+  no repo edits, no deploys, no credential access.
+
+# Do not inherit a general-purpose / demo group's behavior.
+inheritDemoBehavior: false
+
+# No extra skills or MCP servers — the bridge IS the capability surface.
+skills: []
+mcpServers: []
+
+# Capabilities exposed by the bridge. Each maps to a handler in
+# capability-bridge.ts and is justified by a mount below.
+capabilities:
+  readOnly:
+    - read_status
+    - lookup
+    - search
+  confirmationGated:
+    - create_record
+
+# Mounts: narrow, named, each linked to the capability that justifies it.
+# NEVER mount the tree root. NEVER mount credential/settings/source roots.
+mounts:
+  - path: status
+    access: read
+    justifies: read_status
+  - path: docs
+    access: read
+    justifies: lookup, search
+  - path: records
+    access: read-write
+    justifies: create_record
+
+# Explicit refusals — defense in depth alongside the bridge's deny list.
+refusals:
+  - arbitrary shell commands or command fragments
+  - editing source, commit/push/merge/rebase, opening PRs, changing git config
+  - deploying, publishing packages, mutating external APIs, changing infra
+  - reading/printing/copying/testing credentials
+  - changing settings, profiles, DNS, registry configuration
+  - installing packages or broadening mounts from chat
+
+# Confirmation policy for mutations.
+confirmation:
+  required: true
+  exactPhraseMatch: true
+
+# Append-only audit log the agent cannot rewrite.
+audit:
+  enabled: true
+  appendOnly: true
+  path: ~/path/to/sensitive-tree/records/sidecar-audit.jsonl
