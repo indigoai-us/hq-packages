@@ -1,5 +1,5 @@
 name: hq-pack-engineering
-version: 1.2.0
+version: 1.2.1
 publisher: '@indigoai-us'
 access: public
 description: 'Engineering capabilities for HQ — code review, debugging, testing, PR lifecycle, story execution (Ralph), and the worker team that executes coding work. Install when you use HQ to manage repos.'
@@ -40,8 +40,8 @@ contributes:
     # PreToolUse warn/redirect: nudge competing browser MCP tools toward the
     # agent-browser CLI (non-blocking). SessionStart: install reminder if missing.
     # Auto-discovered by master-hook.sh from core/packages/*/hooks/<event>/.
-    - PreToolUse/50-mcp__Claude_in_Chrome__*,mcp__playwright__*,mcp__Playwright__*--prefer-agent-browser.sh
-    - SessionStart/50-agent-browser-presence-check.sh
+    - PreToolUse/50-mcp__Claude_in_Chrome__*,mcp__playwright__*,mcp__Playwright__*--prefer-agent-browser
+    - SessionStart/50-agent-browser-presence-check
   policies:
     - e2e-testing-standards
     - hq-bugfix-requires-tests
