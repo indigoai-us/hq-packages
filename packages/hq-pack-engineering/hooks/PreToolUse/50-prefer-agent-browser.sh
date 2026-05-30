@@ -1,4 +1,5 @@
 #!/bin/bash
+# hq-hook-match: mcp__Claude_in_Chrome__*,mcp__playwright__*,mcp__Playwright__*
 # 50-...--prefer-agent-browser.sh — PreToolUse warn/redirect (non-blocking).
 #
 # Enforces policy hq-prefer-agent-browser (soft) as a prompt-level nudge: when a

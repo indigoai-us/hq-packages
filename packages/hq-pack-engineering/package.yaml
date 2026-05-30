@@ -40,7 +40,7 @@ contributes:
     # PreToolUse warn/redirect: nudge competing browser MCP tools toward the
     # agent-browser CLI (non-blocking). SessionStart: install reminder if missing.
     # Auto-discovered by master-hook.sh from core/packages/*/hooks/<event>/.
-    - PreToolUse/50-mcp__Claude_in_Chrome__*,mcp__playwright__*,mcp__Playwright__*--prefer-agent-browser
+    - PreToolUse/50-prefer-agent-browser
     - SessionStart/50-agent-browser-presence-check
   policies:
     - e2e-testing-standards
