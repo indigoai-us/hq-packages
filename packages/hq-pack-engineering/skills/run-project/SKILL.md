@@ -1,8 +1,8 @@
 ---
 name: run-project
-description: Codex-native router for executing HQ PRD stories. Default inline uses filesystem-mediated worker-phase spawn_agent workers; explicit interactive mode runs directly in the parent; Ralph/headless uses the shell orchestrator.
-allowed-tools: Read, spawn_agent, wait_agent, Bash(bash:*), Bash(jq:*), Bash(cat:*), Bash(tail:*), Bash(kill:*), Bash(ls:*), Bash(mkdir:*), Bash(nohup:*), Bash(echo:*), Bash(sleep:*), Bash(qmd:*), Bash(test:*), Bash, Write, AskUserQuestion, Task
-argument-hint: "{project} [--status] [--resume] [--dry-run] [--inline] [--interactive] [--ralph-mode] [--engine codex|claude]"
+description: Codex-native router for executing HQ PRD stories. Default inline uses filesystem-mediated worker-phase spawn_agent workers; explicit interactive mode runs directly in the parent; Ralph/headless runs the same inline worker loop unattended (auto-advance, no pauses).
+allowed-tools: Read, spawn_agent, wait_agent, Bash(bash:*), Bash(jq:*), Bash(cat:*), Bash(tail:*), Bash(kill:*), Bash(ls:*), Bash(mkdir:*), Bash(echo:*), Bash(sleep:*), Bash(qmd:*), Bash(test:*), Bash, Write, AskUserQuestion, Task
+argument-hint: "{project} [--status] [--resume] [--dry-run] [--inline] [--interactive] [--ralph-mode]"
 ---
 
 # Run Project — Codex Router
@@ -31,14 +31,14 @@ Extract from `$ARGUMENTS`:
 - `--resume` — pass through to the chosen execution path
 - `--inline` — story-level Codex sub-agent execution (default)
 - `--interactive` or `--session-mode` — parent-driven Codex execution
-- `--ralph-mode` — background/headless shell orchestrator
-- `--engine codex|claude` — engine for Ralph/headless execution; default to `claude` for worker-authoritative runs
-- `--builder codex|claude` — backward-compatible alias for `--engine`
-- Other shell-orchestrator flags (`--swarm`, `--tmux`, `--timeout`, `--retry-failed`, `--in-place`, `--checkin-interval`, `--codex-autofix`, `--no-monitor`) pass through only to Ralph/headless mode
+- `--ralph-mode` — the same inline worker loop as default, run unattended: skip the preflight approval, auto-advance through every story without between-story pauses, and report once at the end
+- `--resume` continues from the next incomplete story (read from `state.json`)
 
 If no execution mode is supplied, route to `--inline`. This is the default because it preserves the Ralph story loop and keeps implementation context out of the parent session.
 
-Use `--interactive` only when the user asks to steer edits directly in the parent session. Use `--ralph-mode` for long unattended, swarm, tmux, or process-isolated runs.
+Use `--interactive` only when the user asks to steer edits directly in the parent session. Use `--ralph-mode` for long unattended runs where you do not want to be prompted between stories — it executes the identical worker-authoritative story loop, just without the pauses.
+
+> **Note on the legacy detached orchestrator.** Earlier versions of this skill launched a detached shell subprocess (`nohup bash run-project.sh … --engine claude`) that ran one headless builder per story. That path is retired. `run-project.sh`'s execution loop is frozen and kept only for `--status`, `--dry-run`, and `--help`; it no longer runs stories, and it has no `claude` builder. Ralph now runs inline in the active session — no detached process, no per-story subprocess, no `claude -p` billing surface. The `--engine`/`--builder`, `--swarm`, `--tmux`, `--codex-autofix`, and `--no-monitor` flags belonged to that retired loop and are no longer accepted.
 
 ## Step 2 — Status, Help, and Dry Run
 
@@ -149,7 +149,7 @@ Interactive mode is parent-driven. It replaces Claude session-mode for Codex.
 
 Use when the project is small enough for the parent session and the user may want to steer implementation decisions.
 
-Codex interactive mode is direct parent execution, not proof that the HQ worker pipeline ran. If the user asks for worker-backed execution, or if a PRD/story requires `workers_run`, worker handoffs, or `/execute-task` semantics, stop and route to Ralph/headless with `--engine claude`.
+Codex interactive mode is direct parent execution, not proof that the HQ worker pipeline ran. If the user asks for worker-backed execution, or if a PRD/story requires `workers_run`, worker handoffs, or `/execute-task` semantics, stop and route to Ralph/headless (the unattended inline worker loop).
 
 Process:
 
@@ -174,40 +174,20 @@ Process:
 
 Do not spawn an end-to-end `/execute-task` sub-agent in Codex interactive mode unless the user explicitly asks for delegated agent work. Bounded helper agents are okay only when explicitly requested or clearly available, and they must return compact structured output.
 
-## Step 5 — Ralph/Headless Codex Execution
+## Step 5 — Ralph/Headless Unattended Execution
 
-Use when the project is long-running, unattended, swarm/tmux-oriented, requires worker-backed story execution, or when process isolation matters more than per-edit steering.
+Use when the project is long-running and the user wants it to run to completion without being prompted between stories.
 
-Launch with the worker-authoritative Claude engine:
+Ralph/headless is **the same inline worker loop as Step 3, run unattended.** It does not launch a detached subprocess and it does not use a separate engine — it executes the identical story-delegated `spawn_agent(agent_type: "worker")` loop in the active session, worker-authoritative as always. The only differences from default inline are operational:
 
-```bash
-cd ~/HQ && \
-  nohup bash {run_project_script} {project} {passthrough_flags} --engine claude --no-permissions \
-  > workspace/orchestrator/{project}/run.log 2>&1 &
-echo "PID:$!"
-```
+1. **Skip the preflight approval gate (Step 3a).** Still spawn the one read-only explorer to build the plan, but do not pause for approval — log the plan to `workspace/orchestrator/{project}/codex-session-plan.md` and proceed.
+2. **Auto-advance.** Run the Step 3b story loop for every approved incomplete story back to back. Do not pause between stories (skip Step 3b.10). All per-story invariants still hold: JSON-validate the worker return, enforce the worker-proof gate, verify parent-visible commits, mark `passes: true` only after verification, and update `state.json` after each story.
+3. **Run regression gates on cadence.** Apply Step 3c every 3 completed stories exactly as in inline mode.
+4. **Report once.** Emit one compact line per story to the transcript (`[{story_id}] {status} · {files_changed} files · {first_commit_short_sha}`); send anything longer to `workspace/threads/journal/<date>/<story-id>.md`. Surface a single summary at the end rather than pausing throughout.
 
-If `{run_project_script}` does not support `--engine`, use the legacy equivalent:
+Stop and surface to the user mid-run only on a hard blocker: a story that lands `blocked` (including `INVALID_RETURN_FORMAT`), a failed regression gate, or a worker that cannot run `/execute-task`. Do not silently skip past a blocked story to the next one — auto-advance applies to *passed* stories only.
 
-```bash
-bash {run_project_script} {project} {passthrough_flags} --builder claude --no-permissions
-```
-
-`--engine codex` is an explicit opaque-builder opt-in, not the default worker path. It requires `HQ_ALLOW_CODEX_OPAQUE_BUILDER=1` and must not be described as worker-authoritative until Codex can prove worker participation.
-
-Monitor progress from:
-
-- `workspace/orchestrator/{project}/state.json`
-- `workspace/orchestrator/{project}/progress.txt`
-- `workspace/orchestrator/{project}/run.log`
-
-Every poll:
-
-1. Read state with `jq -r '.status'`.
-2. Tail only new progress lines.
-3. Check PID with `kill -0`.
-4. If paused, surface the reason and ask resume / abort / detach.
-5. If completed, summarize state, report path, commits, and failed/skipped stories.
+Because the loop runs in-session, there is no PID, `run.log`, or detached process to poll. Progress lives in `state.json` and `progress.txt`, which the loop updates as it goes; `--status` and `--dry-run` against `{run_project_script}` remain available for out-of-band inspection.
 
 ## Step 6 — Completion
 
@@ -224,7 +204,7 @@ After either mode completes:
 - **Do not reference `.Codex/commands/run-project.md` as required source** — that file may not exist. This skill is the Codex router.
 - **Do not assume Claude-only primitives** — `Task`, `ExitPlanMode`, `/checkpoint`, and `/compact` are not Codex requirements. Use `spawn_agent` / `wait_agent` for default inline isolation.
 - **Default is inline** — a bare `/run-project {project}` uses story-level `spawn_agent(agent_type: "worker")` execution and nested `/execute-task` worker phases.
-- **Default Ralph/headless engine is worker-authoritative Claude** — use `--engine claude` or legacy `--builder claude` unless the user explicitly opts into the opaque Codex builder.
-- **Preserve HQ invariants** — PRD `userStories[].passes`, file locks, active-run coordination, commits per story, and quality gates remain required regardless of engine.
+- **Ralph/headless is the unattended inline loop** — it is the same worker-authoritative `spawn_agent(agent_type: "worker")` story loop as default inline, run without preflight approval or between-story pauses. There is no detached subprocess, no separate engine, and no `claude -p`. Do not pass or accept `--engine`/`--builder`; `run-project.sh` has no `claude` builder and its execution loop is frozen.
+- **Preserve HQ invariants** — PRD `userStories[].passes`, file locks, active-run coordination, commits per story, and quality gates remain required in every mode.
 - **Ask before mode changes** — switching from default inline to parent-driven interactive or Ralph/headless is a user-facing execution semantic. Preserve the decision gate with text fallback if needed.
 - **Budget mode is default** — Codex inline must prefer low-reasoning story delegation, compact JSON returns, bounded log reads, changed-repo regression gates, and no parent-side phase fanout.
