@@ -2,7 +2,7 @@
 name: run-project
 description: Codex-native router for executing HQ PRD stories. Default inline uses filesystem-mediated worker-phase spawn_agent workers; explicit interactive mode runs directly in the parent; Ralph/headless runs the same inline worker loop unattended (auto-advance, no pauses).
 allowed-tools: Read, spawn_agent, wait_agent, Bash(bash:*), Bash(jq:*), Bash(cat:*), Bash(tail:*), Bash(kill:*), Bash(ls:*), Bash(mkdir:*), Bash(echo:*), Bash(sleep:*), Bash(qmd:*), Bash(test:*), Bash, Write, AskUserQuestion, Task
-argument-hint: "{project} [--status] [--resume] [--dry-run] [--inline] [--interactive] [--ralph-mode]"
+argument-hint: "{project} [--status] [--resume] [--dry-run] [--inline] [--interactive] [--ralph-mode] [--in-place] [--timeout N]"
 ---
 
 # Run Project — Codex Router
@@ -32,6 +32,8 @@ Extract from `$ARGUMENTS`:
 - `--inline` — story-level Codex sub-agent execution (default)
 - `--interactive` or `--session-mode` — parent-driven Codex execution
 - `--ralph-mode` — the same inline worker loop as default, run unattended: skip the preflight approval, auto-advance through every story without between-story pauses, and report once at the end
+- `--in-place` — (ralph) skip feature-branch pre-creation; work on the current checkout
+- `--timeout N` — (ralph) per-story wall-clock budget in minutes before a story is marked `blocked: TIMEOUT`
 - `--resume` continues from the next incomplete story (read from `state.json`)
 
 If no execution mode is supplied, route to `--inline`. This is the default because it preserves the Ralph story loop and keeps implementation context out of the parent session.
@@ -136,6 +138,8 @@ Every 3 completed stories, run budget-aware `metadata.qualityGates` in one Codex
 
 On failure, surface the summary and ask whether to fix, adjust, stop, or switch to Ralph/headless mode.
 
+**Two regression layers, do not conflate them.** This every-3-stories quality gate is the *coarse* layer. The *fine* layer runs inside every story: when a story has non-empty `e2eTests`, `/execute-task`'s acceptance-test-writer phase writes `{repo}/__tests__/stories/{id}.test.ts` and then runs the **entire** `__tests__/stories/` suite as back-pressure — so every story re-verifies all prior stories' acceptance criteria and a regression (story N breaking story A) is caught immediately, not up to 3 stories later. A failing prior-story test is a back-pressure failure for the current story (the worker returns `all_story_tests_pass: false`). The orchestrator does not need to schedule this — it is part of the story worker's contract — but must treat such a story as not `passed`.
+
 ### 3d. Budget Guardrails
 
 - Use exactly one preflight explorer, one story worker per story, and one regression-gate worker at gate cadence.
@@ -178,14 +182,25 @@ Do not spawn an end-to-end `/execute-task` sub-agent in Codex interactive mode u
 
 Use when the project is long-running and the user wants it to run to completion without being prompted between stories.
 
-Ralph/headless is **the same inline worker loop as Step 3, run unattended.** It does not launch a detached subprocess and it does not use a separate engine — it executes the identical story-delegated `spawn_agent(agent_type: "worker")` loop in the active session, worker-authoritative as always. The only differences from default inline are operational:
+Ralph/headless is **the same inline worker loop as Step 3, run unattended.** It does not launch a detached subprocess and it does not use a separate engine — it executes the identical story-delegated `spawn_agent(agent_type: "worker")` loop in the active session, worker-authoritative as always.
+
+**5.0 — Pre-flight (run ONCE, before the loop starts).** Skipping the *approval pause* (operational step 1 below) must not skip *validation*. Before auto-advancing, the orchestrator must:
+
+1. **Pre-create the feature branch** from `metadata.baseBranch` unless `--in-place` was passed — never let an unattended run discover mid-loop that it has been committing to the wrong branch (`run-project-precreate-branch-before-ralph`).
+2. **Scan the PRD for stories whose acceptance requires interactive input** (a decision the worker would surface via `AskUserQuestion`) and mark them `blocked` up front with reason `NEEDS_INTERACTION` — do not let them wedge the loop mid-run (`hq-cmd-run-project-no-askuserquestion-stories-in-ralph-mode`). Workers in ralph mode never call `AskUserQuestion`.
+3. **Verify the target repo + branch resolve and the tree is clean.** Abort with a clear message if not — an unattended run on a dirty or missing tree is never correct.
+
+If any pre-flight check cannot be satisfied, stop and surface it; do not start the loop.
+
+The operational differences from default inline are then:
 
 1. **Skip the preflight approval gate (Step 3a).** Still spawn the one read-only explorer to build the plan, but do not pause for approval — log the plan to `workspace/orchestrator/{project}/codex-session-plan.md` and proceed.
 2. **Auto-advance.** Run the Step 3b story loop for every approved incomplete story back to back. Do not pause between stories (skip Step 3b.10). All per-story invariants still hold: JSON-validate the worker return, enforce the worker-proof gate, verify parent-visible commits, mark `passes: true` only after verification, and update `state.json` after each story.
 3. **Run regression gates on cadence.** Apply Step 3c every 3 completed stories exactly as in inline mode.
 4. **Report once.** Emit one compact line per story to the transcript (`[{story_id}] {status} · {files_changed} files · {first_commit_short_sha}`); send anything longer to `workspace/threads/journal/<date>/<story-id>.md`. Surface a single summary at the end rather than pausing throughout.
+5. **Bound wedge time.** A worker that never returns must not stall the run forever. Set a per-story soft budget (default ~20 min; honor `--timeout N` minutes if passed). If a story's `wait_agent` exceeds it, treat the story as `blocked` with reason `TIMEOUT`, stop, and surface it — do not silently move on. Slow back-pressure (e.g. heavy E2E) is the usual cause; the bound keeps an unattended run from hanging indefinitely.
 
-Stop and surface to the user mid-run only on a hard blocker: a story that lands `blocked` (including `INVALID_RETURN_FORMAT`), a failed regression gate, or a worker that cannot run `/execute-task`. Do not silently skip past a blocked story to the next one — auto-advance applies to *passed* stories only.
+Stop and surface to the user mid-run only on a hard blocker: a story that lands `blocked` (including `INVALID_RETURN_FORMAT`, `NEEDS_INTERACTION`, or `TIMEOUT`), a failed regression gate (coarse 3-story gate or a per-story `all_story_tests_pass: false`), or a worker that cannot run `/execute-task`. Do not silently skip past a blocked story to the next one — auto-advance applies to *passed* stories only.
 
 Because the loop runs in-session, there is no PID, `run.log`, or detached process to poll. Progress lives in `state.json` and `progress.txt`, which the loop updates as it goes; `--status` and `--dry-run` against `{run_project_script}` remain available for out-of-band inspection.
 
