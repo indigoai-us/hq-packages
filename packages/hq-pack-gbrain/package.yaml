@@ -1,0 +1,21 @@
+source: "github:indigoai-us/hq-packages#packages/hq-pack-gbrain"
+name: hq-pack-gbrain
+version: 0.1.0
+publisher: '@indigoai-us'
+access: public
+description: 'Optional GBrain integration for HQ. Adds per-company brain setup, brain-first lookup, capture, search, and lightweight gardening without making GBrain part of HQ core.'
+requires:
+  hqCore: '>=14.2.0'
+contributes:
+  skills:
+    - gbrain
+  workers:
+    - gbrain-gardener
+  knowledge:
+    - gbrain-hq
+  hooks: []
+  policies:
+    - gbrain-company-isolation
+  commands: []
+  scripts:
+    - hq-gbrain

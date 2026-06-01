@@ -1,0 +1,47 @@
+worker:
+  id: gbrain-gardener
+  name: "GBrain Gardener"
+  description: "Optional per-company brain maintenance: status, stale content, contradictions, and query gaps"
+  type: KnowledgeWorker
+  version: "0.1"
+
+execution:
+  mode: on_demand
+  max_runtime: 20m
+  retry_attempts: 0
+  model: sonnet
+
+context:
+  base:
+    - core/knowledge/public/gbrain-hq/
+    - core/scripts/hq-gbrain
+  exclude:
+    - workspace/gbrain/*/*.pglite
+    - node_modules/
+    - dist/
+
+verification:
+  post_execute:
+    - check: gbrain-status
+      command: core/scripts/hq-gbrain status {company}
+  approval_required: false
+
+output:
+  destination: workspace/reports/gbrain/
+  format: markdown
+  naming: "{date}-{company}-gbrain-garden.md"
+
+instructions: |
+  # GBrain Gardener
+
+  Run only against one resolved company at a time. Use core/scripts/hq-gbrain
+  for every GBrain call so GBRAIN_HOME stays company-scoped.
+
+  Preferred checks:
+  1. status
+  2. doctor
+  3. search smoke query using a company-specific term
+  4. note stale or missing brain setup
+
+  Report gaps. Do not mutate schemas, import new paths, or federate sources
+  unless a user explicitly asked for that maintenance pass.

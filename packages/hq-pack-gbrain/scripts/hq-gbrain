@@ -1,0 +1,233 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage:
+  hq-gbrain status [company]
+  hq-gbrain setup [company] [--install-gbrain]
+  hq-gbrain search [company] <query>
+  hq-gbrain ask [company] <question>
+  hq-gbrain capture [company] <text>
+  hq-gbrain doctor [company]
+  hq-gbrain home [company]
+
+GBrain runtime is scoped to workspace/gbrain/{company}.
+EOF
+}
+
+find_hq_root() {
+  local dir="$PWD"
+  while [[ "$dir" != "/" ]]; do
+    if [[ -f "$dir/companies/manifest.yaml" && -d "$dir/core" ]]; then
+      printf '%s\n' "$dir"
+      return 0
+    fi
+    dir="$(dirname "$dir")"
+  done
+  return 1
+}
+
+infer_company() {
+  local hq_root="$1"
+  if [[ -n "${HQ_COMPANY:-}" ]]; then
+    printf '%s\n' "$HQ_COMPANY"
+    return 0
+  fi
+  case "$PWD" in
+    "$hq_root"/companies/*|"$hq_root"/companies/*/*)
+      local rest="${PWD#"$hq_root"/companies/}"
+      printf '%s\n' "${rest%%/*}"
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+company_exists() {
+  local hq_root="$1" company="$2"
+  awk -v co="$company" '
+    $0 ~ "^  " co ":" { found=1 }
+    END { exit found ? 0 : 1 }
+  ' "$hq_root/companies/manifest.yaml"
+}
+
+manifest_value() {
+  local hq_root="$1" company="$2" key="$3"
+  awk -v co="$company" -v key="$key" '
+    $0 ~ "^  " co ":" { in_co=1; next }
+    in_co && /^  [a-zA-Z0-9_-]+:/ { in_co=0 }
+    in_co && $0 ~ "^    " key ":" {
+      sub("^    " key ":[[:space:]]*", "", $0)
+      print $0
+      exit
+    }
+  ' "$hq_root/companies/manifest.yaml"
+}
+
+require_gbrain() {
+  if command -v gbrain >/dev/null 2>&1; then
+    return 0
+  fi
+  if [[ "${INSTALL_GBRAIN:-0}" == "1" ]]; then
+    if ! command -v bun >/dev/null 2>&1; then
+      printf 'ERROR: gbrain is missing and bun is not available for install.\n' >&2
+      return 1
+    fi
+    bun install -g github:garrytan/gbrain
+    command -v gbrain >/dev/null 2>&1
+    return $?
+  fi
+  printf 'ERROR: gbrain is not installed. Re-run setup with --install-gbrain.\n' >&2
+  return 1
+}
+
+run_gbrain() {
+  local home="$1"
+  shift
+  GBRAIN_HOME="$home" gbrain "$@"
+}
+
+main() {
+  local cmd="${1:-}"
+  if [[ -z "$cmd" || "$cmd" == "-h" || "$cmd" == "--help" ]]; then
+    usage
+    return 0
+  fi
+  shift
+
+  local hq_root
+  hq_root="$(find_hq_root)" || {
+    printf 'ERROR: run from inside an HQ tree.\n' >&2
+    return 1
+  }
+
+  local company="${1:-}"
+  if [[ -n "$company" ]] && company_exists "$hq_root" "$company"; then
+    shift
+  else
+    company="$(infer_company "$hq_root" || true)"
+  fi
+  if [[ -z "$company" ]]; then
+    printf 'ERROR: company is required when it cannot be inferred from cwd.\n' >&2
+    return 1
+  fi
+  if ! company_exists "$hq_root" "$company"; then
+    printf 'ERROR: unknown company: %s\n' "$company" >&2
+    return 1
+  fi
+
+  local install_gbrain=0
+  local args=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --install-gbrain)
+        install_gbrain=1
+        shift
+        ;;
+      *)
+        args+=("$1")
+        shift
+        ;;
+    esac
+  done
+  set +u
+  set -- "${args[@]}"
+  set -u
+  INSTALL_GBRAIN="$install_gbrain"
+
+  local company_path knowledge_path home
+  company_path="$(manifest_value "$hq_root" "$company" path)"
+  knowledge_path="$(manifest_value "$hq_root" "$company" knowledge)"
+  home="$hq_root/workspace/gbrain/$company"
+
+  case "$cmd" in
+    home)
+      printf '%s\n' "$home"
+      ;;
+
+    status)
+      printf 'company: %s\n' "$company"
+      printf 'company_path: %s\n' "${company_path:-missing}"
+      printf 'knowledge_path: %s\n' "${knowledge_path:-missing}"
+      printf 'gbrain_home: %s\n' "$home"
+      if command -v gbrain >/dev/null 2>&1; then
+        printf 'gbrain: %s\n' "$(command -v gbrain)"
+        GBRAIN_HOME="$home" gbrain --version 2>/dev/null || true
+      else
+        printf 'gbrain: missing\n'
+      fi
+      if [[ -f "$home/.gbrain/config.json" ]]; then
+        printf 'initialized: yes\n'
+      else
+        printf 'initialized: no\n'
+      fi
+      ;;
+
+    setup)
+      require_gbrain
+      mkdir -p "$home"
+      if [[ ! -f "$home/.gbrain/config.json" ]]; then
+        run_gbrain "$home" init --pglite --no-embedding --non-interactive
+      fi
+      if [[ -n "$knowledge_path" && -d "$hq_root/$knowledge_path" ]]; then
+        run_gbrain "$home" import "$hq_root/$knowledge_path" --no-embed
+      fi
+      if [[ -n "$company_path" && -f "$hq_root/$company_path/company-brief.md" ]]; then
+        local brief_import_dir
+        brief_import_dir="$home/import/company-brief"
+        mkdir -p "$brief_import_dir"
+        cp "$hq_root/$company_path/company-brief.md" "$brief_import_dir/company-brief.md"
+        run_gbrain "$home" import "$brief_import_dir" --no-embed
+      fi
+      printf 'GBrain setup complete for %s\n' "$company"
+      printf 'GBRAIN_HOME=%s\n' "$home"
+      ;;
+
+    search)
+      require_gbrain
+      if [[ $# -lt 1 ]]; then
+        printf 'ERROR: search requires a query.\n' >&2
+        return 1
+      fi
+      run_gbrain "$home" search "$*"
+      ;;
+
+    ask)
+      require_gbrain
+      if [[ $# -lt 1 ]]; then
+        printf 'ERROR: ask requires a question.\n' >&2
+        return 1
+      fi
+      local think_err
+      think_err="$(mktemp)"
+      if ! run_gbrain "$home" think "$*" 2>"$think_err"; then
+        printf 'think unavailable; falling back to search.\n' >&2
+        cat "$think_err" >&2 || true
+        run_gbrain "$home" search "$*"
+      fi
+      rm -f "$think_err"
+      ;;
+
+    capture)
+      require_gbrain
+      if [[ $# -lt 1 ]]; then
+        printf 'ERROR: capture requires text.\n' >&2
+        return 1
+      fi
+      run_gbrain "$home" capture "$*"
+      ;;
+
+    doctor)
+      require_gbrain
+      run_gbrain "$home" doctor
+      ;;
+
+    *)
+      usage >&2
+      return 1
+      ;;
+  esac
+}
+
+main "$@"

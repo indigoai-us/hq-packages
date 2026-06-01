@@ -1,0 +1,30 @@
+{
+  "name": "@indigoai-us/hq-pack-gbrain",
+  "version": "0.1.0",
+  "description": "Optional GBrain integration pack for HQ",
+  "license": "MIT",
+  "files": [
+    "package.yaml",
+    "README.md",
+    "skills/",
+    "workers/",
+    "knowledge/",
+    "policies/",
+    "scripts/"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/indigoai-us/hq-packages.git",
+    "directory": "packages/hq-pack-gbrain"
+  },
+  "keywords": [
+    "hq",
+    "hq-pack",
+    "gbrain",
+    "memory",
+    "knowledge"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}
