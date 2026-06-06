@@ -1,5 +1,8 @@
 ---
 id: e2e-testing-standards
+trigger: E2E failure, end-to-end test, e2e flow regression
+when: test || e2e
+on: [PreToolUse, PostToolUse]
 enforcement: hard
 scope: global
 tags: [testing, e2e, prd, ralph, run-project, execute-task]

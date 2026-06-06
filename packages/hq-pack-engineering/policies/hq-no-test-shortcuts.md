@@ -3,6 +3,8 @@ id: hq-no-test-shortcuts
 title: Never skip or work around failing tests
 scope: global
 trigger: test failure, flaky test, E2E failure, CI red
+when: test || e2e
+on: [PreToolUse, PostToolUse]
 enforcement: hard
 tier: 1
 version: 1
