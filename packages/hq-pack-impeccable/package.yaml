@@ -1,0 +1,26 @@
+name: hq-pack-impeccable
+version: 1.0.0
+publisher: '@indigoai-us'
+access: public
+description: "Impeccable — production-grade frontend design skill (craft, shape, audit, animate, colorize, …) with 30+ reference files. Ported from pbakaus/impeccable (Apache-2.0)."
+license: 'Apache-2.0'
+repository: 'https://github.com/pbakaus/impeccable'
+requires:
+  hqCore: '>=12.0.0'
+contributes:
+  skills:
+    - impeccable
+author:
+  uid: 'cmt_pbakaus'
+  handle: 'pbakaus'
+  displayName: 'Paul Bakaus'
+upstream:
+  repo: 'https://github.com/pbakaus/impeccable'
+  ref: 'main'
+  ported_commit: '1aedbcf538e3fa6694ccbf00294cc18e59ba1f21'
+  license: 'Apache-2.0'
+  ported_at: '2026-06-06T23:38:02Z'
+  kind: port
+capabilities:   # derived by security-scan static inspection of the skill's .mjs live-browser payload
+  - network
+  - fs

@@ -1,0 +1,23 @@
+name: hq-pack-magicpath-agent-skills
+version: 1.0.0
+publisher: '@indigoai-us'
+access: public
+description: 'Integration pack — setup + usage knowledge + vendor links for MagicPath AI agent-skills. No copied upstream code (no LICENSE upstream).'
+requires:
+  hqCore: '>=12.0.0'
+contributes:
+  knowledge:
+    - magicpath-agent-skills
+author:
+  uid: 'cmt_magicpathai'
+  handle: 'magicpathai'
+  displayName: 'MagicPath AI'
+upstream:
+  repo: 'https://github.com/MagicPathAI/agent-skills'
+  ref: 'main'
+  ported_commit: '5e08ac90a5050a52abe4c28cbb700e989c111767'
+  license: 'NONE'
+  ported_at: '2026-06-06T23:38:02Z'
+  kind: integration
+# No top-level license: and no LICENSE file — there is no redistributable upstream.
+capabilities: []   # derived by security-scan: knowledge-only integration pack, no sensitive surface.
