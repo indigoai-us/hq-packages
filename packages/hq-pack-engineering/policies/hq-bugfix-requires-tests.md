@@ -3,6 +3,8 @@ id: hq-bugfix-requires-tests
 title: Every bugfix must include test coverage
 scope: global
 trigger: bug fix, broken behavior, regression, hotfix
+when: test
+on: [PreToolUse, UserPromptSubmit, AssistantIntent]
 enforcement: soft
 tier: 1
 version: 1

@@ -3,6 +3,8 @@ id: hq-prefer-agent-browser
 title: Default browser tool — agent-browser CLI for interactive/QA, Playwright for committed E2E
 scope: global
 trigger: browser-based QA, page audits, site testing, smoke tests, web automation, deploy verification
+when: browser
+on: [PreToolUse, UserPromptSubmit, AssistantIntent]
 enforcement: soft
 version: 3
 created: 2026-03-24
