@@ -1,10 +1,23 @@
 name: hq-pack-gstack
-version: 1.0.0
+version: 1.1.0
 publisher: '@indigoai-us'
 access: public
 description: 'gstack-team workers (26 g-* skills) + scripts/gstack-bridge.sh'
+license: 'MIT'
+repository: 'https://github.com/garrytan/gstack'
 requires:
   hqCore: '>=12.0.0'
+author:
+  uid: 'cmt_garrytan'
+  handle: 'garrytan'
+  displayName: 'Garry Tan'
+upstream:
+  repo: 'https://github.com/garrytan/gstack'
+  ref: 'main'
+  ported_commit: 'cab774cced06e0a36b3b4b1518b8c968707f7e2f'
+  license: 'MIT'
+  ported_at: '2026-06-06T23:43:28Z'
+  kind: port
 contributes:
   workers:
     - gstack-team
@@ -17,3 +30,6 @@ contributes:
   # package-provided scripts into the host instance's scripts/ directory.
   scripts:
     - gstack-bridge.sh
+capabilities:
+  - scripts
+  - fs

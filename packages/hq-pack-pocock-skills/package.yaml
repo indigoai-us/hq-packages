@@ -1,0 +1,40 @@
+name: hq-pack-pocock-skills
+version: 1.0.0
+publisher: '@indigoai-us'
+access: public
+description: "Matt Pocock's engineering + productivity skills (diagnose, tdd, triage, prototype, handoff, caveman, write-a-skill, …) ported from the cross-editor skills bundle."
+license: 'MIT'
+repository: 'https://github.com/mattpocock/skills'
+requires:
+  hqCore: '>=12.0.0'
+contributes:
+  skills:
+    - diagnose
+    - grill-with-docs
+    - triage
+    - improve-codebase-architecture
+    - setup-matt-pocock-skills
+    - tdd
+    - to-issues
+    - to-prd
+    - zoom-out
+    - prototype
+    - caveman
+    - grill-me
+    - handoff
+    - write-a-skill
+  knowledge:
+    - pocock-skills
+author:
+  uid: 'cmt_mattpocock'
+  handle: 'mattpocock'
+  displayName: 'Matt Pocock'
+upstream:
+  repo: 'https://github.com/mattpocock/skills'
+  ref: 'main'
+  ported_commit: 'be55a7970319ede7965edbb02b5e41cba1ca82c9'
+  license: 'MIT'
+  ported_at: '2026-06-06T23:38:02Z'
+  kind: port
+capabilities: []   # derived by security-scan static inspection: no contributes.scripts/hooks, no network/fs/secrets surface in any shipped file.
+
