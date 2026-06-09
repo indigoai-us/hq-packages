@@ -431,7 +431,7 @@ print((d.get("response_metadata") or {}).get("next_cursor") or "")
 POLL_INTERVAL="${MENTION_POLL_INTERVAL:-15}"
 CHANNEL_REFRESH_SECS="${MENTION_CHANNEL_REFRESH_SECS:-60}"
 WORKER_TIMEOUT_SECS="${MENTION_WORKER_TIMEOUT:-7200}"
-SPAWN_PROBE_SECS="${MENTION_SPAWN_PROBE_SECS:-8}"
+SPAWN_PROBE_SECS="${MENTION_SPAWN_PROBE_SECS:-12}"
 # Backfill window for channels the bot joins mid-run (NOT applied at first
 # arm). Catches @-mentions that landed between invite and refresh tick.
 BACKFILL_SECS="${MENTION_BACKFILL_SECS:-600}"
@@ -1021,7 +1021,11 @@ EOF
       sleep 1
       if grep -q "unresolved placeholders" "$log_file" 2>/dev/null; then
         echo "SPAWN_FAILED ts=$ts reason=template_placeholders_unresolved log=$log_file"
-        rm -f "$SPAWN_DIR/$ts.spawned"
+        # Unmark the THREAD sentinel (keyed by thread_ts, not ts) so the
+        # failure doesn't permanently silence the thread. For an in-thread
+        # mention ts != thread_ts, so removing "$ts.spawned" would miss the
+        # real sentinel and poison the thread until the stale-GC window.
+        rm -f "$SPAWN_DIR/$thread_ts.spawned"
         return 1
       fi
       run_dir="$(grep -oE "$HQ_ROOT/workspace/workers/runs/[A-Za-z0-9_]+" "$log_file" 2>/dev/null | head -1)"
@@ -1030,8 +1034,18 @@ EOF
       fi
       probe_left=$((probe_left - 1))
     done
+    # Probe window elapsed without pty.log output. A slow TUI cold start is
+    # NOT a failure: if the worker process is still alive, treat the spawn as
+    # successful (it will post when ready) — logging SPAWN_FAILED here and
+    # unmarking would both lie in the log and risk a double-spawn next tick.
+    # Only a dead worker is a genuine failure worth unmarking + retrying.
+    local _sp
+    _sp="$(cat "$SPAWN_DIR/$thread_ts.spawned" 2>/dev/null | tr -d '[:space:]')"
+    if [ -n "$_sp" ] && [ "$_sp" -eq "$_sp" ] 2>/dev/null && kill -0 "$_sp" 2>/dev/null; then
+      return 0
+    fi
     echo "SPAWN_FAILED ts=$ts reason=pty_log_never_populated probe_secs=$SPAWN_PROBE_SECS run_dir=${run_dir:-unknown}"
-    rm -f "$SPAWN_DIR/$ts.spawned"
+    rm -f "$SPAWN_DIR/$thread_ts.spawned"
     return 1
   fi
 }
