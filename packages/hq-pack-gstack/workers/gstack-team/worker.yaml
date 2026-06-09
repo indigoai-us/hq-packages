@@ -1,6 +1,7 @@
 worker:
   id: gstack-team
   name: "Gstack Team"
+  description: "Wraps the gstack CLI (Garry Tan's methodology) as an HQ OpsWorker — exposes the g-* skills (plan, review, QA, ship, retro) for codebase-level engineering flow"
   type: OpsWorker
   version: "1.0"
 
