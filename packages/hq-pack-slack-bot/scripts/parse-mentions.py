@@ -49,6 +49,11 @@ def main() -> int:
                    help="also emit T\\t rows for top-level messages with reply_count > 0; "
                         "the watcher uses these to schedule per-thread polling so it can "
                         "catch @-mentions that land in thread REPLIES, not just parents.")
+    p.add_argument("--all-messages", action="store_true",
+                   help="firehose mode: treat EVERY non-bot, non-subtype message as a match, "
+                        "not just ones containing the bot's @-mention token. Used for "
+                        "dedicated channels (e.g. #hq-feedback) where the bot should triage "
+                        "every message without being tagged.")
     args = p.parse_args()
 
     # strict=False mirrors monitor-liveops/parse-history.py — see the
@@ -130,7 +135,9 @@ def main() -> int:
             continue
 
         text = m.get("text") or ""
-        if mention_token not in text:
+        # Firehose channels match every message; normal channels require
+        # the literal @-mention token in the body.
+        if not args.all_messages and mention_token not in text:
             continue
 
         thread_ts = m.get("thread_ts") or m.get("ts")
