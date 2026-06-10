@@ -453,7 +453,7 @@ print((d.get("response_metadata") or {}).get("next_cursor") or "")
 POLL_INTERVAL="${MENTION_POLL_INTERVAL:-15}"
 CHANNEL_REFRESH_SECS="${MENTION_CHANNEL_REFRESH_SECS:-60}"
 WORKER_TIMEOUT_SECS="${MENTION_WORKER_TIMEOUT:-7200}"
-SPAWN_PROBE_SECS="${MENTION_SPAWN_PROBE_SECS:-8}"
+SPAWN_PROBE_SECS="${MENTION_SPAWN_PROBE_SECS:-12}"
 # Backfill window for channels the bot joins mid-run (NOT applied at first
 # arm). Catches @-mentions that landed between invite and refresh tick.
 BACKFILL_SECS="${MENTION_BACKFILL_SECS:-600}"
@@ -564,12 +564,60 @@ echo "WATCHER_ARMED bot=$BOT_SLUG workspace=$WORKSPACE scope=$SCOPE_LABEL person
 # replies, the message's own ts for top-level posts). One worker per
 # thread — subsequent @-mentions in the same thread are handled by that
 # worker via its own poll loop, not by spawning another instance.
+#
+# Liveness check: the dedupe sentinel ($SPAWN_DIR/<thread_ts>.spawned)
+# carries the worker's PID once spawn_worker has forked. already_spawned
+# reads the PID and verifies the process is still alive via `kill -0`.
+# When the worker exits (resolved-keyword, idle, time-cap, etc.), the
+# next @-mention in the same thread finds a dead PID, GCs the sentinel,
+# and a fresh worker spawns — without this, the sentinel is permanent
+# and the thread silently rejects every follow-up mention forever.
+#
+# Before the PID is written (the few ms between mark_spawned and the
+# fork completing), the file is empty — treated as "spawn in progress,
+# don't double-spawn". If a spawn crashes before writing its PID, the
+# stale empty sentinel is GC'd after $STALE_MARK_SECS (default 300s)
+# so the thread isn't permanently silenced.
+STALE_MARK_SECS="${STALE_MARK_SECS:-300}"
+
 already_spawned() {
-  [ -e "$SPAWN_DIR/$1.spawned" ]
+  local f="$SPAWN_DIR/$1.spawned"
+  [ -e "$f" ] || return 1
+  local pid
+  pid="$(cat "$f" 2>/dev/null | tr -d '[:space:]')"
+  # Numeric PID present → check liveness.
+  if [ -n "$pid" ] && [ "$pid" -eq "$pid" ] 2>/dev/null; then
+    if kill -0 "$pid" 2>/dev/null; then
+      return 0
+    fi
+    # Worker process is gone → GC sentinel, allow respawn for a new
+    # @-mention landing in this thread after the worker exited.
+    rm -f "$f"
+    return 1
+  fi
+  # Empty / non-numeric sentinel — spawn in flight, OR a crashed spawn
+  # left a stale empty stub. Treat as deduped until $STALE_MARK_SECS,
+  # then GC so the thread isn't permanently silenced.
+  local mtime now age
+  mtime="$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f" 2>/dev/null || echo 0)"
+  now="$(date +%s)"
+  age=$(( now - mtime ))
+  if [ "$age" -gt "$STALE_MARK_SECS" ]; then
+    rm -f "$f"
+    return 1
+  fi
+  return 0
 }
 
 mark_spawned() {
   : > "$SPAWN_DIR/$1.spawned"
+}
+
+# Called from inside spawn_worker's subshell once the worker PID is
+# known. Atomically replaces the empty sentinel from mark_spawned with
+# the PID, so subsequent already_spawned calls can check liveness.
+record_spawn_pid() {
+  printf '%s\n' "$2" > "$SPAWN_DIR/$1.spawned"
 }
 
 # track_thread <channel> <thread_ts> <latest_reply>
@@ -1011,8 +1059,15 @@ EOF
       --var SESSION_FILE="$session_file" \
       "$initial_prompt" \
       >"$log_file" 2>&1 &
+    worker_pid=$!
     disown
-    echo "SPAWN agent=$agent_name channel=$channel thread_ts=$thread_ts log=$log_file pid=$!"
+    # Stamp the PID into the dedupe sentinel so already_spawned can
+    # check liveness on future @-mentions in this thread. Without this,
+    # the sentinel is permanent and the thread silently rejects every
+    # follow-up mention after the worker exits (resolved-keyword / idle
+    # / timeout).
+    record_spawn_pid "$thread_ts" "$worker_pid"
+    echo "SPAWN agent=$agent_name channel=$channel thread_ts=$thread_ts log=$log_file pid=$worker_pid"
   )
 
   # Durable session record for restart-respawn (see SESSION_STORE). Written
@@ -1028,7 +1083,11 @@ EOF
       sleep 1
       if grep -q "unresolved placeholders" "$log_file" 2>/dev/null; then
         echo "SPAWN_FAILED ts=$ts reason=template_placeholders_unresolved log=$log_file"
-        rm -f "$SPAWN_DIR/$ts.spawned" "$session_file"
+        # Unmark the THREAD sentinel (keyed by thread_ts, not ts) so the
+        # failure doesn't permanently silence the thread. For an in-thread
+        # mention ts != thread_ts, so removing "$ts.spawned" would miss the
+        # real sentinel and poison the thread for every later mention.
+        rm -f "$SPAWN_DIR/$thread_ts.spawned" "$session_file"
         return 1
       fi
       run_dir="$(grep -oE "$HQ_ROOT/workspace/workers/runs/[A-Za-z0-9_]+" "$log_file" 2>/dev/null | head -1)"
@@ -1037,8 +1096,18 @@ EOF
       fi
       probe_left=$((probe_left - 1))
     done
+    # Probe window elapsed without pty.log output. A slow TUI cold start is
+    # NOT a failure: if the worker process is still alive, treat the spawn as
+    # successful (it will post when ready) — logging SPAWN_FAILED here and
+    # unmarking would both lie in the log and risk a double-spawn next tick.
+    # Only a dead worker is a genuine failure worth unmarking + retrying.
+    local _sp
+    _sp="$(cat "$SPAWN_DIR/$thread_ts.spawned" 2>/dev/null | tr -d '[:space:]')"
+    if [ -n "$_sp" ] && [ "$_sp" -eq "$_sp" ] 2>/dev/null && kill -0 "$_sp" 2>/dev/null; then
+      return 0
+    fi
     echo "SPAWN_FAILED ts=$ts reason=pty_log_never_populated probe_secs=$SPAWN_PROBE_SECS run_dir=${run_dir:-unknown}"
-    rm -f "$SPAWN_DIR/$ts.spawned" "$session_file"
+    rm -f "$SPAWN_DIR/$thread_ts.spawned" "$session_file"
     return 1
   fi
 }
