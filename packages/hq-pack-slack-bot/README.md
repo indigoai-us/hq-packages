@@ -134,6 +134,37 @@ to teach the worker something domain-specific — keep the interaction
 protocol + JSON envelope + DM gate intact, replace the placeholder
 "what to do" section.
 
+## Credential handling & injection posture (governed)
+
+This pack is conformant with the HQ governing policy
+`indigo-agent-scoped-credential-handling-and-injection-posture`
+(`companies/indigo/policies/`, enforcement: **hard**) — it is brought
+into conformance, not granted a carve-out. The contract:
+
+- **Vault is the sole source.** The bot token is resolved ONLY from the
+  HQ vault via `hq secrets <scope> get --reveal
+  <personUid>/HQ_SLACK_BOT_TOKEN_<NAME>_<WORKSPACE>`. The token is never
+  hardcoded, inlined, read from 1Password, or trusted from a pre-set
+  env var (a pre-set `BOT_TOKEN` / `SLACK_*_TOKEN` is a stale leftover —
+  always re-fetch from the vault path you were handed).
+- **Token is a capability — never expose the plaintext.** The watcher
+  hands the worker the secret *name* + scope flags, never the value; the
+  worker re-resolves from the vault and caches to a `umask 077` per-run
+  tmpfile. The token value is never echoed to stdout, logs, code, tests,
+  or audit summaries — only its name and length. The detect-secrets hook
+  blocks raw `xoxb-…` in commands; do not route around it.
+- **Per-entity identity.** Each bot is its own per-entity Slack app with
+  its own scoped token; the watcher never falls back to another entity's
+  credential.
+- **Verify identity before acting.** The watcher runs `auth.test` to
+  bind the token to its real `bot_user_id` before arming.
+- **Scoped client-held credential, not a broker endpoint.** Capability
+  is driven through the agent's own CLI/tools; no per-capability backend
+  route. Blast radius is bounded by per-entity scope + membership/DM
+  gating + short-lived materialization (with rotation + audit owned by
+  the `agent-slack-capabilities` sibling stories), not by stripping
+  capabilities.
+
 ## Creator inference (DM gate)
 
 The bot is a personal/company identity surface; it must not respond to
