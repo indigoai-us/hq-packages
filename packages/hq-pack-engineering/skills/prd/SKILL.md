@@ -665,6 +665,26 @@ Read `metadata.openQuestions[]` from the prd.json just written. **If empty**, sk
 
 **Rationale:** Open questions historically drifted into `metadata.openQuestions[]` and were forgotten. Forcing resolution at PRD creation (in plan mode, via AskUserQuestion) catches cost/timeline implications while context is rich, not in the executing agent's downstream session where context is thinner. The "Defer — track as pre-flight story" escape hatch preserves the option to punt without losing traceability.
 
+## Step 8.9: Deploy Visual Summary
+
+The project is now at the "ready to run" state — PRD files written and registered. Automatically
+generate and deploy a **visual project summary** so the user gets a shareable picture of what's
+coming, not just JSON on disk.
+
+Invoke the `project-summary` skill on this project (`{co}/{name}`). It reads the finished
+`prd.json`, renders a branded `index.html` (objectives, story map, phasing, and auto-detected UX
+mockups or architecture diagram) on the company's design standards, and deploys it
+company-gated via hq-deploy — returning a live URL. (`project-summary` ships with vanilla
+hq-core; if it is unavailable, skip this step.)
+
+Rules for this step:
+- **Planning artifact only** — it must NOT edit target repos and is subject to the same
+  no-implement rule as the rest of `/prd`. It only visualizes the PRD that already exists.
+- **Non-fatal** — if the build or deploy fails (no HQ identity, guardrails, offline, etc.),
+  log a one-line note and continue to Step 9 anyway. PRD creation must never be blocked by the
+  summary deploy.
+- Capture the returned URL (or the `skipped — {reason}` note) and surface it in Step 9.
+
 ## Step 9: Confirm & STOP
 
 Tell user:
@@ -676,6 +696,9 @@ Open questions remaining: {metadata.openQuestions.length}
 Files:
   companies/{co}/projects/{name}/prd.json   (source of truth — tracks all work)
   companies/{co}/projects/{name}/README.md  (human-readable view)
+
+Visual summary (live, members only):
+  {summary_url}   (or: "skipped — {reason}")
 
 Post-implementation docs needed:
   {list from postImplementation metadata, or "None detected"}
