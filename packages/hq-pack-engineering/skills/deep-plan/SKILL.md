@@ -860,7 +860,7 @@ To execute, start a new session and run:
   /execute-task {name}/US-001 (single story)
 ```
 
-**Then run `/handoff` (or the `handoff` skill) and end the session.** Do NOT proceed to execution.
+**Then, by default, run `/handoff` (or the `handoff` skill) and end the session** so stories execute in a fresh session. If the user explicitly asks to run it in this session, you may proceed to execution after warning once that planning context can bleed into execution, and recommending the handoff + fresh-session path.
 
 ## Story Guidelines
 
@@ -901,8 +901,8 @@ Splitting heuristics:
 - **All stories start with `passes: false`** — `/run-project` marks them true
 - **Planning, not execution** — this skill IS planning for everything except Step 8.5, which uses plan mode + AskUserQuestion to force resolution of open questions before PRD completion
 - **Track stories in prd.json** — that is the task list, no separate todo tracking needed
-- **HARD BLOCK: Do NOT implement** — ONLY create the PRD files (`companies/{co}/projects/{name}/prd.json` + `README.md`). NEVER edit target files (repos, decks, sites, etc.) during a PRD session. Plan approval = "approved to generate PRD files," NOT "approved to implement." Implementation happens via `/execute-task` or `/run-project` AFTER PRD creation. Violating this bypasses project tracking, worker assignment, handoffs, and quality gates
-- **STOP after PRD creation** — After Step 9 confirmation, run the `handoff` skill and end session. NEVER start executing stories, running workers, or writing implementation code in the same session as PRD creation. No exceptions, regardless of project size or user request. If user asks to start immediately, explain that execution requires a fresh session for context isolation (Ralph pattern). prd.json tracks all work for humans and future agent runs — this separation is mandatory
+- **Do NOT silently implement instead of planning** — A PRD invocation's job is to create the PRD files (`companies/{co}/projects/{name}/prd.json` + `README.md`). Do not skip that and start editing target files (repos, decks, sites, etc.) in their place. Plan approval = "approved to generate PRD files," not an implicit "approved to implement." Implementation runs via `/execute-task` or `/run-project` — by default in a fresh session, or in this session if the user explicitly requests it (see the handoff default below). Bypassing the PRD files entirely loses project tracking, worker assignment, and quality gates
+- **Default to handoff after PRD creation** — After Step 9 confirmation, the default is to run the `handoff` skill and end the session, so stories execute in a fresh session with clean context isolation (Ralph pattern). This is a strong default, not a hard block: if the user explicitly asks to execute now, you may proceed to `/execute-task` or `/run-project` in this session — but first warn once that planning context can reduce execution isolation, and recommend handoff + fresh session as the cleaner path. Never auto-execute without an explicit request. prd.json tracks all work regardless, so a fresh session can always resume
 - **Infrastructure before planning** — never create a PRD that references infrastructure (company, repo, knowledge) that doesn't exist. Fix gaps first (Step 2.5)
 - **MANDATORY: Always create project files** — Every PRD invocation MUST produce `companies/{co}/projects/{name}/prd.json` and `companies/{co}/projects/{name}/README.md`. No exceptions. These files are how HQ tracks work — they are NOT just inputs for `/run-project`. Never output a PRD to chat only, never skip file creation because the user "just wants a quick plan", never treat file generation as optional. If the user provides enough info to generate stories, write the files
 - **Every story MUST have testable acceptance criteria** — "works correctly" is not acceptable
