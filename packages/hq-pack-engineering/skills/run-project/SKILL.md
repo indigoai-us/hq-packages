@@ -54,6 +54,15 @@ bash {run_project_script} --dry-run {project}
 
 Display the important output to the user and stop.
 
+## Step 2.5 — Design-Lock Check (soft gate)
+
+Before execution, read the project's `prd.json` and check `metadata.designLocked`.
+
+- If `designLocked: true` (or the project has no UI surface) — proceed silently.
+- If the PRD is **UI-bearing** (stories reference screens, pages, components, or `metadata.designRef`/`audiences` imply a user-facing interface) and `designLocked` is absent or false — surface a one-line **soft warning**: "Heads up — design isn't locked for `{project}`. Consider `/storyboard {project}` first to lock visuals and fold any design changes into the PRD before building. Proceed anyway? [Y/n]"
+
+This is advisory, not a hard stop — many projects (CLIs, infra, libraries) have no visual surface and should proceed without friction. Honor an explicit "yes/proceed" and continue.
+
 ## Step 3 — Default Inline Codex Execution
 
 Inline mode is story-delegated. The Codex parent session plans and coordinates; each story runs in one fresh `worker` agent that invokes `/execute-task {project}/{story-id}` internally. `/execute-task` then maps its worker phases to nested Codex `spawn_agent` calls via `.claude/skills/execute-task/SKILL.md`.
