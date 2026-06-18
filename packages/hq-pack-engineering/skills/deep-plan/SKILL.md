@@ -142,6 +142,17 @@ companies/{co}/projects/{slug}/brainstorm.md
 
 **If not found:** proceed normally (no change to existing behavior). All smart-skip thresholds use the default (research-only) conditions.
 
+## Step 3.55: Design Detection
+
+Also check for a design artifact produced by `/storyboard` in design-led mode at `companies/{co}/projects/{slug}/design/design.md`.
+
+**If found:**
+1. Read it — surface(s) used, design rationale, and a proposed screen/story list.
+2. Set `metadata.designRef` to `design/design.md` (plus any referenced Figma URL). Seed candidate stories from the design's screen list, and add each screen's resolved interaction as enrichment to the Architecture-tier questions (mirrors brainstorm enrichment — informs questions, does not collapse them).
+3. This is the design-led handoff: `/storyboard` explored visuals first, and `/deep-plan` now hardens them into a full PRD.
+
+**If not found:** proceed normally.
+
 ## Step 3.6: Open Session Journal
 
 Spec: `core/knowledge/public/hq-core/journal-spec.md`. Open a session journal at the project_dir so research, decisions, and dead ends survive context compaction:
