@@ -488,6 +488,12 @@ CLAUDE_CMD=(
   --dangerously-skip-permissions
   --allow-dangerously-skip-permissions
   --permission-mode bypassPermissions
+  # Keep HQ-root file access alive even if the Bash-tool cwd later drifts into a
+  # sub-repo/worktree: --add-dir adds HQ root to the file-access roots so HQ
+  # knowledge/policy/skill-file READS keep resolving. (Slash-command/skill search
+  # paths still load from the LAUNCH cwd at boot — drift-prevention in the worker
+  # prompts stays the primary guard; this is belt-and-suspenders.)
+  --add-dir "$REPO_ROOT"
 )
 if [[ -n "$APPEND_SYSTEM_PROMPT" ]]; then
   CLAUDE_CMD+=(--append-system-prompt "$APPEND_SYSTEM_PROMPT")

@@ -12,11 +12,31 @@ the child, waits briefly, then SIGKILLs if still alive.
 """
 import os
 import pty
+import re
 import select
 import signal
 import sys
 import termios
 import time
+
+
+# claude --remote-control shows two interactive dialogs the worker must
+# clear or it hangs forever (the read loop below only tees output, it
+# never typed anything before this). Strip ANSI/VT noise so we can match
+# the prompt text reliably, then auto-answer:
+#   * "trust this folder" -> press Enter (default = trust)
+#   * "Bypass Permissions mode … Yes, I accept" -> one Down then Enter
+_CSI = re.compile(rb'\x1b\[[0-9;<>?]*[A-Za-z]')
+_OSC = re.compile(rb'\x1b\][^\x07]*\x07')
+_OTHER = re.compile(rb'\x1b[()][0-9A-Za-z]|\x1b[=>NODME]')
+
+
+def _clean(b):
+    b = _OSC.sub(b'', b)
+    b = _CSI.sub(b'', b)
+    b = _OTHER.sub(b'', b)
+    b = re.sub(rb'[\x00-\x08\x0e-\x1f\x7f ]', b'', b)
+    return b
 
 
 def set_raw_ish(fd):
@@ -60,6 +80,9 @@ def main():
     set_raw_ish(fd)
 
     exit_code = 0
+    dlg_buf = b''
+    trust_done = False
+    bypass_done = False
     try:
         while True:
             try:
@@ -75,6 +98,21 @@ def main():
                     break
                 out_f.write(data)
                 out_f.flush()
+                if not (trust_done and bypass_done):
+                    dlg_buf = (dlg_buf + data)[-8000:]
+                    txt = _clean(dlg_buf)
+                    if (not trust_done) and b'trustthisfolder' in txt.lower():
+                        time.sleep(0.4)
+                        os.write(fd, b'\r')
+                        trust_done = True
+                        dlg_buf = b''
+                    elif (not bypass_done) and b'Yes,Iaccept' in txt:
+                        time.sleep(0.4)
+                        os.write(fd, b'\x1b[B')
+                        time.sleep(0.25)
+                        os.write(fd, b'\r')
+                        bypass_done = True
+                        dlg_buf = b''
             wpid, status = os.waitpid(pid, os.WNOHANG)
             if wpid == pid:
                 if os.WIFEXITED(status):

@@ -158,6 +158,26 @@ fenced code block.
      more-than-a-paragraph answer, or anything the user might want to
      screenshot / share later → deploy.
 
+   **Message body = the user-facing answer ONLY — never status or wrapper
+   text (HARD).** The `text` you post via `chat.postMessage` (inline answer
+   OR the one-line deploy summary) must contain *only* the actual reply:
+   the answer, the result, the link. It must NOT contain status/wrapper/meta
+   lines that narrate the act of replying or what you did under the hood.
+   Banned in the message body — these belong ONLY in the JSON envelope, and
+   posting them to Slack is the bug this rule exists to prevent:
+   - "Replied in the Slack thread." / "Scheduled and replied in the thread."
+   - "Done. I posted X as a new message in #channel."
+   - Restating the channel, thread, run id, or job id you operated on.
+
+   The human can already see your message landed in the thread — saying so
+   *inside* the reply is redundant noise AND leaks the worker's internal
+   status contract onto a human-facing surface. **Litmus test:** if a
+   sentence describes the *act of replying / posting / scheduling* rather
+   than *answering the ask*, it does not go in the message — it goes in the
+   envelope's `summary` / `details` (see "Final Message" below), which no
+   human ever reads. Before every `chat.postMessage`, re-read your drafted
+   `text` and delete any such line.
+
    The worker template is otherwise generic. What "respond helpfully"
    means in DOMAIN terms is up to the *fork* of this template (look
    up an answer, run a script, file a ticket, etc.) — but the
@@ -276,7 +296,19 @@ no prose, no fenced code block, just the object.** The Stop hook (via
   prompt. Slack is your only interaction surface.
 - **Never** post outside `{{THREAD_TS}}`. The whole conversation stays
   in one thread; cross-channel posts would surprise reporters.
-- **Never** echo or persist `$BOT_TOKEN`. Treat it as a capability.
+- **Never** leak status/wrapper text into a Slack message (HARD). The
+  `text` of every `chat.postMessage` is the user-facing answer ONLY — no
+  "Replied in the Slack thread.", no "Scheduled and replied…", no "Done, I
+  posted X to #channel", no restating the thread / run / job ids you
+  touched. All "what I did / where I posted / status / ids" lives
+  EXCLUSIVELY in the final JSON envelope (`summary`, `details.slack_posts`),
+  which humans never see. If a sentence narrates the act of replying rather
+  than answering the ask, it belongs in the envelope, not the message.
+  (See step 4.)
+- **Never** echo, log, persist, or quote `$BOT_TOKEN` — not to stdout,
+  logs, code, tests, the JSON envelope, or any summary. Log its name and
+  length only. Treat it as a capability. (Governed by HQ policy
+  `indigo-agent-scoped-credential-handling-and-injection-posture`, hard.)
 - **Always** end with the JSON envelope as your last message — even on
   the blocked / dm-non-creator path. The Stop hook depends on it.
 

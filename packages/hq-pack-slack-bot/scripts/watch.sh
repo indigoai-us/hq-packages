@@ -229,7 +229,15 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PACKAGE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 HQ_ROOT="${HQ_ROOT:-$(cd "$PACKAGE_DIR/../../.." && pwd)}"
 TEMPLATE_RUNNER="$SCRIPT_DIR/claude-worker-template.sh"
-WORKER_TEMPLATE="slack-mention-worker"
+# Per-bot template routing: a per-bot specialization at
+# workers/<bot-slug>/ overrides the generic template. Drop a
+# system-prompt.md + schema.json + settings.json + meta.yaml in
+# workers/<bot-slug>/ to specialize a bot without forking the pack.
+if [[ -d "$PACKAGE_DIR/workers/$BOT_SLUG" ]]; then
+  WORKER_TEMPLATE="$BOT_SLUG"
+else
+  WORKER_TEMPLATE="slack-mention-worker"
+fi
 TEMPLATE_DIR="$PACKAGE_DIR/workers/$WORKER_TEMPLATE"
 PARSE_MENTIONS="$SCRIPT_DIR/parse-mentions.py"
 PARSE_SEARCH="$SCRIPT_DIR/parse-search.py"
@@ -261,8 +269,22 @@ THREAD_DIR="/tmp/hq-slack-bot.${BOT_SLUG}.threads"
 MEMBERSHIP_DIR="/tmp/hq-slack-bot.${BOT_SLUG}.membership"
 LOG_DIR="${MENTION_LOG_DIR:-$HQ_ROOT/workspace/logs/hq-slack-bot/$BOT_SLUG}"
 WATCHER_ALIVE_FILE="${MENTION_WATCHER_ALIVE_FILE:-/tmp/hq-slack-bot.${BOT_SLUG}.alive}"
+# Durable session store — survives `systemctl restart`, OS reboot, and
+# stop/start. It lives on the persistent root disk (a HOME dotdir), NOT /tmp,
+# which is wiped on reboot. One <thread_ts>.json per spawned worker holds the
+# full context needed to RESPAWN it. Rationale: a per-mention worker PTY is a
+# CHILD of this service, so it dies when the service stops/restarts — silently
+# dropping an in-flight triage. The worker DELETES its own SESSION_FILE the
+# moment the outcome is durably decided (item created, or no item needed), so a
+# record that SURVIVES a restart means the work never completed. Re-running such
+# a record is therefore safe from double-filing (no artifact was created yet) —
+# that delete-on-decide protocol is what makes arm-time respawn dedupe-free.
+SESSION_STORE="${MENTION_SESSION_STORE:-$HOME/.hq-slack-bot/$BOT_SLUG/sessions}"
+# Cap respawns per session so a worker that keeps dying can't loop forever.
+SESSION_RESPAWN_CAP="${MENTION_SESSION_RESPAWN_CAP:-3}"
+SESSION_RESPAWN_ENABLE="${MENTION_SESSION_RESPAWN_ENABLE:-1}"
 
-mkdir -p "$SPAWN_DIR" "$CURSOR_DIR" "$THREAD_DIR" "$MEMBERSHIP_DIR" "$LOG_DIR"
+mkdir -p "$SPAWN_DIR" "$CURSOR_DIR" "$THREAD_DIR" "$MEMBERSHIP_DIR" "$LOG_DIR" "$SESSION_STORE"
 
 # ── Pre-flight: file deps ──────────────────────────────────────────────────
 for f in "$PARSE_MENTIONS" "$PARSE_SEARCH"; do
@@ -378,7 +400,7 @@ list_bot_channels() {
   local out=""
   LAST_LIST_ERR=""
   while :; do
-    local url="https://slack.com/api/users.conversations?types=public_channel,private_channel&limit=200"
+    local url="https://slack.com/api/users.conversations?types=public_channel,private_channel,im,mpim&limit=200"
     if [ -n "$cursor" ]; then url="${url}&cursor=${cursor}"; fi
     local resp curl_rc
     resp="$(curl -fsS -H "Authorization: Bearer $TOKEN" "$url" 2>/dev/null)"; curl_rc=$?
@@ -431,7 +453,7 @@ print((d.get("response_metadata") or {}).get("next_cursor") or "")
 POLL_INTERVAL="${MENTION_POLL_INTERVAL:-15}"
 CHANNEL_REFRESH_SECS="${MENTION_CHANNEL_REFRESH_SECS:-60}"
 WORKER_TIMEOUT_SECS="${MENTION_WORKER_TIMEOUT:-7200}"
-SPAWN_PROBE_SECS="${MENTION_SPAWN_PROBE_SECS:-8}"
+SPAWN_PROBE_SECS="${MENTION_SPAWN_PROBE_SECS:-12}"
 # Backfill window for channels the bot joins mid-run (NOT applied at first
 # arm). Catches @-mentions that landed between invite and refresh tick.
 BACKFILL_SECS="${MENTION_BACKFILL_SECS:-600}"
@@ -535,11 +557,11 @@ SEARCH_INIT_TS_DISPLAY="$(cat "$SEARCH_CURSOR_FILE" 2>/dev/null || echo "<unset>
 SEARCH_STATE_DISPLAY="enabled"
 [ "$SEARCH_POLL_ENABLE" = "1" ] || SEARCH_STATE_DISPLAY="disabled-by-config"
 [ -n "${USER_TOKEN:-}" ] || SEARCH_STATE_DISPLAY="no-user-token"
-echo "WATCHER_ARMED bot=$BOT_SLUG workspace=$WORKSPACE scope=$SCOPE_LABEL person_uid=$PERSON_UID user_id=$BOT_USER_ID channels=$CHANNEL_COUNT creator=${CREATOR_ID:-<none>} creator_src=${CREATOR_SRC:-none} search=${SEARCH_STATE_DISPLAY} search_cursor=${SEARCH_INIT_TS_DISPLAY} hash=$SCRIPT_HASH"
+echo "WATCHER_ARMED bot=$BOT_SLUG workspace=$WORKSPACE scope=$SCOPE_LABEL person_uid=$PERSON_UID user_id=$BOT_USER_ID channels=$CHANNEL_COUNT creator=${CREATOR_ID:-<none>} creator_src=${CREATOR_SRC:-none} firehose=${MENTION_FIREHOSE_CHANNELS:-<none>} search=${SEARCH_STATE_DISPLAY} search_cursor=${SEARCH_INIT_TS_DISPLAY} hash=$SCRIPT_HASH"
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 # Spawn dedupe is keyed on the THREAD's ts (the parent message's ts for
-# replies, the message's own ts for top-level posts). One LIVE worker per
+# replies, the message's own ts for top-level posts). One worker per
 # thread — subsequent @-mentions in the same thread are handled by that
 # worker via its own poll loop, not by spawning another instance.
 #
@@ -548,7 +570,8 @@ echo "WATCHER_ARMED bot=$BOT_SLUG workspace=$WORKSPACE scope=$SCOPE_LABEL person
 # reads the PID and verifies the process is still alive via `kill -0`.
 # When the worker exits (resolved-keyword, idle, time-cap, etc.), the
 # next @-mention in the same thread finds a dead PID, GCs the sentinel,
-# and a fresh worker spawns.
+# and a fresh worker spawns — without this, the sentinel is permanent
+# and the thread silently rejects every follow-up mention forever.
 #
 # Before the PID is written (the few ms between mark_spawned and the
 # fork completing), the file is empty — treated as "spawn in progress,
@@ -576,7 +599,7 @@ already_spawned() {
   # left a stale empty stub. Treat as deduped until $STALE_MARK_SECS,
   # then GC so the thread isn't permanently silenced.
   local mtime now age
-  mtime="$(stat -c %Y "$f" 2>/dev/null || echo 0)"
+  mtime="$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f" 2>/dev/null || echo 0)"
   now="$(date +%s)"
   age=$(( now - mtime ))
   if [ "$age" -gt "$STALE_MARK_SECS" ]; then
@@ -923,8 +946,26 @@ diff_channels() {
 # spawn_worker <channel> <ts> <user> <thread_ts> <text>
 # Dispatches the template runner with per-spawn --var substitutions.
 spawn_worker() {
-  local channel="$1" ts="$2" user="$3" thread_ts="$4" text="$5"
-  local agent_name="mention:${ts}"
+  local channel="$1" ts="$2" user="$3" thread_ts="$4" text="$5" respawn_count="${6:-0}"
+  local session_file="$SESSION_STORE/${thread_ts}.json"
+  # Descriptive session name derived from the mention text: strip <@bot>
+  # / <url> markup, collapse whitespace, clamp to ~48 chars, prefix
+  # "feedback:" so the Remote Control session list is readable. Falls
+  # back to the ts when the text is empty (e.g. mention-only message).
+  local _desc
+  _desc="$(printf '%s' "$text" \
+    | sed -E 's/<@[A-Za-z0-9]+>//g; s/<[^>]*>//g' \
+    | tr '\n\r\t' '   ' \
+    | sed -E 's/[[:space:]]+/ /g; s/^ +//; s/ +$//' \
+    | LC_ALL=C tr -cd '[:print:]' \
+    | cut -c1-48 \
+    | sed -E 's/ +$//')"
+  local agent_name
+  if [ -n "$_desc" ]; then
+    agent_name="feedback: ${_desc}"
+  else
+    agent_name="feedback: ${ts}"
+  fi
   local log_file="$LOG_DIR/worker-${ts}.log"
 
   # The worker's first user-turn MUST begin with /startwork so the
@@ -932,11 +973,26 @@ spawn_worker() {
   # before doing anything Slack-side. The /startwork skill consumes
   # only its own first line; the body that follows is the actual
   # per-mention briefing.
+  # Firehose channels triage EVERY message (no @-mention). Reframe the
+  # worker's brief so it doesn't look for a tag that isn't there.
+  local _fire=""
+  case ",${MENTION_FIREHOSE_CHANNELS:-}," in
+    *",${channel},"*) _fire=1 ;;
+  esac
+  local trigger_line step1_line
+  if [ -n "$_fire" ]; then
+    trigger_line="A new message was posted in Slack channel ${channel}, which this bot triages in full — no @-mention required. Treat it as an incoming feedback item to triage."
+    step1_line="1. Read this message + the thread context if any."
+  else
+    trigger_line="A new @-mention of bot ${BOT_USER_ID} was posted in Slack."
+    step1_line="1. Read the mentioning message + the thread context if any."
+  fi
+
   local initial_prompt
   initial_prompt="$(cat <<EOF
 /startwork -c ${STARTWORK_COMPANY}
 
-A new @-mention of bot ${BOT_USER_ID} was posted in Slack.
+${trigger_line}
 
   channel:    ${channel}
   ts:         ${ts}
@@ -949,7 +1005,7 @@ ${text}
 
 Once /startwork has resolved your HQ context, follow your
 system-prompt protocol. Headline:
-1. Read the mentioning message + the thread context if any.
+${step1_line}
 2. Respond helpfully in the thread via Slack chat.postMessage.
 3. Poll the thread for follow-up replies; respond in-thread until idle
    or the user posts a resolved keyword.
@@ -1000,6 +1056,7 @@ EOF
       --var MENTION_TS="$ts" \
       --var REPORTER="$user" \
       --var HQ_ROOT="$HQ_ROOT" \
+      --var SESSION_FILE="$session_file" \
       "$initial_prompt" \
       >"$log_file" 2>&1 &
     worker_pid=$!
@@ -1013,6 +1070,11 @@ EOF
     echo "SPAWN agent=$agent_name channel=$channel thread_ts=$thread_ts log=$log_file pid=$worker_pid"
   )
 
+  # Durable session record for restart-respawn (see SESSION_STORE). Written
+  # AFTER the SPAWN line so it reflects a real dispatch; removed on probe
+  # failure below; deleted by the worker itself once the outcome is decided.
+  _write_session_record "$channel" "$ts" "$user" "$thread_ts" "$text" "${_fire:-}" "$respawn_count" "$session_file"
+
   # Post-spawn pty.log probe — same pattern as monitor-liveops.
   if [ "$SPAWN_PROBE_SECS" -gt 0 ]; then
     local probe_left="$SPAWN_PROBE_SECS"
@@ -1021,7 +1083,11 @@ EOF
       sleep 1
       if grep -q "unresolved placeholders" "$log_file" 2>/dev/null; then
         echo "SPAWN_FAILED ts=$ts reason=template_placeholders_unresolved log=$log_file"
-        rm -f "$SPAWN_DIR/$ts.spawned"
+        # Unmark the THREAD sentinel (keyed by thread_ts, not ts) so the
+        # failure doesn't permanently silence the thread. For an in-thread
+        # mention ts != thread_ts, so removing "$ts.spawned" would miss the
+        # real sentinel and poison the thread for every later mention.
+        rm -f "$SPAWN_DIR/$thread_ts.spawned" "$session_file"
         return 1
       fi
       run_dir="$(grep -oE "$HQ_ROOT/workspace/workers/runs/[A-Za-z0-9_]+" "$log_file" 2>/dev/null | head -1)"
@@ -1030,13 +1096,86 @@ EOF
       fi
       probe_left=$((probe_left - 1))
     done
+    # Probe window elapsed without pty.log output. A slow TUI cold start is
+    # NOT a failure: if the worker process is still alive, treat the spawn as
+    # successful (it will post when ready) — logging SPAWN_FAILED here and
+    # unmarking would both lie in the log and risk a double-spawn next tick.
+    # Only a dead worker is a genuine failure worth unmarking + retrying.
+    local _sp
+    _sp="$(cat "$SPAWN_DIR/$thread_ts.spawned" 2>/dev/null | tr -d '[:space:]')"
+    if [ -n "$_sp" ] && [ "$_sp" -eq "$_sp" ] 2>/dev/null && kill -0 "$_sp" 2>/dev/null; then
+      return 0
+    fi
     echo "SPAWN_FAILED ts=$ts reason=pty_log_never_populated probe_secs=$SPAWN_PROBE_SECS run_dir=${run_dir:-unknown}"
-    rm -f "$SPAWN_DIR/$ts.spawned"
+    rm -f "$SPAWN_DIR/$thread_ts.spawned" "$session_file"
     return 1
   fi
 }
 
+# _write_session_record — persist a durable JSON session record (see
+# SESSION_STORE). python3 handles safe JSON escaping of arbitrary message text.
+_write_session_record() {
+  local channel="$1" ts="$2" user="$3" thread_ts="$4" text="$5" fire="$6" rc="$7" out="$8"
+  local now; now="$(date +%s 2>/dev/null || echo 0)"
+  HQ_SESS_CH="$channel" HQ_SESS_TS="$ts" HQ_SESS_USER="$user" HQ_SESS_TT="$thread_ts" \
+  HQ_SESS_TEXT="$text" HQ_SESS_FIRE="$fire" HQ_SESS_RC="$rc" HQ_SESS_NOW="$now" HQ_SESS_OUT="$out" \
+  python3 -c '
+import json, os
+o = os.environ
+rec = {
+    "channel": o["HQ_SESS_CH"], "ts": o["HQ_SESS_TS"], "user": o["HQ_SESS_USER"],
+    "thread_ts": o["HQ_SESS_TT"], "text": o["HQ_SESS_TEXT"],
+    "firehose": bool(o.get("HQ_SESS_FIRE")), "spawnedAt": int(o["HQ_SESS_NOW"] or 0),
+    "respawnCount": int(o["HQ_SESS_RC"] or 0), "status": "active",
+}
+open(o["HQ_SESS_OUT"], "w").write(json.dumps(rec))
+' 2>/dev/null || true
+}
+
+# respawn_unresolved_sessions — at arm, re-dispatch a worker for every session
+# record that SURVIVED a restart (the worker died before deleting its own
+# SESSION_FILE). Safe from double-filing: a surviving record means the outcome
+# was never durably decided, so no artifact was created yet. Capped per session
+# so a worker that keeps dying can't loop forever. The saved context drives
+# spawn_worker identically to the original dispatch.
+respawn_unresolved_sessions() {
+  [ "${SESSION_RESPAWN_ENABLE:-1}" = "1" ] || return 0
+  local found=0 respawned=0 f rec channel ts user thread_ts fire rc text
+  for f in "$SESSION_STORE"/*.json; do
+    [ -e "$f" ] || continue
+    found=$((found+1))
+    rec="$(HQ_SESS_FILE="$f" python3 -c '
+import json, os, sys
+try:
+    r = json.load(open(os.environ["HQ_SESS_FILE"]))
+except Exception:
+    sys.exit(1)
+def clean(s): return (s or "").replace("\t"," ").replace("\n"," ").replace("\r"," ")
+print("\t".join([r.get("channel",""), r.get("ts",""), r.get("user",""), r.get("thread_ts",""), "1" if r.get("firehose") else "", str(r.get("respawnCount",0)), clean(r.get("text",""))]))
+' 2>/dev/null)"
+    if [ -z "$rec" ]; then echo "RESPAWN_SKIP file=$f reason=unparseable"; rm -f "$f"; continue; fi
+    IFS=$'\t' read -r channel ts user thread_ts fire rc text <<< "$rec"
+    [ -n "${rc:-}" ] || rc=0
+    if [ "$rc" -ge "$SESSION_RESPAWN_CAP" ] 2>/dev/null; then
+      echo "RESPAWN_SKIP thread_ts=$thread_ts reason=cap_reached count=$rc"; rm -f "$f"; continue
+    fi
+    echo "RESPAWN thread_ts=$thread_ts channel=$channel count=$((rc+1)) (recovering a session dropped by a watcher restart)"
+    mark_spawned "$thread_ts"
+    if spawn_worker "$channel" "$ts" "$user" "$thread_ts" "$text" "$((rc+1))"; then
+      respawned=$((respawned+1))
+    else
+      echo "RESPAWN_FAILED thread_ts=$thread_ts"
+    fi
+  done
+  [ "$found" -gt 0 ] && echo "RESPAWN_SCAN found=$found respawned=$respawned cap=$SESSION_RESPAWN_CAP"
+  return 0
+}
+
 # ── Main loop ──────────────────────────────────────────────────────────────
+# Recover any sessions dropped by a prior watcher/box restart BEFORE normal
+# polling resumes. Safe to run on every arm: spawn-dedup plus the per-session
+# delete-on-decide protocol prevent duplicate triage.
+respawn_unresolved_sessions
 while true; do
   # Refresh channel list periodically — bot may have been added to (or
   # removed from) channels since startup. Set-diff so net-zero swaps still
@@ -1093,6 +1232,12 @@ while true; do
           case "$ch" in
             D*) KEEP_LIST="${KEEP_LIST}${ch}"$'\n'; continue ;;
           esac
+          # Firehose channels are explicitly opted in by the operator —
+          # keep them regardless of creator presence (the bot triages
+          # everything there; creator-membership is irrelevant).
+          case ",${MENTION_FIREHOSE_CHANNELS:-}," in
+            *",${ch},"*) KEEP_LIST="${KEEP_LIST}${ch}"$'\n'; continue ;;
+          esac
           channel_has_creator "$ch"
           mrc=$?
           case "$mrc" in
@@ -1135,11 +1280,20 @@ while true; do
     RESP="$(curl -fsS -H "Authorization: Bearer $TOKEN" \
       "https://slack.com/api/conversations.history?channel=${CHANNEL}&oldest=${LAST_TS}&limit=50" 2>/dev/null || true)"
 
+    # Firehose channels (MENTION_FIREHOSE_CHANNELS, comma-separated channel
+    # IDs) match EVERY top-level message — no @-mention required — so the bot
+    # triages everything posted there (e.g. #hq-feedback). All other channels
+    # stay @-mention-only.
+    FIREHOSE_FLAG=""
+    case ",${MENTION_FIREHOSE_CHANNELS:-}," in
+      *",${CHANNEL},"*) FIREHOSE_FLAG="--all-messages" ;;
+    esac
+
     # --emit-threads asks the parser to also surface T-rows for top-level
     # messages with reply_count > 0, so we can schedule per-thread polling
     # for in-thread @-mentions (mentions that land in REPLIES, not the
     # parent — invisible to conversations.history).
-    PARSED="$(printf '%s' "$RESP" | "$PARSE_MENTIONS" --last-ts "$LAST_TS" --bot "$BOT_USER_ID" --emit-threads 2>/dev/null || true)"
+    PARSED="$(printf '%s' "$RESP" | "$PARSE_MENTIONS" --last-ts "$LAST_TS" --bot "$BOT_USER_ID" --emit-threads $FIREHOSE_FLAG 2>/dev/null || true)"
     OK="$(printf '%s' "$PARSED" | sed -n 's/^OK=//p' | head -1)"
     ERR="$(printf '%s' "$PARSED" | sed -n 's/^ERR=//p' | head -1)"
     NEW_LAST="$(printf '%s' "$PARSED" | sed -n 's/^MAX_TS=//p' | head -1)"
