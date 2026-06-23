@@ -22,6 +22,7 @@ contributes:
     - chart-of-accounts
     - acct-import
     - run-reports
+    - invoice
   knowledge:
     - double-entry-rules
     - default-chart-of-accounts
