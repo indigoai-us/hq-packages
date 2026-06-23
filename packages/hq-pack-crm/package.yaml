@@ -1,0 +1,19 @@
+name: hq-pack-crm
+version: 1.0.0
+publisher: '@indigoai-us'
+access: public
+description: 'Native HQ CRM — your ontology as the canonical client record. A read-only crm_* surface over a vault-synced projection that joins every GTM silo (inbound, pipeline, contract, billing) onto one account with its activity timeline. Company-agnostic; the per-company crmEnabled setting turns it on.'
+requires:
+  hqCore: '>=12.0.0'
+  # Runtime prerequisites:
+  #   - The native ontology CRM enabled for the company (companySettings.crmEnabled),
+  #     which produces the vault-synced crm-projection.json this skill reads.
+  #   - `hq` CLI on PATH for sync (`/hq-sync`) and login (`/hq-login`).
+contributes:
+  skills:
+    - crm
+  knowledge:
+    - crm
+initialization:
+  entrypoint: crm
+  prompt: "Run /crm to find any client's status from the canonical record. Turn it on per-company with the crmEnabled setting."
