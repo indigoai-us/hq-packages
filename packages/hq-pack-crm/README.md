@@ -1,5 +1,7 @@
 # hq-pack-crm
 
+![hq-pack-crm — an antique brass desk telephone, your client connections](cover.jpg)
+
 Native HQ CRM, packaged. Turns your **ontology into the canonical client
 record** and gives agents a fast, read-only way to answer "where is this
 client?" without hand-joining your GTM silos at query time.
