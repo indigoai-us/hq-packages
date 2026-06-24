@@ -95,8 +95,8 @@ common case):
 
    Events you'll receive on stdout:
 
-   - `WATCHER_ARMED bot=<slug> workspace=<slug> scope=<…> person_uid=<prs_…> user_id=<U…> channels=<N> creator=<U…|<none>> creator_src=<…> hash=<sha12>` — startup
-   - `MENTION channel=<C…|D…|G…> ts=<ts> thread_ts=<ts> user=<U…> text=<first 200 chars> [(thread-reply)]` — every new @-mention. The `(thread-reply)` suffix means the mention was found in a thread REPLY (not the parent), via the watcher's per-thread polling pass. Dedupe is keyed on `thread_ts`, not `ts`, so each thread spawns at most one worker.
+   - `WATCHER_ARMED bot=<slug> workspace=<slug> scope=<…> person_uid=<prs_…> user_id=<U…> channels=<N> creator=<U…|<none>> creator_src=<…> firehose=<…> own_threads=<on|off> search=<…> search_cursor=<…> hash=<sha12>` — startup. `own_threads=on` (default) means the bot listens to every reply in threads it started, even without an @-mention; `MENTION_LISTEN_OWN_THREADS=0` turns that off for a strictly @-mention-only bot.
+   - `MENTION channel=<C…|D…|G…> ts=<ts> thread_ts=<ts> user=<U…> text=<first 200 chars> [(thread-reply)|(own-thread)]` — every new trigger. The `(thread-reply)` suffix means an @-mention found in a thread REPLY (not the parent). The `(own-thread)` suffix means a human replied in a thread the bot itself STARTED — no @-mention required, because the bot opened the thread (gated by `own_threads`). Dedupe is keyed on `thread_ts`, not `ts`, so each thread spawns at most one worker.
    - `SPAWN agent=mention:<ts> channel=<…> thread_ts=<…> log=<path> pid=<pid>` — worker dispatched
    - `SPAWN_FAILED ts=<ts> reason=<…>` — worker dispatch failed
    - `API_ERROR <slack-error>` — polling failed (e.g. invalid_auth). For thread-poll errors the prefix is `API_ERROR thread:<error>` and includes `thread_ts=`.
@@ -151,6 +151,18 @@ common case):
   schedules per-thread polling via `conversations.replies`. State
   lives in `/tmp/hq-slack-bot.<slug>.threads/<channel>:<thread_ts>`.
   Stale threads are GC'd after `MENTION_THREAD_GC_SECS` (default 24h).
+- **Bot-started threads are listened to in full** (`MENTION_LISTEN_OWN_THREADS`,
+  default `1`). When the bot itself authors a top-level message that draws
+  human replies, the watcher wakes a worker on the FIRST reply even without
+  an @-mention — because the bot started the thread, it hears the whole
+  thread. Mechanically: the channel poll tags such threads (the parser
+  emits `bot_owned=1`), a marker is written to
+  `/tmp/hq-slack-bot.<slug>.ownthreads/<channel>:<thread_ts>`, and the
+  thread-poll pass runs that thread in firehose (`--all-messages`) mode so
+  any reply triggers exactly one spawn; the spawned worker then owns the
+  thread via its own (already mention-free) reply poll. Set
+  `MENTION_LISTEN_OWN_THREADS=0` to keep a specific bot strictly
+  @-mention-only (e.g. a triage bot whose policy is mention-only).
 - **Creator-presence enforcement.** Every channel-refresh tick, the
   watcher confirms the creator (`creator:` field in `--check` output)
   is still a member of each non-DM channel via `conversations.members`.

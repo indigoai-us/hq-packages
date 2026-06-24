@@ -61,6 +61,17 @@
 # Requires channels:leave / groups:leave / mpim:leave scopes on the
 # Slack app; without them the watcher emits LEAVE_FAILED and keeps the
 # channel in the polling set.
+#
+# Bot-started threads (MENTION_LISTEN_OWN_THREADS, default on): when the
+# bot itself authors a top-level message and a human replies, the watcher
+# wakes a worker on the FIRST reply even without an @-mention — because
+# the bot started the thread, it listens to the whole thread. The channel
+# poll tags such threads (parse-mentions.py emits bot_owned=1 on its
+# T-row); the thread-poll pass then runs in --all-messages (firehose) mode
+# for them, so any human reply triggers exactly one spawn. After that the
+# spawned worker owns the thread via its own reply poll (already
+# mention-free). Set MENTION_LISTEN_OWN_THREADS=0 to make a specific bot
+# strictly @-mention-only.
 
 set -u
 set -o pipefail
@@ -267,6 +278,13 @@ THREAD_DIR="/tmp/hq-slack-bot.${BOT_SLUG}.threads"
 # MEMBERSHIP_CHECK_SECS, leaving the channel via conversations.leave
 # if the creator is no longer a member.
 MEMBERSHIP_DIR="/tmp/hq-slack-bot.${BOT_SLUG}.membership"
+# Threads the bot STARTED (authored the parent). One marker file per
+# thread, named <channel>:<thread_ts> (mirrors THREAD_DIR keys). When a
+# marker is present, the thread-poll pass runs in firehose mode for that
+# thread so ANY human reply wakes a worker — no @-mention needed. The
+# marker is created by track_thread (bot_owned=1) and removed in lockstep
+# with the thread's cursor file (spawn / GC / channel-leave).
+OWN_DIR="/tmp/hq-slack-bot.${BOT_SLUG}.ownthreads"
 LOG_DIR="${MENTION_LOG_DIR:-$HQ_ROOT/workspace/logs/hq-slack-bot/$BOT_SLUG}"
 WATCHER_ALIVE_FILE="${MENTION_WATCHER_ALIVE_FILE:-/tmp/hq-slack-bot.${BOT_SLUG}.alive}"
 # Durable session store — survives `systemctl restart`, OS reboot, and
@@ -284,7 +302,7 @@ SESSION_STORE="${MENTION_SESSION_STORE:-$HOME/.hq-slack-bot/$BOT_SLUG/sessions}"
 SESSION_RESPAWN_CAP="${MENTION_SESSION_RESPAWN_CAP:-3}"
 SESSION_RESPAWN_ENABLE="${MENTION_SESSION_RESPAWN_ENABLE:-1}"
 
-mkdir -p "$SPAWN_DIR" "$CURSOR_DIR" "$THREAD_DIR" "$MEMBERSHIP_DIR" "$LOG_DIR" "$SESSION_STORE"
+mkdir -p "$SPAWN_DIR" "$CURSOR_DIR" "$THREAD_DIR" "$OWN_DIR" "$MEMBERSHIP_DIR" "$LOG_DIR" "$SESSION_STORE"
 
 # ── Pre-flight: file deps ──────────────────────────────────────────────────
 for f in "$PARSE_MENTIONS" "$PARSE_SEARCH"; do
@@ -463,6 +481,12 @@ THREAD_GC_SECS="${MENTION_THREAD_GC_SECS:-86400}"
 # Per-loop cap on threads polled (sorted by cursor mtime, freshest first).
 # Bounds the work each tick at scale; rarely hit in practice.
 THREAD_POLL_CAP="${MENTION_THREAD_POLL_CAP:-50}"
+# Listen to threads the bot itself STARTED: when the bot authors a
+# top-level message that draws human replies, wake a worker on the first
+# reply even without an @-mention. Default on — a bot that opens a thread
+# should hear the responses to it. Set MENTION_LISTEN_OWN_THREADS=0 to
+# keep a specific bot strictly @-mention-only.
+LISTEN_OWN_THREADS="${MENTION_LISTEN_OWN_THREADS:-1}"
 # Membership verification: every MENTION_MEMBERSHIP_CHECK_SECS, the
 # watcher confirms the creator is still a member of each channel the
 # bot is in. If not — and MENTION_LEAVE_ON_CREATOR_ABSENT is on — the
@@ -557,7 +581,9 @@ SEARCH_INIT_TS_DISPLAY="$(cat "$SEARCH_CURSOR_FILE" 2>/dev/null || echo "<unset>
 SEARCH_STATE_DISPLAY="enabled"
 [ "$SEARCH_POLL_ENABLE" = "1" ] || SEARCH_STATE_DISPLAY="disabled-by-config"
 [ -n "${USER_TOKEN:-}" ] || SEARCH_STATE_DISPLAY="no-user-token"
-echo "WATCHER_ARMED bot=$BOT_SLUG workspace=$WORKSPACE scope=$SCOPE_LABEL person_uid=$PERSON_UID user_id=$BOT_USER_ID channels=$CHANNEL_COUNT creator=${CREATOR_ID:-<none>} creator_src=${CREATOR_SRC:-none} firehose=${MENTION_FIREHOSE_CHANNELS:-<none>} search=${SEARCH_STATE_DISPLAY} search_cursor=${SEARCH_INIT_TS_DISPLAY} hash=$SCRIPT_HASH"
+OWN_THREADS_DISPLAY="on"
+[ "$LISTEN_OWN_THREADS" = "1" ] || OWN_THREADS_DISPLAY="off"
+echo "WATCHER_ARMED bot=$BOT_SLUG workspace=$WORKSPACE scope=$SCOPE_LABEL person_uid=$PERSON_UID user_id=$BOT_USER_ID channels=$CHANNEL_COUNT creator=${CREATOR_ID:-<none>} creator_src=${CREATOR_SRC:-none} firehose=${MENTION_FIREHOSE_CHANNELS:-<none>} own_threads=${OWN_THREADS_DISPLAY} search=${SEARCH_STATE_DISPLAY} search_cursor=${SEARCH_INIT_TS_DISPLAY} hash=$SCRIPT_HASH"
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 # Spawn dedupe is keyed on the THREAD's ts (the parent message's ts for
@@ -627,13 +653,19 @@ record_spawn_pid() {
 # threads are short-lived and this catches the "@-mention landed in a
 # reply seconds before we noticed the parent" case).
 track_thread() {
-  local channel="$1" thread_ts="$2" latest_reply="$3"
+  local channel="$1" thread_ts="$2" latest_reply="$3" bot_owned="${4:-0}"
   if already_spawned "$thread_ts"; then
     return 0
   fi
   local f="$THREAD_DIR/${channel}:${thread_ts}"
   if [ ! -e "$f" ]; then
     printf '%s' "$thread_ts" > "$f"
+  fi
+  # Bot started this thread → mark it so the thread-poll pass listens to
+  # every reply (firehose), not just @-mentions. Gated by the
+  # LISTEN_OWN_THREADS kill-switch (default on).
+  if [ "$LISTEN_OWN_THREADS" = "1" ] && [ "$bot_owned" = "1" ]; then
+    : > "$OWN_DIR/${channel}:${thread_ts}"
   fi
 }
 
@@ -748,6 +780,10 @@ except Exception:
     if [ -d "$THREAD_DIR" ]; then
       rm -f "$THREAD_DIR/${channel}:"*
     fi
+    # Drop any bot-started-thread markers anchored to this channel.
+    if [ -d "$OWN_DIR" ]; then
+      rm -f "$OWN_DIR/${channel}:"*
+    fi
     return 0
   fi
   err="$(printf '%s' "$resp" | python3 -c '
@@ -776,17 +812,24 @@ gc_threads() {
     thread_ts="${base#*:}"
     if [ "$channel" = "$base" ] || [ -z "$thread_ts" ]; then
       # Malformed name — drop it rather than crash later.
-      rm -f "$f"
+      rm -f "$f" "$OWN_DIR/$base"
       continue
     fi
     if already_spawned "$thread_ts"; then
-      rm -f "$f"
+      rm -f "$f" "$OWN_DIR/$base"
       continue
     fi
     mtime="$(stat -c %Y "$f" 2>/dev/null || echo 0)"
     if [ "$mtime" -lt "$cutoff" ]; then
-      rm -f "$f"
+      rm -f "$f" "$OWN_DIR/$base"
     fi
+  done
+  # Sweep any orphan own-thread markers whose thread cursor is already
+  # gone (defensive — removal is normally paired above).
+  for f in "$OWN_DIR"/*; do
+    [ -e "$f" ] || continue
+    base="$(basename "$f")"
+    [ -e "$THREAD_DIR/$base" ] || rm -f "$f"
   done
 }
 
@@ -910,7 +953,7 @@ poll_search() {
     echo "MENTION channel=$S_CHANNEL ts=$S_TS thread_ts=$S_THREAD_TS user=$S_USER text=$PREVIEW (via search)"
     mark_spawned "$S_THREAD_TS"
     # Drop any in-flight thread-tracker — the worker now owns this thread.
-    rm -f "$THREAD_DIR/${S_CHANNEL}:${S_THREAD_TS}"
+    rm -f "$THREAD_DIR/${S_CHANNEL}:${S_THREAD_TS}" "$OWN_DIR/${S_CHANNEL}:${S_THREAD_TS}"
     if ! spawn_worker "$S_CHANNEL" "$S_TS" "$S_USER" "$S_THREAD_TS" "$S_TEXT"; then
       echo "SPAWN_FAILED ts=$S_TS reason=spawn_worker_returned_nonzero source=search"
     fi
@@ -946,7 +989,7 @@ diff_channels() {
 # spawn_worker <channel> <ts> <user> <thread_ts> <text>
 # Dispatches the template runner with per-spawn --var substitutions.
 spawn_worker() {
-  local channel="$1" ts="$2" user="$3" thread_ts="$4" text="$5" respawn_count="${6:-0}"
+  local channel="$1" ts="$2" user="$3" thread_ts="$4" text="$5" respawn_count="${6:-0}" trigger_kind="${7:-mention}"
   local session_file="$SESSION_STORE/${thread_ts}.json"
   # Descriptive session name derived from the mention text: strip <@bot>
   # / <url> markup, collapse whitespace, clamp to ~48 chars, prefix
@@ -983,6 +1026,9 @@ spawn_worker() {
   if [ -n "$_fire" ]; then
     trigger_line="A new message was posted in Slack channel ${channel}, which this bot triages in full — no @-mention required. Treat it as an incoming feedback item to triage."
     step1_line="1. Read this message + the thread context if any."
+  elif [ "$trigger_kind" = "own_thread" ]; then
+    trigger_line="A human replied in a Slack thread that this bot (${BOT_USER_ID}) started. No @-mention is required — because the bot opened the thread, it listens to every reply. Treat this as a follow-up in a conversation you began."
+    step1_line="1. Read the new reply + the full thread you started for context."
   else
     trigger_line="A new @-mention of bot ${BOT_USER_ID} was posted in Slack."
     step1_line="1. Read the mentioning message + the thread context if any."
@@ -1073,7 +1119,7 @@ EOF
   # Durable session record for restart-respawn (see SESSION_STORE). Written
   # AFTER the SPAWN line so it reflects a real dispatch; removed on probe
   # failure below; deleted by the worker itself once the outcome is decided.
-  _write_session_record "$channel" "$ts" "$user" "$thread_ts" "$text" "${_fire:-}" "$respawn_count" "$session_file"
+  _write_session_record "$channel" "$ts" "$user" "$thread_ts" "$text" "${_fire:-}" "$respawn_count" "$session_file" "$trigger_kind"
 
   # Post-spawn pty.log probe — same pattern as monitor-liveops.
   if [ "$SPAWN_PROBE_SECS" -gt 0 ]; then
@@ -1115,10 +1161,11 @@ EOF
 # _write_session_record — persist a durable JSON session record (see
 # SESSION_STORE). python3 handles safe JSON escaping of arbitrary message text.
 _write_session_record() {
-  local channel="$1" ts="$2" user="$3" thread_ts="$4" text="$5" fire="$6" rc="$7" out="$8"
+  local channel="$1" ts="$2" user="$3" thread_ts="$4" text="$5" fire="$6" rc="$7" out="$8" trigger_kind="${9:-mention}"
   local now; now="$(date +%s 2>/dev/null || echo 0)"
   HQ_SESS_CH="$channel" HQ_SESS_TS="$ts" HQ_SESS_USER="$user" HQ_SESS_TT="$thread_ts" \
   HQ_SESS_TEXT="$text" HQ_SESS_FIRE="$fire" HQ_SESS_RC="$rc" HQ_SESS_NOW="$now" HQ_SESS_OUT="$out" \
+  HQ_SESS_TRIGGER="$trigger_kind" \
   python3 -c '
 import json, os
 o = os.environ
@@ -1127,6 +1174,7 @@ rec = {
     "thread_ts": o["HQ_SESS_TT"], "text": o["HQ_SESS_TEXT"],
     "firehose": bool(o.get("HQ_SESS_FIRE")), "spawnedAt": int(o["HQ_SESS_NOW"] or 0),
     "respawnCount": int(o["HQ_SESS_RC"] or 0), "status": "active",
+    "triggerKind": o.get("HQ_SESS_TRIGGER") or "mention",
 }
 open(o["HQ_SESS_OUT"], "w").write(json.dumps(rec))
 ' 2>/dev/null || true
@@ -1140,7 +1188,7 @@ open(o["HQ_SESS_OUT"], "w").write(json.dumps(rec))
 # spawn_worker identically to the original dispatch.
 respawn_unresolved_sessions() {
   [ "${SESSION_RESPAWN_ENABLE:-1}" = "1" ] || return 0
-  local found=0 respawned=0 f rec channel ts user thread_ts fire rc text
+  local found=0 respawned=0 f rec channel ts user thread_ts fire rc trigger_kind text
   for f in "$SESSION_STORE"/*.json; do
     [ -e "$f" ] || continue
     found=$((found+1))
@@ -1151,17 +1199,18 @@ try:
 except Exception:
     sys.exit(1)
 def clean(s): return (s or "").replace("\t"," ").replace("\n"," ").replace("\r"," ")
-print("\t".join([r.get("channel",""), r.get("ts",""), r.get("user",""), r.get("thread_ts",""), "1" if r.get("firehose") else "", str(r.get("respawnCount",0)), clean(r.get("text",""))]))
+# triggerKind precedes text so the shell `read` can slurp text last.
+print("\t".join([r.get("channel",""), r.get("ts",""), r.get("user",""), r.get("thread_ts",""), "1" if r.get("firehose") else "", str(r.get("respawnCount",0)), r.get("triggerKind","mention") or "mention", clean(r.get("text",""))]))
 ' 2>/dev/null)"
     if [ -z "$rec" ]; then echo "RESPAWN_SKIP file=$f reason=unparseable"; rm -f "$f"; continue; fi
-    IFS=$'\t' read -r channel ts user thread_ts fire rc text <<< "$rec"
+    IFS=$'\t' read -r channel ts user thread_ts fire rc trigger_kind text <<< "$rec"
     [ -n "${rc:-}" ] || rc=0
     if [ "$rc" -ge "$SESSION_RESPAWN_CAP" ] 2>/dev/null; then
       echo "RESPAWN_SKIP thread_ts=$thread_ts reason=cap_reached count=$rc"; rm -f "$f"; continue
     fi
     echo "RESPAWN thread_ts=$thread_ts channel=$channel count=$((rc+1)) (recovering a session dropped by a watcher restart)"
     mark_spawned "$thread_ts"
-    if spawn_worker "$channel" "$ts" "$user" "$thread_ts" "$text" "$((rc+1))"; then
+    if spawn_worker "$channel" "$ts" "$user" "$thread_ts" "$text" "$((rc+1))" "${trigger_kind:-mention}"; then
       respawned=$((respawned+1))
     else
       echo "RESPAWN_FAILED thread_ts=$thread_ts"
@@ -1331,7 +1380,7 @@ while true; do
       # Parent had a mention → no need to track this thread for replies;
       # the worker now owns it. Remove any tracker file we may have set
       # earlier from a previous reply-count tick.
-      rm -f "$THREAD_DIR/${CHANNEL}:${THREAD_TS}"
+      rm -f "$THREAD_DIR/${CHANNEL}:${THREAD_TS}" "$OWN_DIR/${CHANNEL}:${THREAD_TS}"
       if ! spawn_worker "$CHANNEL" "$TS" "$SLACK_USER" "$THREAD_TS" "$TEXT"; then
         echo "SPAWN_FAILED ts=$TS reason=spawn_worker_returned_nonzero"
       fi
@@ -1340,9 +1389,9 @@ while true; do
     # Track every thread with replies that we haven't spawned for. The
     # next loop iteration's thread-poll pass will look for @-mentions in
     # those replies.
-    while IFS=$'\t' read -r T_THREAD_TS T_REPLY_COUNT T_LATEST_REPLY; do
+    while IFS=$'\t' read -r T_THREAD_TS T_REPLY_COUNT T_LATEST_REPLY T_BOT_OWNED; do
       [ -z "$T_THREAD_TS" ] && continue
-      track_thread "$CHANNEL" "$T_THREAD_TS" "$T_LATEST_REPLY"
+      track_thread "$CHANNEL" "$T_THREAD_TS" "$T_LATEST_REPLY" "$T_BOT_OWNED"
     done <<< "$T_ROWS"
 
     if [ -n "$NEW_LAST" ] && [ "$NEW_LAST" != "null" ]; then
@@ -1371,15 +1420,25 @@ while true; do
     # Belt-and-suspenders: if the thread was spawned-for between gc and
     # now, skip it.
     if already_spawned "$T_THREAD_TS"; then
-      rm -f "$THREAD_DIR/$tf"
+      rm -f "$THREAD_DIR/$tf" "$OWN_DIR/$tf"
       continue
     fi
     T_CURSOR_FILE="$THREAD_DIR/$tf"
     T_CURSOR="$(cat "$T_CURSOR_FILE" 2>/dev/null || echo "$T_THREAD_TS")"
 
+    # Threads the bot STARTED listen to EVERY human reply (firehose mode),
+    # not just @-mentions. All other tracked threads stay @-mention-only —
+    # this is the only place the own-thread marker changes behavior.
+    T_OWN_FLAG=""
+    T_TRIGGER_KIND="mention"
+    if [ -e "$OWN_DIR/$tf" ]; then
+      T_OWN_FLAG="--all-messages"
+      T_TRIGGER_KIND="own_thread"
+    fi
+
     T_RESP="$(curl -fsS -H "Authorization: Bearer $TOKEN" \
       "https://slack.com/api/conversations.replies?channel=${T_CHANNEL}&ts=${T_THREAD_TS}&oldest=${T_CURSOR}&limit=50" 2>/dev/null || true)"
-    T_PARSED="$(printf '%s' "$T_RESP" | "$PARSE_MENTIONS" --last-ts "$T_CURSOR" --bot "$BOT_USER_ID" 2>/dev/null || true)"
+    T_PARSED="$(printf '%s' "$T_RESP" | "$PARSE_MENTIONS" --last-ts "$T_CURSOR" --bot "$BOT_USER_ID" $T_OWN_FLAG 2>/dev/null || true)"
     T_OK="$(printf '%s' "$T_PARSED" | sed -n 's/^OK=//p' | head -1)"
     T_ERR="$(printf '%s' "$T_PARSED" | sed -n 's/^ERR=//p' | head -1)"
     T_NEW_LAST="$(printf '%s' "$T_PARSED" | sed -n 's/^MAX_TS=//p' | head -1)"
@@ -1406,12 +1465,13 @@ while true; do
         break
       fi
       PREVIEW="$(printf '%s' "$T_TEXT" | tr '\n\r' '  ' | cut -c 1-200)"
-      echo "MENTION channel=$T_CHANNEL ts=$T_TS thread_ts=$T_THREAD_TS user=$T_USER text=$PREVIEW (thread-reply)"
+      if [ "$T_TRIGGER_KIND" = "own_thread" ]; then T_SUFFIX="(own-thread)"; else T_SUFFIX="(thread-reply)"; fi
+      echo "MENTION channel=$T_CHANNEL ts=$T_TS thread_ts=$T_THREAD_TS user=$T_USER text=$PREVIEW $T_SUFFIX"
       mark_spawned "$T_THREAD_TS"
-      if ! spawn_worker "$T_CHANNEL" "$T_TS" "$T_USER" "$T_THREAD_TS" "$T_TEXT"; then
+      if ! spawn_worker "$T_CHANNEL" "$T_TS" "$T_USER" "$T_THREAD_TS" "$T_TEXT" 0 "$T_TRIGGER_KIND"; then
         echo "SPAWN_FAILED ts=$T_TS reason=spawn_worker_returned_nonzero"
       fi
-      rm -f "$T_CURSOR_FILE"
+      rm -f "$T_CURSOR_FILE" "$OWN_DIR/$tf"
       break
     done <<< "$T_BODY"
 

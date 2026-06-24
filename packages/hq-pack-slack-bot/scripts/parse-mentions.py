@@ -26,11 +26,19 @@ When `--emit-threads` is also passed, the watcher additionally needs to
 discover threads with replies so it can poll them for in-thread
 @-mentions. In that mode the parser emits a second row type:
 
-    T\\t<thread_ts>\\t<reply_count>\\t<latest_reply>   ← one per top-level
-                                  message whose reply_count > 0 (regardless
-                                  of whether the parent itself mentioned
-                                  the bot — that case is also emitted as
-                                  an M row).
+    T\\t<thread_ts>\\t<reply_count>\\t<latest_reply>\\t<bot_owned>   ← one per
+                                  top-level message whose reply_count > 0
+                                  (regardless of whether the parent itself
+                                  mentioned the bot — that case is also
+                                  emitted as an M row).
+
+<bot_owned> is "1" when the thread's PARENT message was authored by the
+bot itself (i.e. the bot STARTED this thread), else "0". The watcher uses
+this to listen to every reply in a bot-started thread without requiring
+an @-mention — "if the bot starts a thread, it also listens to it."
+Bot-authored parents can carry the bot_message subtype, so the T-row
+emission deliberately does NOT skip them on subtype when the author is
+the bot.
 
 The row prefix lets the watcher cheaply distinguish the two streams
 without a second parser pass.
@@ -92,7 +100,8 @@ def main() -> int:
     mention_rows = []
     # Thread-head rows are keyed on parent ts (the canonical thread_ts)
     # so duplicates from `messages` re-listing the parent collapse.
-    thread_rows: dict[str, tuple[str, int, str]] = {}
+    # Tuple: (thread_ts, reply_count, latest_reply, bot_owned).
+    thread_rows: dict[str, tuple[str, int, str, str]] = {}
     max_ts: float | None = None
     for m in messages:
         ts_str = m.get("ts") or ""
@@ -109,9 +118,22 @@ def main() -> int:
         # haven't already seen — `last` cursor bound — and only when
         # the caller asked for it). Parent messages carry reply_count
         # and latest_reply; replies do not.
-        if args.emit_threads and ts_num > last and subtype not in skip_subtypes:
+        if args.emit_threads and ts_num > last:
             reply_count = m.get("reply_count") or 0
-            if reply_count and reply_count > 0:
+            # Did the bot author this thread's parent? If so the bot
+            # STARTED the thread and should hear every reply (the
+            # watcher flips the thread into firehose mode). Bot-authored
+            # parents may carry the bot_message subtype, so we must NOT
+            # let the subtype filter drop them here — only genuine
+            # structural subtypes (joins/leaves/edits) are skipped for
+            # non-bot parents.
+            parent_author = m.get("user") or m.get("bot_id") or ""
+            parent_is_bot = parent_author == args.bot
+            if (
+                reply_count
+                and reply_count > 0
+                and (parent_is_bot or subtype not in skip_subtypes)
+            ):
                 # For a parent, thread_ts in the API response equals its
                 # own ts. We key on ts to be safe even if the field is
                 # absent.
@@ -120,6 +142,7 @@ def main() -> int:
                     thread_ts_key,
                     int(reply_count),
                     str(m.get("latest_reply") or ts_str),
+                    "1" if parent_is_bot else "0",
                 )
 
         if ts_num <= last:
@@ -153,8 +176,8 @@ def main() -> int:
     for _, ts_str, user, thread_ts, text in mention_rows:
         print(f"M\t{ts_str}\t{user}\t{thread_ts}\t{text}")
     if args.emit_threads:
-        for thread_ts_key, reply_count, latest_reply in thread_rows.values():
-            print(f"T\t{thread_ts_key}\t{reply_count}\t{latest_reply}")
+        for thread_ts_key, reply_count, latest_reply, bot_owned in thread_rows.values():
+            print(f"T\t{thread_ts_key}\t{reply_count}\t{latest_reply}\t{bot_owned}")
     return 0
 
 
