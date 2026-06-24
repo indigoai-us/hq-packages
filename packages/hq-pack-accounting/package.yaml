@@ -1,0 +1,34 @@
+name: hq-pack-accounting
+version: 0.1.0
+publisher: '@indigoai-us'
+access: public
+description: 'Double-entry accounting for HQ — chart of accounts, balanced journal entries, the three financial statements, and CSV/QuickBooks import with account mapping, built on your CRM accounts. Requires hq-pack-crm.'
+requires:
+  # The pack mechanics (skills/scripts/knowledge) run on any v12+ HQ. The
+  # accounting ENGINE lives in hq-pro and is gated per-company by the
+  # `accountingEnabled` setting (not by hqCore); see knowledge/double-entry-rules.
+  hqCore: '>=12.0.0'
+  packs:
+    # Accounting accounts ARE CRM accounts (counterparties, invoices). Requires
+    # the CRM pack — enforced at install by the hq-cli pack-dependency gate.
+    - name: hq-pack-crm
+      version: '>=1.0.0'
+capabilities:
+  - fs
+  - scripts
+contributes:
+  skills:
+    - accounting
+    - chart-of-accounts
+    - acct-import
+    - run-reports
+    - invoice
+  knowledge:
+    - double-entry-rules
+    - default-chart-of-accounts
+    - account-mapping
+  scripts:
+    - acct-import.mjs
+initialization:
+  entrypoint: accounting
+  prompt: "Run /accounting to set up your chart of accounts, import a statement, and read your financial statements. Requires hq-pack-crm and the company's accountingEnabled setting."
