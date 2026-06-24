@@ -1,5 +1,7 @@
 # hq-pack-accounting
 
+![hq-pack-accounting — a level brass balance scale, the books in balance](cover.jpg)
+
 Double-entry accounting for HQ — a built-in QuickBooks replacement. Chart of
 accounts, balanced journal entries, CSV/QuickBooks import with account mapping,
 and the three financial statements (trial balance, profit & loss, balance
