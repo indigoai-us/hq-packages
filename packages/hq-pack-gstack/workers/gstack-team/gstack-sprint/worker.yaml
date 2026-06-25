@@ -1,7 +1,7 @@
 worker:
   id: gstack-sprint
   name: "gstack Sprint Runner"
-  description: "Runs a full gstack sprint loop (Think → Plan → Build → Review → Test → Ship → Reflect) on the active codebase using g-* skills"
+  description: "Runs a full gstack sprint loop (Think -> Plan -> Build -> Review -> Test -> Ship -> Reflect) on the active codebase via g-prefixed skills, intended to run before opening a PR."
   type: CodeWorker
   version: "1.0"
 
