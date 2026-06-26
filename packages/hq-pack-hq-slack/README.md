@@ -1,6 +1,6 @@
 # hq-pack-hq-slack
 
-![hq-pack-hq-slack — MCP-free Slack messaging from the CLI, acting as you](cover.png)
+![hq-pack-hq-slack — MCP-free Slack messaging from the CLI, acting as you](cover.jpg)
 
 MCP-free Slack messaging for HQ. Post, read, reply, DM, search, and upload to
 Slack from the CLI — acting **as you**, via **your own** Slack app's user token
