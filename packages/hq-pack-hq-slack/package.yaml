@@ -1,5 +1,5 @@
 name: hq-pack-hq-slack
-version: 1.0.0
+version: 1.0.1
 publisher: '@indigoai-us'
 access: public
 description: 'MCP-free Slack messaging for HQ — post, read, reply, DM, search, and upload to Slack from the CLI, acting AS you via your OWN Slack app''s user token (xoxp-). Ships a self-contained CLI skill plus a guided one-time setup that walks you through creating your own full-access Slack app from a manifest and storing the token in the HQ vault. For day-to-day owner-level messaging; pair with hq-pack-slack-bot for autonomous @-mention bots.'
