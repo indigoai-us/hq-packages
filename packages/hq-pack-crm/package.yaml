@@ -1,19 +1,37 @@
 name: hq-pack-crm
-version: 1.0.0
+version: 1.1.0
 publisher: '@indigoai-us'
 access: public
-description: 'Native HQ CRM — your ontology as the canonical client record. A read-only crm_* surface over a vault-synced projection that joins every GTM silo (inbound, pipeline, contract, billing) onto one account with its activity timeline. Company-agnostic; the per-company crmEnabled setting turns it on.'
+description: 'Native HQ CRM + client management — your ontology as the canonical client record. /crm-setup stands a company up service-agnostically (connect the tools you use, build native HQ capabilities for the ones you don''t), /crm reads the vault-synced projection that joins every GTM silo (inbound, pipeline, contract, billing) onto one account with its timeline, and a fleet of client-management skills (signals, action items, meeting next-steps) run off one per-company config. Company-agnostic; the per-company crmEnabled setting turns it on.'
 requires:
   hqCore: '>=12.0.0'
   # Runtime prerequisites:
-  #   - The native ontology CRM enabled for the company (companySettings.crmEnabled),
-  #     which produces the vault-synced crm-projection.json this skill reads.
-  #   - `hq` CLI on PATH for sync (`/hq-sync`) and login (`/hq-login`).
+  #   - The native ontology CRM enabled for the company (companySettings.crmEnabled,
+  #     flipped by /crm-setup via `hq company settings set --crm-enabled true`),
+  #     which produces the vault-synced crm-projection.json /crm reads.
+  #   - `hq` CLI on PATH for sync (`/hq-sync`), login (`/hq-login`), CRM writes
+  #     (`hq crm entity upsert`), and activation (`hq company settings set`).
+  #   - The core `/new-connection` command for the connect path (ships in hq-core).
 contributes:
   skills:
     - crm
+    - crm-setup
+    - client-signals
+    - client-action-items
+    - meeting-next-steps
+  workers:
+    - deal-brain
   knowledge:
     - crm
 initialization:
-  entrypoint: crm
-  prompt: "Run /crm to find any client's status from the canonical record. Turn it on per-company with the crmEnabled setting."
+  entrypoint: crm-setup
+  prompt: "Run /crm-setup to stand up the CRM for a company — connect the tools you use, build native HQ capabilities for the rest, then turn it on. Then /crm answers 'where is this client?' and the bundled skills run off it."
+keywords:
+  - hq
+  - hq-pack
+  - crm
+  - client-management
+  - pipeline
+  - gtm
+license: MIT
+repository: 'https://github.com/indigoai-us/hq-packages'
