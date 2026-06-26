@@ -7,7 +7,9 @@
     "knowledge",
     "scripts",
     "package.yaml",
-    "README.md"
+    "README.md",
+    "cover.png",
+    "icon.svg"
   ],
   "repository": {
     "type": "git",
