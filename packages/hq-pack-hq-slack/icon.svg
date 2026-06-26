@@ -1,0 +1,23 @@
+<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="hq-pack-hq-slack — MCP-free Slack messaging">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6366f1"/>
+      <stop offset="1" stop-color="#8b5cf6"/>
+    </linearGradient>
+    <filter id="soft" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#1e1b4b" flood-opacity="0.45"/>
+    </filter>
+  </defs>
+  <rect x="16" y="16" width="480" height="480" rx="108" fill="url(#bg)"/>
+  <!-- chat bubble -->
+  <g filter="url(#soft)">
+    <path d="M150 132h212a44 44 0 0 1 44 44v118a44 44 0 0 1-44 44H236l-74 58v-58h-12a44 44 0 0 1-44-44V176a44 44 0 0 1 44-44z" fill="#ffffff"/>
+  </g>
+  <!-- terminal prompt glyph inside the bubble -->
+  <g stroke="#6366f1" stroke-width="22" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M176 206l40 35-40 35"/>
+    <line x1="238" y1="282" x2="320" y2="282"/>
+  </g>
+  <!-- lime status dot -->
+  <circle cx="372" cy="190" r="16" fill="#a3e635"/>
+</svg>

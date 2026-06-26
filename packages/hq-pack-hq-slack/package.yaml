@@ -1,0 +1,35 @@
+name: hq-pack-hq-slack
+version: 1.0.0
+publisher: '@indigoai-us'
+access: public
+description: 'MCP-free Slack messaging for HQ — post, read, reply, DM, search, and upload to Slack from the CLI, acting AS you via your OWN Slack app''s user token (xoxp-). Ships a self-contained CLI skill plus a guided one-time setup that walks you through creating your own full-access Slack app from a manifest and storing the token in the HQ vault. For day-to-day owner-level messaging; pair with hq-pack-slack-bot for autonomous @-mention bots.'
+requires:
+  hqCore: '>=12.0.0'
+  # Runtime prerequisites:
+  #   - bash, python3 (stdlib only — no pip installs)
+  #   - `hq` CLI for the recommended vault token store (optional: a local
+  #     ~/.mcp.json works as a legacy fallback)
+  #   - A Slack user token (xoxp-) from your own Slack app — see
+  #     knowledge/hq-slack/create-your-slack-app.md
+contributes:
+  workers: []
+  knowledge:
+    - hq-slack
+  skills:
+    - hq-slack
+  hooks: []
+  policies: []
+  commands: []
+  # scripts/ ships the vendored, self-contained hq-slack.sh CLI.
+  scripts:
+    - hq-slack.sh
+keywords:
+  - hq
+  - hq-pack
+  - slack
+  - messaging
+  - cli
+  - mcp-free
+  - user-token
+license: MIT
+repository: 'https://github.com/indigoai-us/hq-packages'

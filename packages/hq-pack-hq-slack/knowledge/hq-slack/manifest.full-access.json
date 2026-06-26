@@ -1,0 +1,65 @@
+{
+  "_comment": "HQ Slack — full-access user-token app manifest. Paste this into https://api.slack.com/apps → Create New App → From a manifest. It grants a broad set of USER (xoxp-) scopes so the app can act as YOU across messaging, channels, files, search, reactions, and profile. Rename display_information.name freely. admin.* (Enterprise Grid) scopes are intentionally omitted — see scopes-reference.md to add them. After creating: Settings → Install App → Install to Workspace, then copy the 'User OAuth Token' (xoxp-…).",
+  "display_information": {
+    "name": "HQ Slack",
+    "description": "Personal HQ Slack agent — posts, reads, replies, searches, and shares files as me.",
+    "background_color": "#0a0a0a",
+    "long_description": "HQ Slack is a personal automation app for HQ (the team AI operating system). Installed with a broad set of user scopes, it acts on your behalf to post and reply in any channel or DM you belong to, read channel and thread history, search your messages, manage reactions and pins, upload files, and read your team's directory — all from the MCP-free hq-slack CLI. The token never leaves your machine's HQ vault."
+  },
+  "features": {
+    "bot_user": {
+      "display_name": "HQ Slack",
+      "always_online": false
+    }
+  },
+  "oauth_config": {
+    "scopes": {
+      "user": [
+        "channels:history",
+        "channels:read",
+        "channels:write",
+        "groups:history",
+        "groups:read",
+        "groups:write",
+        "im:history",
+        "im:read",
+        "im:write",
+        "mpim:history",
+        "mpim:read",
+        "mpim:write",
+        "chat:write",
+        "search:read",
+        "users:read",
+        "users:read.email",
+        "users.profile:read",
+        "users.profile:write",
+        "usergroups:read",
+        "usergroups:write",
+        "files:read",
+        "files:write",
+        "reactions:read",
+        "reactions:write",
+        "pins:read",
+        "pins:write",
+        "bookmarks:read",
+        "bookmarks:write",
+        "stars:read",
+        "stars:write",
+        "emoji:read",
+        "dnd:read",
+        "dnd:write",
+        "links:read",
+        "links:write",
+        "team:read"
+      ]
+    }
+  },
+  "settings": {
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": false,
+    "token_rotation_enabled": false,
+    "interactivity": {
+      "is_enabled": false
+    }
+  }
+}
