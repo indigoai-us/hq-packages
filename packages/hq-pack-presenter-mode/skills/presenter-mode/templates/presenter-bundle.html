@@ -1,0 +1,149 @@
+<!-- HQ PRESENTER MODE: bundle start -->
+<!--
+  Self-contained presenter machinery extracted verbatim from the AI Summit keynote.
+  Inject this block immediately before </body> in any self-contained HTML deck whose
+  slides are `.deck-slide` elements inside a `.deck` container.
+
+  Contract this bundle provides / requires:
+    - Slides: <section class="deck-slide">…</section> (one per slide), inside <div class="deck">.
+    - Progressive reveals (optional): elements with class "frag" (shown via class "shown").
+    - Notes payload: a <script id="notes-data" type="application/json">{...}</script> tag
+      (schema in templates/notes-data.example.json). Required for the ?notes view.
+    - URL params: base = audience view (press P to present); ?present=1 = enter present mode;
+      ?notes = presenter notes view; ?sync=<room> = join the cross-device PubNub room.
+    - Hooks exposed: window.__knApplyDeck(n), window.__knApplyNotes(n), window.__knPub(n).
+
+  GOTCHA (see policy hq-deck-present-mode-scale-to-fit): pin any vw/vh units in slide
+  content to px first, or they fight the scale-to-fit transform.
+-->
+<style id="hq-presenter-style">
+/* present mode + scale-to-fit (base slide canvas is 1280x720) */
+body.present { background: #000; }
+body.present .deck { padding: 0; gap: 0; position: fixed; inset: 0; }
+body.present .deck-slide { width: 1280px; height: 720px; aspect-ratio: auto; border-radius: 0; box-shadow: none; display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%) scale(var(--fit,1)); transform-origin: center center; overflow: hidden; }
+body.present .deck-slide.active { display: block; }
+.hud { position: fixed; bottom: 14px; right: 16px; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 10px; letter-spacing: 0.2em; color: rgba(255,255,255,0.55); display: none; }
+body.present .hud { display: block; }
+.tip { position: fixed; top: 16px; right: 16px; z-index: 9; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 10px; letter-spacing: 0.2em; color: rgba(255,255,255,0.7); background: rgba(9,9,11,0.75); padding: 6px 10px; border-radius: 3px; border: 1px solid rgba(255,255,255,0.12); }
+body.present .tip { display: none; }
+@keyframes hqFadeIn{from{opacity:0}to{opacity:1}}@keyframes hqRise{from{opacity:0;transform:translateY(26px)}to{opacity:1;transform:translateY(0)}}body.present .deck-slide.active{animation:hqFadeIn .42s ease both}body.present .deck-slide.active .stage{animation:hqRise .6s cubic-bezier(.22,.61,.36,1) .05s both}@media (prefers-reduced-motion:reduce){body.present .deck-slide.active,body.present .deck-slide.active .stage{animation:none}}
+.pn-key{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;margin-left:6px;padding:0 4px;font-family:'Geist Mono',monospace;font-size:10px;font-weight:600;color:rgba(243,238,228,.55);background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);border-radius:4px}
+/* presenter notes view */
+body.notes-mode{overflow:hidden}
+body.notes-mode .deck,body.notes-mode .tip,body.notes-mode #hud{display:none!important}
+#presenter-notes{display:none}
+body.notes-mode #presenter-notes{display:flex;flex-direction:column;position:fixed;inset:0;z-index:99999;background:#0a0a0c;color:#f3eee4;font-family:'Geist',system-ui,sans-serif}
+#pn-bar{display:flex;align-items:center;gap:16px;padding:14px 26px;border-bottom:1px solid rgba(255,255,255,.08);background:rgba(10,10,12,.92)}
+#pn-num{font-family:'Geist Mono',monospace;font-size:15px;font-weight:700;letter-spacing:.1em;color:#ff7a3d;white-space:nowrap}
+#pn-title{font-size:17px;font-weight:600;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+#pn-title em{font-family:'Fraunces';font-style:italic;color:#ff7a3d}
+#pn-dot{width:9px;height:9px;border-radius:50%;background:rgba(243,238,228,.3);flex:none}
+#pn-dot.live{background:#5fcf8e;box-shadow:0 0 10px rgba(95,207,142,.6)}
+#pn-sync{font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:rgba(243,238,228,.34);white-space:nowrap}
+#pn-main{flex:1;overflow-y:auto}
+#pn-notes{max-width:1000px;margin:0 auto;padding:44px 40px 30px}
+#pn-notes p{font-size:clamp(22px,2.7vw,31px);line-height:1.62;margin:0 0 20px;color:#efe9dd}
+#pn-notes p em{font-family:'Fraunces';font-style:italic;color:#fff}
+#pn-notes .cue{font-size:16px;line-height:1.5;color:#e09145;font-family:'Geist Mono',monospace;background:rgba(224,145,69,.1);border-left:2px solid #e09145;padding:8px 14px;border-radius:6px;margin:0 0 20px}
+#pn-notes .beat{font-size:15px;color:rgba(243,238,228,.55);font-style:italic;margin:0 0 18px}
+#pn-foot{display:flex;align-items:center;gap:18px;padding:13px 26px;border-top:1px solid rgba(255,255,255,.08);background:#141417}
+#pn-next{flex:1;font-size:14px;color:rgba(243,238,228,.55);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#pn-next b{color:#ff7a3d;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;margin-right:8px}
+#pn-foot .keys{font-family:'Geist Mono',monospace;font-size:11px;color:rgba(243,238,228,.32);letter-spacing:.1em}
+#pn-foot button{font-family:'Geist Mono';font-size:14px;color:#f3eee4;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:7px 15px;cursor:pointer}#pn-mode{display:flex;gap:2px;background:rgba(255,255,255,.06);border-radius:8px;padding:2px;margin-left:auto}#pn-mode button{font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:rgba(243,238,228,.5);background:none;border:0;border-radius:6px;padding:5px 11px;cursor:pointer}#pn-mode button.on{background:#ff7a3d;color:#0a0a0c;font-weight:600}#pn-bar #pn-title{flex:none;max-width:46%}.pn-bul{margin:0;padding:0;list-style:none}.pn-bul li{font-size:clamp(23px,2.7vw,31px);line-height:1.45;margin:0 0 24px;padding-left:36px;position:relative;color:#efe9dd;font-weight:500}.pn-bul li:before{content:'';position:absolute;left:4px;top:.55em;width:12px;height:12px;border-radius:50%;background:#ff7a3d}#pn-foot{align-items:center;gap:14px;padding:10px 22px}.pn-th{display:flex;flex-direction:column;gap:3px}.pn-thl{font-family:'Geist Mono',monospace;font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;color:rgba(243,238,228,.4)}.pn-th img{height:58px;width:auto;border-radius:4px;border:1px solid rgba(255,255,255,.14);display:block;background:#000}#pn-thumb-next{height:46px;opacity:.72}.pn-nextt{font-size:13px;color:rgba(243,238,228,.55);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+</style>
+
+<div class="hud" id="hud"></div>
+
+<div id="presenter-notes"><div id="pn-bar"><span id="pn-num">01 / 01</span><span id="pn-title">&mdash;</span><span id="pn-mode"><button data-m="script">Script</button><button data-m="bullets">Bullets</button><kbd class="pn-key" title="Press B to toggle">B</kbd></span><span id="pn-dot"></span><span id="pn-sync">standalone</span></div>
+<div id="pn-main"><div id="pn-notes">Loading&hellip;</div></div>
+<div id="pn-foot"><div class="pn-th"><span class="pn-thl">On screen</span><img id="pn-thumb-now" alt=""></div><div class="pn-th"><span class="pn-thl">Next</span><img id="pn-thumb-next" alt=""></div><span id="pn-next" class="pn-nextt"></span><span style="flex:1"></span><span class="keys">&larr; &rarr; / SPACE</span><button id="pn-prev">&larr;</button><button id="pn-nxt">&rarr;</button></div></div>
+
+<script>
+/* deck navigation core — runs in deck (non-notes) mode only */
+(function () {
+  if(location.search.indexOf('notes')>=0||location.hash.indexOf('notes')>=0)return;
+  const slides = Array.from(document.querySelectorAll('.deck-slide'));
+  const total = slides.length;
+  const hud = document.getElementById('hud'); let bc=null; try{ bc=new BroadcastChannel('keynote'); }catch(e){}
+  let i = 0;
+  const isPresent = () => document.body.classList.contains('present');
+  function go(n) {
+    i = Math.max(0, Math.min(total - 1, n));
+    slides.forEach((s, idx) => s.classList.toggle('active', idx === i));
+    var __cs=slides[i]; if(__cs){var __f=__cs.querySelectorAll('.frag.shown'); for(var __k=0;__k<__f.length;__k++) __f[__k].classList.remove('shown');}
+    if (hud) hud.textContent = String(i+1).padStart(2,'0') + ' / ' + String(total).padStart(2,'0');
+    history.replaceState(null, '', '#' + (i + 1)); try{ if(bc) bc.postMessage({slide:i+1,total:total}); localStorage.setItem('kn-deck-slide',String(i+1)); if(window.__knPub&&!window.__knApplying){window.__knPub(i+1);} }catch(e){}
+  }
+  window.__knApplyDeck=function(n){try{window.__knApplying=1;if(!isPresent())enter();go(n-1);}finally{window.__knApplying=0;}};
+  function frags(){return slides[i]?Array.prototype.slice.call(slides[i].querySelectorAll('.frag')):[]}
+  function advance(){var f=frags(),hid=f.filter(function(x){return !x.classList.contains('shown')});if(hid.length){hid[0].classList.add('shown')}else{go(i+1)}}
+  function back(){var f=frags(),sh=f.filter(function(x){return x.classList.contains('shown')});if(sh.length){sh[sh.length-1].classList.remove('shown')}else{go(i-1)}}
+  function fit(){try{var s=Math.min(window.innerWidth/1280,window.innerHeight/720);document.documentElement.style.setProperty('--fit',s);}catch(e){}}
+  window.addEventListener('resize',fit);
+  function enter() { document.body.classList.add('present'); fit();
+    const h = parseInt(location.hash.slice(1), 10);
+    go(Number.isFinite(h) && h > 0 ? h - 1 : 0); }
+  function exit() { document.body.classList.remove('present');
+    slides.forEach(s => s.classList.remove('active')); }
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'p' || e.key === 'P') { isPresent() ? exit() : enter(); return; }
+    if (e.key === 'n' || e.key === 'N') { try{ window.open(location.pathname + '?notes' + (/sync=([^&#]+)/.test(location.href)?'&sync='+RegExp.$1:''), 'hq-notes', 'width=1120,height=780'); }catch(err){} return; }
+    if (!isPresent()) return;
+    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); advance(); }
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); back(); }
+    else if (e.key === 'Home') { go(0); }
+    else if (e.key === 'End')  { go(total-1); }
+    else if (e.key === 'Escape') { exit(); }
+  });
+  document.addEventListener('click', (e) => {
+    if (!isPresent()) return;
+    const x = e.clientX, w = window.innerWidth;
+    if (x > w * 0.6) advance(); else if (x < w * 0.4) back();
+  });
+  const p = new URLSearchParams(location.search);
+  if (p.get('present') === '1') enter();
+  if(bc) bc.onmessage=function(e){ var d=e.data||{}; if(d.goto){ if(!isPresent()) enter(); go(d.goto-1); } };
+  window.addEventListener('storage',function(e){ if(e.key==='kn-notes-goto'&&e.newValue){ var g=parseInt(e.newValue,10)||0; if(g){ if(!isPresent())enter(); go(g-1); } } });
+})();
+</script>
+
+<script>
+/* presenter notes view — runs in ?notes mode only */
+(function(){
+  if(location.search.indexOf('notes')<0 && location.hash.indexOf('notes')<0) return;
+  document.body.classList.add('notes-mode');
+  var DATA=JSON.parse(document.getElementById('notes-data').textContent);
+  var S=DATA.slides,TOTAL=DATA.total,cur=1,bc=null,mode='script';try{mode=localStorage.getItem('kn-notes-mode')||'script'}catch(e){}
+  try{bc=new BroadcastChannel('keynote')}catch(e){}
+  function $(id){return document.getElementById(id)}
+  function esc(t){return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+  function fmt(raw){return raw.split(/\n\n+/).map(function(p){p=p.trim();if(!p)return '';var x=esc(p).replace(/\*([^*]+)\*/g,'<em>$1</em>');if(/^\[/.test(p))return '<div class="cue">'+x.replace(/^\[|\]$/g,'')+'</div>';if(/^\(/.test(p))return '<div class="beat">'+x+'</div>';return '<p>'+x+'</p>'}).join('')}
+  function render(n){cur=Math.max(1,Math.min(TOTAL,n));var s=S[cur-1];$('pn-num').textContent=(cur<10?'0'+cur:cur)+' / '+TOTAL;$('pn-title').innerHTML=s.title||'';$('pn-notes').innerHTML=(mode==='bullets'&&s.bullets&&s.bullets.length)?bul(s.bullets):fmt(s.spoken||'(no notes)');var nx=S[cur];var tn=$('pn-thumb-now');if(tn)tn.src=s.thumb||'';var txn=$('pn-thumb-next');if(txn)txn.src=(nx&&nx.thumb)?nx.thumb:'';$('pn-next').innerHTML=nx?(nx.title||''):'last slide';$('pn-main').scrollTop=0}
+  function go(n,b){render(n);try{localStorage.setItem('kn-notes-goto',String(cur))}catch(e){}if(b&&bc){try{bc.postMessage({goto:cur})}catch(e){}}if(window.__knPub&&!window.__knApplying){window.__knPub(cur);}} window.__knApplyNotes=function(n){try{window.__knApplying=1;go(n,false);}finally{window.__knApplying=0;}};
+  if(bc)bc.onmessage=function(e){var d=e.data||{};if(d.slide){$('pn-dot').classList.add('live');$('pn-sync').textContent='live · following deck';render(d.slide)}};
+  window.addEventListener('storage',function(e){if(e.key==='kn-deck-slide'&&e.newValue){var s=parseInt(e.newValue,10)||0;if(s){$('pn-dot').classList.add('live');$('pn-sync').textContent='live · following deck';render(s)}}});
+  try{var ls=parseInt(localStorage.getItem('kn-deck-slide'),10);if(ls>0)cur=ls}catch(e){}
+  document.addEventListener('keydown',function(e){if(e.key==='ArrowRight'||e.key===' '||e.key==='PageDown'){e.preventDefault();go(cur+1,true)}else if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();go(cur-1,true)}else if(e.key==='Home'){go(1,true)}else if(e.key==='End'){go(TOTAL,true)}});
+  $('pn-prev').onclick=function(){go(cur-1,true)};$('pn-nxt').onclick=function(){go(cur+1,true)};
+  function bul(a){return '<ul class="pn-bul">'+a.map(function(b){return '<li>'+esc(b)+'</li>'}).join('')+'</ul>'}
+  function setMode(m){mode=m;try{localStorage.setItem('kn-notes-mode',m)}catch(e){}var bs=document.querySelectorAll('#pn-mode button');for(var i=0;i<bs.length;i++){bs[i].className=bs[i].getAttribute('data-m')===m?'on':''}render(cur)}
+  var mbs=document.querySelectorAll('#pn-mode button');for(var i=0;i<mbs.length;i++){mbs[i].onclick=function(){setMode(this.getAttribute('data-m'))}}
+  document.addEventListener('keydown',function(e){if((e.key==='b'||e.key==='B')&&!e.metaKey&&!e.ctrlKey){setMode(mode==='bullets'?'script':'bullets')}});
+  setMode(mode);
+})();
+</script>
+
+<script>
+/* cross-device sync bridge (PubNub public demo keyset over REST) — gated on ?sync=<room> */
+(function(){try{
+var M=/[?&#]sync=([A-Za-z0-9_-]+)/.exec(location.href); if(!M) return;
+var CH="hqck-"+M[1], CID=Math.random().toString(36).slice(2), NB="https://ps.pndsn.com", isNotes=/[?&#]notes/i.test(location.href);
+window.__knPub=function(n){try{fetch(NB+"/publish/demo/demo/0/"+CH+"/0/"+encodeURIComponent(JSON.stringify({n:n,id:CID})),{mode:"cors",keepalive:true});}catch(e){}};
+function apply(n){var f=isNotes?window.__knApplyNotes:window.__knApplyDeck; if(f) f(n);}
+var tt="0",started=false;
+function loop(){fetch(NB+"/subscribe/demo/"+CH+"/0/"+tt+"?uuid="+CID).then(function(r){return r.json();}).then(function(d){tt=d[1]; if(started){var a=d[0]||[]; for(var i=0;i<a.length;i++){var m=a[i]; if(m&&m.id!==CID&&typeof m.n==="number") apply(m.n);}} started=true; loop();}).catch(function(){setTimeout(loop,2500);});}
+loop();
+}catch(e){}})();
+</script>
+<!-- HQ PRESENTER MODE: bundle end -->

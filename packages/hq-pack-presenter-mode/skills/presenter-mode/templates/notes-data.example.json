@@ -1,0 +1,26 @@
+{
+  "total": 2,
+  "slides": [
+    {
+      "n": 1,
+      "title": "Opening — the hook",
+      "spoken": "[smile, slow down]\n\nWelcome. Tonight I want to show you the *systems* behind the brands you already know.\n\n(beat)\n\nNot theory — the actual operating layer.",
+      "bullets": [
+        "Welcome + who I am",
+        "Promise: the real operating layer",
+        "Set the stakes"
+      ],
+      "thumb": "data:image/jpeg;base64,..."
+    },
+    {
+      "n": 2,
+      "title": "Why this matters now",
+      "spoken": "Most teams bolt AI on as a feature. The winners build it as *infrastructure*.\n\n[click to reveal chart]",
+      "bullets": [
+        "AI-as-feature vs AI-as-infrastructure",
+        "The compounding gap"
+      ],
+      "thumb": "data:image/jpeg;base64,..."
+    }
+  ]
+}

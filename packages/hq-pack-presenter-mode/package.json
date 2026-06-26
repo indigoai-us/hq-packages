@@ -1,0 +1,31 @@
+{
+  "name": "@indigoai-us/hq-pack-presenter-mode",
+  "version": "1.0.0",
+  "description": "HQ content pack: turn any self-contained HTML deck into an hq-deploy–hosted presentation with two cloud-synced links — a presentation link and a notes/teleprompter link that stay in sync across devices.",
+  "files": [
+    "skills",
+    "policies",
+    "package.yaml",
+    "README.md",
+    "cover.png"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/indigoai-us/hq-packages.git",
+    "directory": "packages/hq-pack-presenter-mode"
+  },
+  "keywords": [
+    "hq",
+    "hq-pack",
+    "presentation",
+    "slides",
+    "deck",
+    "presenter",
+    "teleprompter",
+    "cross-device-sync"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
+}
