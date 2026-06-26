@@ -1,0 +1,47 @@
+name: hq-pack-agent-browser
+version: 1.0.0
+publisher: '@indigoai-us'
+access: public
+description: 'agent-browser — Vercel''s native-Rust browser-automation CLI, wired into HQ. Bundles the snapshot+refs workflow, saved-state auth profiles, social-posting recipes, Tauri/WKWebView testing, plus the HQ policies that make agent-browser the default for UI verification and QA audits.'
+license: MIT
+repository: 'https://github.com/indigoai-us/hq-packages'
+requires:
+  hqCore: '>=12.0.0'
+  # Runtime prerequisite: the agent-browser CLI on PATH.
+  #   brew install agent-browser   (then `agent-browser install` to fetch Chromium)
+  # The pack ships knowledge, policies, and a how-to skill — not the binary.
+contributes:
+  workers: []
+  knowledge:
+    - agent-browser
+  skills:
+    - agent-browser-hq
+  # All four policies are public, global, soft-enforcement. They make
+  # agent-browser the default for browser QA / UI verification and steer
+  # around the common false-positive and MCP-misconfiguration traps.
+  policies:
+    - hq-prefer-agent-browser
+    - hq-agent-browser-is-cli-not-mcp-server
+    - agent-browser-ui-verification
+    - agent-browser-react-false-positives
+  hooks: []
+  commands: []
+  scripts: []
+conditional: 'command -v agent-browser >/dev/null 2>&1'
+capabilities:
+  - network
+  - fs
+initialization:
+  entrypoint: '/agent-browser-hq'
+keywords:
+  - hq
+  - hq-pack
+  - agent-browser
+  - browser-automation
+  - vercel
+  - e2e
+  - qa
+  - ui-verification
+  - smoke-test
+  - cdp
+  - tauri

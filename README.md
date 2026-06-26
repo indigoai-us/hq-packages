@@ -13,6 +13,7 @@ Content packs for [HQ by Indigo](https://github.com/indigoai-us/hq-core) — the
 | [`hq-pack-gemini`](./packages/hq-pack-gemini) | Six Gemini CLI workers (coder, reviewer, frontend, designer, stylist, ux-auditor) + `gemini-cli` knowledge. Conditional — skipped when `gemini` is not on `PATH` |
 | [`hq-pack-gstack`](./packages/hq-pack-gstack) | gstack-team workers (26 g-* skills) + `scripts/gstack-bridge.sh` |
 | [`hq-pack-slack-bot`](./packages/hq-pack-slack-bot) | Per-bot Slack mention watcher + spawned-worker template. Pairs with hq-pro `/hq-new-bot`. |
+| [`hq-pack-agent-browser`](./packages/hq-pack-agent-browser) | Vercel's agent-browser CLI wired into HQ — `/agent-browser-hq` skill, auth-profile + social-posting + Tauri knowledge, and the UI-verification/QA policies. Conditional — skipped when `agent-browser` is not on `PATH` |
 
 ## Install a pack
 

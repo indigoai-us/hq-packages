@@ -1,0 +1,33 @@
+{
+  "name": "@indigoai-us/hq-pack-agent-browser",
+  "version": "1.0.0",
+  "description": "HQ content pack: Vercel's agent-browser CLI wired into HQ — snapshot+refs workflow, saved-state auth profiles, social-posting recipes, Tauri testing, and the policies that make it the default for UI verification and QA audits.",
+  "files": [
+    "knowledge",
+    "skills",
+    "policies",
+    "package.yaml",
+    "README.md",
+    "cover.png"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/indigoai-us/hq-packages.git",
+    "directory": "packages/hq-pack-agent-browser"
+  },
+  "keywords": [
+    "hq",
+    "hq-pack",
+    "agent-browser",
+    "browser-automation",
+    "vercel",
+    "e2e",
+    "qa",
+    "ui-verification",
+    "tauri"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
+}
