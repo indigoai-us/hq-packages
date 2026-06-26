@@ -1,0 +1,42 @@
+name: hq-pack-presenter-mode
+version: 1.0.0
+publisher: '@indigoai-us'
+access: public
+description: 'Presenter Mode — turn any self-contained HTML slide deck into an hq-deploy–hosted presentation with TWO cloud-synced links: a presentation link (the slides) and a notes/teleprompter link (script + bullets + thumbnails) that stay in sync across devices over a zero-backend PubNub bridge. Generalized from the AI Summit keynote deck.'
+license: MIT
+repository: 'https://github.com/indigoai-us/hq-packages'
+requires:
+  hqCore: '>=12.0.0'
+  # Runtime prerequisites:
+  #   - the /deploy skill (hq-deploy) for hosting, or any static host
+  #   - `openssl` (random sync-room codes), `bash`, `grep` for the helper scripts
+  #   - a browser at present time; the synced links need outbound HTTPS to
+  #     ps.pndsn.com (PubNub public demo keyset). Degrades to manual nav offline.
+contributes:
+  workers: []
+  knowledge: []
+  skills:
+    - presenter-mode
+  hooks: []
+  # Deck-authoring guardrails captured from the keynote build. Symlinked into
+  # core/policies/ at install; auto-load like any global policy.
+  policies:
+    - hq-deck-present-mode-scale-to-fit
+    - hq-cross-device-deck-sync-pubnub-bridge
+    - hq-deck-slide-reorder-three-coordinated-edits
+  commands: []
+  # The skill's helper scripts + injectable bundle ship INSIDE
+  # skills/presenter-mode/ (templates/ + scripts/), not as top-level
+  # core/scripts contributions — they are skill-local by design.
+  scripts: []
+keywords:
+  - hq
+  - hq-pack
+  - presentation
+  - slides
+  - deck
+  - presenter
+  - teleprompter
+  - speaker-notes
+  - hq-deploy
+  - cross-device-sync
