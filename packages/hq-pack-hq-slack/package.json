@@ -1,0 +1,30 @@
+{
+  "name": "@indigoai-us/hq-pack-hq-slack",
+  "version": "1.0.0",
+  "description": "HQ content pack: MCP-free Slack messaging CLI that acts AS you via your own Slack app's user token, plus a guided one-time setup for creating a full-access Slack app.",
+  "files": [
+    "skills",
+    "knowledge",
+    "scripts",
+    "package.yaml",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/indigoai-us/hq-packages.git",
+    "directory": "packages/hq-pack-hq-slack"
+  },
+  "keywords": [
+    "hq",
+    "hq-pack",
+    "slack",
+    "messaging",
+    "cli",
+    "mcp-free",
+    "user-token"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
+}
