@@ -6,7 +6,8 @@
     "skills",
     "policies",
     "package.yaml",
-    "README.md"
+    "README.md",
+    "cover.png"
   ],
   "repository": {
     "type": "git",

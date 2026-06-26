@@ -1,5 +1,7 @@
 # hq-pack-presenter-mode
 
+![Presenter Mode — a presentation screen and a synced teleprompter notes screen on a darkened keynote stage](cover.png)
+
 Turn any self-contained HTML slide deck into an **hq-deploy–hosted presentation
 with two cloud-synced links** — one for the slides, one for your teleprompter —
 that stay in sync across devices with **no backend**. Generalized from a
