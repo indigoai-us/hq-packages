@@ -1,5 +1,5 @@
 name: hq-pack-crm
-version: 1.1.0
+version: 1.2.0
 publisher: '@indigoai-us'
 access: public
 description: 'Native HQ CRM + client management — your ontology as the canonical client record. /crm-setup stands a company up service-agnostically (connect the tools you use, build native HQ capabilities for the ones you don''t), /crm reads the vault-synced projection that joins every GTM silo (inbound, pipeline, contract, billing) onto one account with its timeline, and a fleet of client-management skills (signals, action items, meeting next-steps) run off one per-company config. Company-agnostic; the per-company crmEnabled setting turns it on.'
@@ -21,6 +21,8 @@ contributes:
     - meeting-next-steps
   workers:
     - deal-brain
+    - email-operator
+    - client-engagement
   knowledge:
     - crm
 initialization:
