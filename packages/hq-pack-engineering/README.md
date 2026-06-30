@@ -21,7 +21,7 @@ All under bare names — `/tdd`, `/review`, `/architect`, etc. work unchanged af
 
 ## What you get
 
-### Skills (17)
+### Skills (18)
 
 | Skill | Purpose |
 |---|---|
@@ -36,6 +36,7 @@ All under bare names — `/tdd`, `/review`, `/architect`, etc. work unchanged af
 | `investigate` | Iron Law debugging — root cause investigation before any fixes, scope lock |
 | `land` | Land a PR — monitor CI, resolve review issues, merge, monitor production |
 | `land-batch` | Triage, review, sequentially merge multiple open PRs |
+| `outpost-host` | Host a static or full-stack app on the HQ Outpost / EC2 VM via nginx — Outpost/EC2 only |
 | `prd` | Create an execution-ready PRD (`prd.json` + README) with full HQ context |
 | `quality-gate` | Universal pre-commit quality checks (typecheck, lint, test, coverage) with `--fix` |
 | `review` | Paranoid pre-landing code review — four-severity analysis with file:line refs |

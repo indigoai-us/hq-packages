@@ -30,6 +30,7 @@ contributes:
     - investigate
     - land
     - land-batch
+    - outpost-host
     - prd
     - quality-gate
     - review
