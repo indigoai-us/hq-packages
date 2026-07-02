@@ -1,0 +1,101 @@
+name: Release npm packages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Run the publish pass without publishing packages
+        type: boolean
+        default: false
+
+concurrency:
+  group: release-npm
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+
+      - name: Run pack tests (gate)
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+
+          tests=(packages/*/tests/*.test.sh)
+          if ((${#tests[@]} == 0)); then
+            echo 'no pack tests found'
+          fi
+
+          for t in "${tests[@]}"; do
+            echo "::group::$t"
+            bash "$t"
+            echo "::endgroup::"
+          done
+
+      - name: Publish changed packages
+        shell: bash
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+
+          if [[ -z "${NODE_AUTH_TOKEN:-}" ]]; then
+            echo "::notice::NPM_TOKEN is not configured; publishing is skipped."
+            exit 0
+          fi
+
+          published=0
+          skipped=0
+
+          for package_json in packages/*/package.json; do
+            package_dir="$(dirname "$package_json")"
+
+            is_private="$(node -p "require('./$package_json').private === true ? 'true' : 'false'")"
+            if [[ "$is_private" == "true" ]]; then
+              echo "$package_dir is private, skipping"
+              ((skipped += 1))
+              continue
+            fi
+
+            name="$(node -p "require('./$package_json').name")"
+            version="$(node -p "require('./$package_json').version")"
+            published_version="$(npm view "$name@$version" version 2>/dev/null || true)"
+
+            if [[ "$published_version" == "$version" ]]; then
+              echo "$name@$version already published, skipping"
+              ((skipped += 1))
+              continue
+            fi
+
+            if [[ "${DRY_RUN:-false}" == "true" ]]; then
+              echo "DRY_RUN=true: would publish $name@$version from $package_dir"
+              ((skipped += 1))
+              continue
+            fi
+
+            echo "Publishing $name@$version from $package_dir"
+            # Publish the folder from the repo root so npm uses the root .npmrc
+            # (with the auth token written by setup-node); npm does not walk up
+            # parent dirs for project config, so `cd $package_dir` would lose it.
+            npm publish "$package_dir" --access public
+            ((published += 1))
+          done
+
+          echo "Summary: published=$published skipped=$skipped"
