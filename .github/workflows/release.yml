@@ -1,9 +1,29 @@
 name: Release npm packages
 
+# Auto-publish changed packs to npm via npm OIDC trusted publishing — no static
+# NPM_TOKEN. This mirrors how hq-cli and hq-cloud publish (org-shared reusable
+# workflow indigoai-us/.github/.github/workflows/_npm-publish.yml), adapted for
+# this multi-pack monorepo: those repos publish a single root package, whereas
+# here we loop every `packages/*/package.json` and publish each pack whose
+# version is not yet on npm.
+#
+# How OIDC trusted publishing works (why there is no token below):
+#   - the job requests an OIDC identity token via `permissions: id-token: write`
+#   - `actions/setup-node` points npm at the public registry
+#   - npm >= 11.5 (bundled with Node 24) exchanges the OIDC token for a
+#     short-lived, package-scoped credential at publish time
+#   - each pack must have a Trusted Publisher configured on npmjs.com pointing at
+#     this repo + this workflow file; until that is provisioned a real publish
+#     fails with an auth error (the dry-run path still validates end to end)
+# No `--provenance`: keep parity with the org-shared pipeline; provenance can be
+# enabled later once trusted publishing is confirmed live for these packs.
+
 on:
   push:
     branches:
       - main
+    tags:
+      - "v*"
   workflow_dispatch:
     inputs:
       dry_run:
@@ -17,6 +37,7 @@ concurrency:
 
 permissions:
   contents: read
+  id-token: write # required for npm OIDC trusted publishing
 
 jobs:
   release:
@@ -25,10 +46,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Node 24 ships npm >= 11, which supports OIDC trusted publishing. Node 20
+      # (npm 10) does NOT — do not downgrade or publishing silently loses OIDC.
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           registry-url: https://registry.npmjs.org
+
+      - run: node --version && npm --version
 
       - name: Run pack tests (gate)
         shell: bash
@@ -47,19 +72,13 @@ jobs:
             echo "::endgroup::"
           done
 
-      - name: Publish changed packages
+      - name: Publish changed packages (OIDC)
         shell: bash
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
         run: |
           set -euo pipefail
           shopt -s nullglob
-
-          if [[ -z "${NODE_AUTH_TOKEN:-}" ]]; then
-            echo "::notice::NPM_TOKEN is not configured; publishing is skipped."
-            exit 0
-          fi
 
           published=0
           skipped=0
@@ -91,9 +110,9 @@ jobs:
             fi
 
             echo "Publishing $name@$version from $package_dir"
-            # Publish the folder from the repo root so npm uses the root .npmrc
-            # (with the auth token written by setup-node); npm does not walk up
-            # parent dirs for project config, so `cd $package_dir` would lose it.
+            # Publish the folder from the repo root so npm reads the registry
+            # config setup-node wrote; OIDC needs no NODE_AUTH_TOKEN — npm mints a
+            # short-lived credential from the id-token at publish time.
             npm publish "$package_dir" --access public
             ((published += 1))
           done
