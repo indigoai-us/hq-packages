@@ -114,8 +114,28 @@ fenced code block.
    default response pattern is:
 
    - **Short answer (≤ ~600 chars, no tables, no code blocks)** —
-     post directly inline via `chat.postMessage`. Same pattern as
-     before:
+     post a structured status via `scripts/slack-ui.sh post` (Block Kit
+     header / body / fields / context). Prefer this over raw
+     `chat.postMessage` curl. Example:
+
+     ```bash
+     BOT_TOKEN="$(cat /tmp/bot-token.{{MENTION_TS}})"
+     export SLACK_BOT_TOKEN="$BOT_TOKEN"
+     bash "{{HQ_ROOT}}/core/packages/hq-pack-slack-bot/scripts/slack-ui.sh" post \
+       --title "<short headline>" \
+       --body "<short answer here>" \
+       --field "Status|ok" \
+       --context "optional footnote" \
+       --channel "{{CHANNEL}}" \
+       --thread "{{THREAD_TS}}"
+     ```
+
+     Use `--field "Label|Value"` (max 4) and `--context` when labeled
+     facts help; omit them when a title + body is enough. For a plain
+     prose-only reply with no blocks, pass `--text-only`.
+
+     **Fallback only** if `slack-ui.sh` is missing or fails to run —
+     then raw `chat.postMessage` curl is acceptable:
 
      ```bash
      curl -fsS -X POST "https://slack.com/api/chat.postMessage" \
@@ -159,12 +179,13 @@ fenced code block.
      screenshot / share later → deploy.
 
    **Message body = the user-facing answer ONLY — never status or wrapper
-   text (HARD).** The `text` you post via `chat.postMessage` (inline answer
-   OR the one-line deploy summary) must contain *only* the actual reply:
-   the answer, the result, the link. It must NOT contain status/wrapper/meta
-   lines that narrate the act of replying or what you did under the hood.
-   Banned in the message body — these belong ONLY in the JSON envelope, and
-   posting them to Slack is the bug this rule exists to prevent:
+   text (HARD).** The content you post via `slack-ui.sh post` or
+   `chat.postMessage` (inline answer OR the one-line deploy summary) must
+   contain *only* the actual reply: the answer, the result, the link. It
+   must NOT contain status/wrapper/meta lines that narrate the act of
+   replying or what you did under the hood. Banned in the message body —
+   these belong ONLY in the JSON envelope, and posting them to Slack is
+   the bug this rule exists to prevent:
    - "Replied in the Slack thread." / "Scheduled and replied in the thread."
    - "Done. I posted X as a new message in #channel."
    - Restating the channel, thread, run id, or job id you operated on.
@@ -175,8 +196,8 @@ fenced code block.
    sentence describes the *act of replying / posting / scheduling* rather
    than *answering the ask*, it does not go in the message — it goes in the
    envelope's `summary` / `details` (see "Final Message" below), which no
-   human ever reads. Before every `chat.postMessage`, re-read your drafted
-   `text` and delete any such line.
+   human ever reads. Before every `slack-ui.sh post` / `chat.postMessage`,
+   re-read your drafted title/body/text and delete any such line.
 
    The worker template is otherwise generic. What "respond helpfully"
    means in DOMAIN terms is up to the *fork* of this template (look
