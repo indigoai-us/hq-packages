@@ -8,6 +8,8 @@ allowed-tools: Read, Write, Edit, Bash, Glob, Grep
 
 Develop a feature using strict test-driven development: write failing tests first, implement minimal code, refactor, and verify coverage.
 
+**What a good test is:** tests verify behavior through public interfaces, read like a specification, and survive refactors.
+
 **Task description:** $ARGUMENTS
 
 ## TDD Cycle (MANDATORY)
@@ -20,6 +22,16 @@ RED → GREEN → REFACTOR → REPEAT
 2. **GREEN**: Write minimal code to pass the test (no over-engineering)
 3. **REFACTOR**: Improve code quality while keeping tests green
 4. **REPEAT**: Continue until feature is complete and coverage meets requirements
+
+---
+
+## Seams — where tests go
+
+A **seam** is the public boundary you test at: the interface where you observe behavior without reaching inside. Tests live at seams, never against internals.
+
+**Test only at pre-agreed seams.** Before writing any test, write down the seams under test and confirm them with the user. No test is written at an unconfirmed seam. You can't test everything — agreeing the seams up front is how testing effort lands on the critical paths and complex logic instead of every edge case.
+
+Ask: "What's the public interface, and which seams should we test?"
 
 ---
 
@@ -72,6 +84,8 @@ export function validateEmail(email: string): boolean {
 ```
 
 ### Step 3: Write Failing Tests (RED Phase)
+
+Read `<repo>/CONTEXT.md` if present so test names and interface vocabulary match the project's domain language (ties into `/domain-modeling`).
 
 Write comprehensive test suite BEFORE implementation:
 
@@ -190,6 +204,7 @@ Improve code quality while keeping tests green:
 - Run tests after each refactoring step
 - Verify all tests still PASS
 - Refactoring should not add new functionality
+- Keep in-loop refactors small and local. For deeper **structural** refactors (moving seams, reshaping modules), hand off to `/review` rather than expanding this cycle.
 
 **Example refactored implementation:**
 ```typescript
@@ -341,6 +356,8 @@ All files   |   100    |   100    |   100    |   100     |             |
 - **Untested error paths**: Include tests for error conditions, not just happy path
 - **No mocking of external dependencies**: Mock API calls, database, file system, etc.
 - **Skipped tests**: Never commit `xit()` or `.skip` — fix the test or remove it
+- **Tautological**: The assertion recomputes the expected value the way the code does (`expect(add(a, b)).toBe(a + b)`, or a snapshot derived by hand the same way) — it passes by construction and can never disagree with the code. Expected values must come from an **independent source of truth** (a known-good literal, a worked example, the spec).
+- **Horizontal slicing**: Writing all tests first, then all implementation. Bulk tests verify *imagined* behavior and commit you to test structure before you understand the implementation. Work in **vertical slices** instead — one test → one implementation → repeat, each test a **tracer bullet** that responds to what the last cycle taught you.
 
 ---
 

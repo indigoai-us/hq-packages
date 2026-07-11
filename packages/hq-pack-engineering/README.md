@@ -21,17 +21,19 @@ All under bare names — `/tdd`, `/review`, `/architect`, etc. work unchanged af
 
 ## What you get
 
-### Skills (18)
+### Skills (23)
 
 | Skill | Purpose |
 |---|---|
 | `architect` | Surface architectural friction, deepening opportunities; deletion-test scoring |
 | `clean-worktree` | Merge a detached worktree branch back into local main; remove worktree and branch |
+| `codebase-design` | Shared deep-module vocabulary (module/interface/depth/seam) + design-it-twice reference |
 | `commit-main` | Commit every dirty file in current repo when on `main` |
 | `deep-plan` | Research subagents + 3-tier 15-question interview for large or strategic PRDs |
 | `diagnose` | Disciplined diagnosis loop for hard / non-deterministic / performance bugs |
 | `discover` | Pull a repo into HQ at latest main; parallel exploration; synthesize knowledge |
 | `document-release` | Post-ship documentation sync — README, CLAUDE.md, architecture docs, INDEX files |
+| `domain-modeling` | Build and sharpen a project's domain glossary in `CONTEXT.md`; hand ADRs to `/adr` |
 | `execute-task` | Execute a single PRD story through coordinated worker phases (Ralph pattern) |
 | `investigate` | Iron Law debugging — root cause investigation before any fixes, scope lock |
 | `land` | Land a PR — monitor CI, resolve review issues, merge, monitor production |
@@ -42,7 +44,10 @@ All under bare names — `/tdd`, `/review`, `/architect`, etc. work unchanged af
 | `review` | Paranoid pre-landing code review — four-severity analysis with file:line refs |
 | `run-pipeline` | Multi-project pipeline orchestrator — triage, execute, PR, review, deploy |
 | `run-project` | Run a project — default inline execution; `--ralph-mode` for background orchestrator |
+| `ship` | Meta pipeline: review → land → deploy → smoke → heal → monitor until KPIs are healthy |
 | `tdd` | Enforce test-driven development with RED→GREEN→REFACTOR cycle |
+| `to-tickets` | Break a plan/spec into tracer-bullet vertical-slice tickets with blocking edges |
+| `wayfinder` | Chart a shared map of investigation tickets for work too big for one agent session |
 
 ### Workers (6)
 
@@ -86,12 +91,18 @@ Engineering teams `hq install` this pack once per HQ instance and get the full d
 - `prd`, `deep-plan` → feed `run-project`; `deep-plan` also triggers `review-plan` (in core)
 - `review` / `investigate` / `diagnose` → independent; feed `architect` and bug-creation flows
 - `tdd`, `quality-gate` → independent pre-commit gates
+- `architect` → `codebase-design` (deep-module vocabulary), `domain-modeling` (glossary), `/adr` (in core)
+- `codebase-design`, `domain-modeling` → reference skills; feed `architect`, `tdd`, `diagnose`
+- `wayfinder` → feeds `prd` / `deep-plan`; uses `deep-research`, `brainstorm`, `domain-modeling`
+- `to-tickets` → feeds `execute-task` / `run-project`; complements `prd`
 
 All bare names — cross-references stay working as long as both ends are installed (or both stay in core).
 
 ## Versioning
 
 `v1.0.0` — initial extraction from `hq-core` v14.2.x. Tracks `hq-core` major versions for breaking-change alignment.
+
+`v1.4.0` — added `codebase-design`, `domain-modeling`, `to-tickets`, and `wayfinder`, ported and genericized from [`mattpocock/skills`](https://github.com/mattpocock/skills) (upstream commit `391a270`); refreshed `diagnose` (Phase-1 red-loop gate + minimise step), `tdd` (seams, tautological/horizontal-slicing anti-patterns), and `architect` (design-it-twice, recommendation badges) with upstream improvements.
 
 ## License
 
