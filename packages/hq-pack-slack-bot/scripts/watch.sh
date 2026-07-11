@@ -241,6 +241,10 @@ fi
 TEMPLATE_DIR="$PACKAGE_DIR/workers/$WORKER_TEMPLATE"
 PARSE_MENTIONS="$SCRIPT_DIR/parse-mentions.py"
 PARSE_SEARCH="$SCRIPT_DIR/parse-search.py"
+# Decision helpers (ask/resolve pending files + poll/dispatch). Pure
+# sourceable lib — no side effects at source time.
+# shellcheck source=decisions-lib.sh
+. "$SCRIPT_DIR/decisions-lib.sh"
 
 SPAWN_DIR="/tmp/hq-slack-bot.${BOT_SLUG}.spawned"
 CURSOR_DIR="/tmp/hq-slack-bot.${BOT_SLUG}.cursors"
@@ -484,6 +488,10 @@ SEARCH_POLL_INTERVAL="${MENTION_SEARCH_POLL_INTERVAL:-30}"
 SEARCH_INITIAL_BACKFILL_SECS="${MENTION_SEARCH_INITIAL_BACKFILL_SECS:-3600}"
 # How many results to fetch per search call. Capped by Slack at 100.
 SEARCH_RESULT_LIMIT="${MENTION_SEARCH_RESULT_LIMIT:-50}"
+# Decision ask/resolve state (slack-ui.sh ask writes pending files here).
+DECISIONS_DIR="${HQ_DECISIONS_DIR:-$HOME/.hq/slack-decisions}"
+DECISIONS_SEEN_DIR="$DECISIONS_DIR/.seen"
+DECISION_POLL_INTERVAL_SECS="${DECISION_POLL_INTERVAL_SECS:-15}"
 
 # ── Pre-flight: sample channel list call ───────────────────────────────────
 # Surface Slack API failures (missing_scope, invalid_auth, ratelimited)
@@ -540,6 +548,7 @@ fi
 # activates without manual intervention.
 rm -f "$SEARCH_DISABLED_FILE"
 LAST_SEARCH_POLL=0
+LAST_DECISION_POLL=0
 
 PREV_ERR=""
 PREV_SEARCH_ERR=""
@@ -1171,6 +1180,296 @@ print("\t".join([r.get("channel",""), r.get("ts",""), r.get("user",""), r.get("t
   return 0
 }
 
+# ── Decisions (slack-ui ask / resolve) ─────────────────────────────────────
+# Local pending files under $DECISIONS_DIR. Button answers arrive via HQ
+# API poll; free-text option replies are matched in the thread-poll path;
+# expiry fires the declared fallback. All paths are no-ops when no pending
+# files exist so existing watcher behavior is unchanged.
+
+# _decision_option_label <pending_file> <value> → label or empty
+_decision_option_label() {
+  local file="$1" value="$2"
+  jq -r --arg v "$value" \
+    '(.options // [])[] | select(.value == $v) | .label' \
+    "$file" 2>/dev/null | head -1
+}
+
+# dispatch_decision_worker <pending_file>
+# If DECISION_DISPATCH_CMD is set, decision_dispatch through it; else spawn
+# a fresh mention-worker with DECISION_* context via TEMPLATE_RUNNER.
+# Does not require an existing session file (asking worker may have exited).
+dispatch_decision_worker() {
+  local pending_file="$1"
+  if [ -n "${DECISION_DISPATCH_CMD:-}" ]; then
+    # shellcheck disable=SC2086
+    decision_dispatch "$pending_file" $DECISION_DISPATCH_CMD
+    return $?
+  fi
+
+  local decision_id question answer_value answer_label user channel thread_ts message_ts
+  decision_id="$(decision_field "$pending_file" '.decision_id // empty')"
+  question="$(decision_field "$pending_file" '.question // empty')"
+  answer_value="$(decision_field "$pending_file" '.value // empty')"
+  answer_label="$(_decision_option_label "$pending_file" "$answer_value")"
+  user="$(decision_field "$pending_file" '.user // empty')"
+  channel="$(decision_field "$pending_file" '.channel // empty')"
+  thread_ts="$(decision_field "$pending_file" '.thread_ts // empty')"
+  message_ts="$(decision_field "$pending_file" '.message_ts // empty')"
+
+  [ -n "$channel" ] || return 1
+  [ -n "$thread_ts" ] || return 1
+
+  local ts agent_name log_file session_file initial_prompt
+  ts="${message_ts:-$thread_ts}"
+  agent_name="decision: ${decision_id}"
+  log_file="$LOG_DIR/worker-decision-${decision_id}.log"
+  session_file="$SESSION_STORE/${thread_ts}.json"
+
+  initial_prompt="$(cat <<EOF
+/startwork -c ${STARTWORK_COMPANY}
+
+A prior decision ask was answered. Resume the original task using the answer.
+
+  channel:               ${channel}
+  thread_ts:             ${thread_ts}
+  decision_id:           ${decision_id}
+  question:              ${question}
+  answer_value:          ${answer_value}
+  answer_label:          ${answer_label}
+  answered_by:           ${user}
+
+Environment carries DECISION_ID / DECISION_QUESTION / DECISION_ANSWER_VALUE /
+DECISION_ANSWER_LABEL / DECISION_USER / DECISION_CHANNEL / DECISION_THREAD_TS.
+If DECISION_ID is set at startup, treat this run as decision resumption:
+read the answer and continue the original task in the thread. Do not re-post
+live decision buttons for an already-resolved decision.
+
+Do not call AskUserQuestion. The Slack thread is your only interaction surface.
+EOF
+)"
+
+  (
+    cd "$HQ_ROOT" || exit 1
+    unset CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST \
+          CLAUDE_CODE_ENTRYPOINT \
+          CLAUDE_CODE_SESSION_ID \
+          CLAUDE_CODE_EXECPATH \
+          CLAUDE_CODE_SDK_HAS_OAUTH_REFRESH \
+          CLAUDE_CODE_EMIT_TOOL_USE_SUMMARIES \
+          CLAUDE_CODE_CLASSIFIER_SUMMARY \
+          CLAUDE_CODE_ENABLE_ASK_USER_QUESTION_TOOL \
+          CLAUDE_CODE_NO_FLICKER \
+          CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING \
+          CLAUDE_CODE_DISABLE_CRON \
+          CLAUDE_AUTOCOMPACT_PCT_OVERRIDE \
+          CLAUDE_AGENT_SDK_VERSION \
+          CLAUDE_EFFORT \
+          CLAUDECODE \
+          ANTHROPIC_BASE_URL \
+          ANTHROPIC_API_KEY \
+          AI_AGENT \
+          BAGGAGE
+    export CLAUDE_STREAM_IDLE_TIMEOUT_MS=600000
+    export DECISION_ID="$decision_id"
+    export DECISION_QUESTION="$question"
+    export DECISION_ANSWER_VALUE="$answer_value"
+    export DECISION_ANSWER_LABEL="$answer_label"
+    export DECISION_USER="$user"
+    export DECISION_CHANNEL="$channel"
+    export DECISION_THREAD_TS="$thread_ts"
+    nohup "$TEMPLATE_RUNNER" \
+      -t "$WORKER_TEMPLATE" \
+      -n "$agent_name" \
+      --timeout "$WORKER_TIMEOUT_SECS" \
+      --var BOT_SLUG="$BOT_SLUG" \
+      --var BOT_USER_ID="$BOT_USER_ID" \
+      --var BOT_TOKEN_SECRET="$SECRET_NAME" \
+      --var BOT_TOKEN_SCOPE_FLAGS="$WORKER_SCOPE_FLAGS" \
+      --var BOT_TOKEN_SCOPE_LABEL="$SCOPE_LABEL" \
+      --var CREATOR_SLACK_USER_ID="${CREATOR_ID:-}" \
+      --var CHANNEL="$channel" \
+      --var THREAD_TS="$thread_ts" \
+      --var MENTION_TS="$ts" \
+      --var REPORTER="${user:-}" \
+      --var HQ_ROOT="$HQ_ROOT" \
+      --var SESSION_FILE="$session_file" \
+      --var DECISION_ID="$decision_id" \
+      --var DECISION_QUESTION="$question" \
+      --var DECISION_ANSWER_VALUE="$answer_value" \
+      --var DECISION_ANSWER_LABEL="$answer_label" \
+      --var DECISION_USER="$user" \
+      --var DECISION_CHANNEL="$channel" \
+      --var DECISION_THREAD_TS="$thread_ts" \
+      "$initial_prompt" \
+      >"$log_file" 2>&1 &
+    worker_pid=$!
+    disown
+    record_spawn_pid "$thread_ts" "$worker_pid"
+    echo "DECISION_SPAWN agent=$agent_name channel=$channel thread_ts=$thread_ts decision_id=$decision_id log=$log_file pid=$worker_pid"
+  )
+  return 0
+}
+
+# resolve_and_dispatch <pending_file> <action> <value> <user> <answered_at> <timed_out:0|1>
+resolve_and_dispatch() {
+  local pending_file="$1" action="$2" value="$3" user="$4" answered_at="$5" timed_out="${6:-0}"
+  local decision_id channel message_ts question label fallback_label
+  local resolve_args
+
+  if ! decision_mark_resolved "$pending_file" "$action" "$value" "$user" "$answered_at"; then
+    return 1
+  fi
+
+  decision_id="$(decision_field "$pending_file" '.decision_id // empty')"
+  channel="$(decision_field "$pending_file" '.channel // empty')"
+  message_ts="$(decision_field "$pending_file" '.message_ts // empty')"
+  question="$(decision_field "$pending_file" '.question // empty')"
+  label="$(_decision_option_label "$pending_file" "$value")"
+  [ -n "$label" ] || label="$value"
+
+  resolve_args=(
+    resolve
+    --decision-id "$decision_id"
+    --channel "$channel"
+    --ts "$message_ts"
+    --question "$question"
+    --state-dir "$DECISIONS_DIR"
+  )
+  if [ "$timed_out" = "1" ]; then
+    fallback_label="$label"
+    resolve_args+=(--timed-out --fallback-label "$fallback_label" --answer-value "$value")
+  else
+    resolve_args+=(--user "$user" --answer-label "$label" --answer-value "$value")
+  fi
+  if [ -n "$answered_at" ]; then
+    resolve_args+=(--answered-at "$answered_at")
+  fi
+  if [ "${DECISIONS_DRY_RUN:-}" = "1" ]; then
+    resolve_args+=(--dry-run)
+  fi
+
+  "$SCRIPT_DIR/slack-ui.sh" "${resolve_args[@]}" >/dev/null 2>&1 || true
+
+  dispatch_decision_worker "$pending_file"
+}
+
+# poll_decisions — best-effort HQ API poll for button/interaction answers.
+# No-op when no pending files or HQ_API_BASE / HQ_API_TOKEN unset.
+# Curl failures are silent (best-effort).
+poll_decisions() {
+  local pending_list pf decision_id answered_at action value user resp
+  local bot_filter url
+
+  pending_list="$(decisions_pending_files "$DECISIONS_DIR" 2>/dev/null || true)"
+  [ -n "$pending_list" ] || return 0
+  [ -n "${HQ_API_BASE:-}" ] || return 0
+  [ -n "${HQ_API_TOKEN:-}" ] || return 0
+
+  bot_filter="${BOT_APP_ID:-}"
+  url="$(decisions_poll_url "$HQ_API_BASE" "$bot_filter")"
+  resp="$(curl -fsS -H "Authorization: Bearer $HQ_API_TOKEN" "$url" 2>/dev/null || true)"
+  [ -n "$resp" ] || return 0
+
+  # Each answered decision: mark seen once, resolve local pending if present.
+  while IFS=$'\t' read -r decision_id answered_at action value user; do
+    [ -z "$decision_id" ] && continue
+    [ -z "$answered_at" ] && continue
+    if decision_event_seen "$DECISIONS_SEEN_DIR" "$decision_id"; then
+      continue
+    fi
+    decision_event_mark_seen "$DECISIONS_SEEN_DIR" "$decision_id"
+    pf="${DECISIONS_DIR}/${decision_id}.json"
+    if [ ! -f "$pf" ]; then
+      continue
+    fi
+    if [ "$(jq -r '.resolved // false' "$pf" 2>/dev/null || echo false)" = "true" ]; then
+      continue
+    fi
+    echo "DECISION_ANSWER decision_id=$decision_id action=${action:-} value=${value:-} user=${user:-} source=api"
+    resolve_and_dispatch "$pf" "${action:-$value}" "${value:-}" "${user:-}" "$answered_at" 0 || true
+  done < <(printf '%s' "$resp" | jq -r '
+    (.decisions // [])[]
+    | select((.answered_at // "") != "")
+    | [
+        (.decision_id // ""),
+        (.answered_at // ""),
+        (.action // ""),
+        (.value // ""),
+        (.user // "")
+      ] | @tsv
+  ' 2>/dev/null || true)
+
+  return 0
+}
+
+# check_decision_expiry — fire declared fallback for expired pending files.
+check_decision_expiry() {
+  local pf now answered_at fallback label
+  now="$(date +%s)"
+  answered_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+  while IFS= read -r pf || [ -n "${pf:-}" ]; do
+    [ -z "${pf:-}" ] && continue
+    [ -f "$pf" ] || continue
+    if ! decision_is_expired "$pf" "$now"; then
+      continue
+    fi
+    fallback="$(decision_field "$pf" '.fallback // empty')"
+    [ -n "$fallback" ] || continue
+    label="$(_decision_option_label "$pf" "$fallback")"
+    echo "DECISION_TIMEOUT decision_id=$(decision_field "$pf" '.decision_id // empty') fallback=$fallback"
+    resolve_and_dispatch "$pf" "timeout" "$fallback" "" "$answered_at" 1 || true
+    : "${label}"
+  done < <(decisions_pending_files "$DECISIONS_DIR" 2>/dev/null || true)
+  return 0
+}
+
+# handle_decision_reply <channel> <thread_ts> <user> <text>
+# Match free-text against a pending decision on this channel+thread.
+# Return 0 if resolved, 1 otherwise.
+handle_decision_reply() {
+  local channel="$1" thread_ts="$2" user="$3" text="$4"
+  local pf matched decision_id answered_at
+  local pending_list ch thr
+
+  pending_list="$(decisions_pending_files "$DECISIONS_DIR" 2>/dev/null || true)"
+  [ -n "$pending_list" ] || return 1
+
+  while IFS= read -r pf || [ -n "${pf:-}" ]; do
+    [ -z "${pf:-}" ] && continue
+    [ -f "$pf" ] || continue
+    ch="$(decision_field "$pf" '.channel // empty')"
+    thr="$(decision_field "$pf" '.thread_ts // empty')"
+    if [ "$ch" != "$channel" ] || [ "$thr" != "$thread_ts" ]; then
+      continue
+    fi
+    matched="$(decision_match_option "$pf" "$text" 2>/dev/null || true)"
+    [ -n "$matched" ] || continue
+    decision_id="$(decision_field "$pf" '.decision_id // empty')"
+    answered_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+    echo "DECISION_REPLY decision_id=$decision_id value=$matched user=$user channel=$channel thread_ts=$thread_ts"
+    if resolve_and_dispatch "$pf" "$matched" "$matched" "$user" "$answered_at" 0; then
+      decision_event_mark_seen "$DECISIONS_SEEN_DIR" "$decision_id"
+      return 0
+    fi
+  done <<< "$pending_list"
+  return 1
+}
+
+# Ensure threads that have pending decisions stay on the thread-poll list
+# so free-text answers are visible after the asking worker exits.
+track_pending_decision_threads() {
+  local pf ch thr
+  while IFS= read -r pf || [ -n "${pf:-}" ]; do
+    [ -z "${pf:-}" ] && continue
+    [ -f "$pf" ] || continue
+    ch="$(decision_field "$pf" '.channel // empty')"
+    thr="$(decision_field "$pf" '.thread_ts // empty')"
+    [ -n "$ch" ] && [ -n "$thr" ] || continue
+    track_thread "$ch" "$thr" "$thr"
+  done < <(decisions_pending_files "$DECISIONS_DIR" 2>/dev/null || true)
+  return 0
+}
+
 # ── Main loop ──────────────────────────────────────────────────────────────
 # Recover any sessions dropped by a prior watcher/box restart BEFORE normal
 # polling resumes. Safe to run on every arm: spawn-dedup plus the per-session
@@ -1399,9 +1698,48 @@ while true; do
       continue
     fi
 
+    # Free-text decision answers: scan raw replies (not just @-mentions).
+    # When a reply matches a pending option value/label, resolve and skip
+    # further processing of that message.
+    if [ -n "$(decisions_pending_files "$DECISIONS_DIR" 2>/dev/null || true)" ]; then
+      while IFS=$'\t' read -r D_TS D_USER D_TEXT; do
+        [ -z "$D_TS" ] && continue
+        if handle_decision_reply "$T_CHANNEL" "$T_THREAD_TS" "$D_USER" "$D_TEXT"; then
+          continue
+        fi
+      done < <(printf '%s' "$T_RESP" | python3 -c '
+import json, sys
+try:
+    d = json.JSONDecoder(strict=False).decode(sys.stdin.read())
+except Exception:
+    sys.exit(0)
+if not d.get("ok"):
+    sys.exit(0)
+bot = """'"$BOT_USER_ID"'"""
+skip = {"channel_join","channel_leave","bot_message","message_changed","message_deleted"}
+for m in d.get("messages") or []:
+    subtype = m.get("subtype") or ""
+    if subtype in skip:
+        continue
+    user = m.get("user") or ""
+    if not user or user == bot:
+        continue
+    ts = m.get("ts") or ""
+    text = (m.get("text") or "").replace("\t"," ").replace("\n"," ").replace("\r"," ")
+    if not ts:
+        continue
+    print(ts + "\t" + user + "\t" + text)
+' 2>/dev/null || true)
+    fi
+
     while IFS=$'\t' read -r T_PFX T_TS T_USER T_INNER_THREAD T_TEXT; do
       [ "$T_PFX" = "M" ] || continue
       [ -z "$T_TS" ] && continue
+      # Decision free-text may also arrive as a mention-shaped row; prefer
+      # resolve-over-spawn when the reply matches a pending option.
+      if handle_decision_reply "$T_CHANNEL" "$T_THREAD_TS" "$T_USER" "$T_TEXT"; then
+        continue
+      fi
       if already_spawned "$T_THREAD_TS"; then
         break
       fi
@@ -1434,6 +1772,18 @@ while true; do
   if [ $((NOW_SEC - LAST_SEARCH_POLL)) -ge "$SEARCH_POLL_INTERVAL" ]; then
     poll_search || true
     LAST_SEARCH_POLL="$NOW_SEC"
+  fi
+
+  # ── Decision poll + expiry ──────────────────────────────────────────────
+  # Cadence gated like search. No-op when no pending files / no HQ API.
+  # Also re-tracks threads that still have open decisions so free-text
+  # answers remain visible after the asking worker exits.
+  NOW_SEC="$(date +%s)"
+  if [ $((NOW_SEC - LAST_DECISION_POLL)) -ge "$DECISION_POLL_INTERVAL_SECS" ]; then
+    track_pending_decision_threads || true
+    poll_decisions || true
+    check_decision_expiry || true
+    LAST_DECISION_POLL="$NOW_SEC"
   fi
 
   touch "$WATCHER_ALIVE_FILE" 2>/dev/null || true

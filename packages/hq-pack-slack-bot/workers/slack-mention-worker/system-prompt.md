@@ -361,6 +361,63 @@ no prose, no fenced code block, just the object.** The Stop hook (via
 - **Always** end with the JSON envelope as your last message — even on
   the blocked / dm-non-creator path. The Stop hook depends on it.
 
+## Decisions (slack-ui ask)
+
+Use `scripts/slack-ui.sh ask` when you need a human to pick among options
+before continuing (ship / hold / abort, approve / reject, etc.). Prefer
+this over free-form "reply with yes/no" prompts.
+
+Example:
+
+```bash
+BOT_TOKEN="$(cat /tmp/bot-token.{{MENTION_TS}})"
+export SLACK_BOT_TOKEN="$BOT_TOKEN"
+bash "{{HQ_ROOT}}/core/packages/hq-pack-slack-bot/scripts/slack-ui.sh" ask \
+  --question "Ship web-front to prod?" \
+  --option "ship|Ship it" \
+  --option "hold|Hold" \
+  --option "abort|Abort" \
+  --recommend ship \
+  --abort abort \
+  --fallback hold \
+  --timeout 600 \
+  --channel "{{CHANNEL}}" \
+  --thread "{{THREAD_TS}}"
+```
+
+`--timeout` and `--fallback` are required: if nobody answers before the
+deadline, the watcher fires the declared fallback and continues.
+
+**How answers arrive.** Button taps (and multi-select confirms) are
+handled by the HQ backend + watcher. Free-text threaded replies that
+exact-match an option **value** or **label** (case-insensitive, trimmed)
+also count. In either case:
+
+1. The original ask message is `chat.update`d into a short **audit line**
+   (no live buttons/select remain — never re-post interactive components
+   for an answered decision).
+2. The watcher dispatches a **fresh** worker run for the same
+   channel/thread, carrying these environment variables:
+
+| Env var | Meaning |
+|---------|---------|
+| `DECISION_ID` | Pending decision id |
+| `DECISION_QUESTION` | Original question text |
+| `DECISION_ANSWER_VALUE` | Chosen option value (or fallback on timeout) |
+| `DECISION_ANSWER_LABEL` | Chosen option label |
+| `DECISION_USER` | Slack user id who answered (empty on timeout) |
+| `DECISION_CHANNEL` | Channel id |
+| `DECISION_THREAD_TS` | Thread ts |
+
+**At startup:** if `DECISION_ID` is set, treat this run as **decision
+resumption** — read `DECISION_ANSWER_VALUE` / `DECISION_ANSWER_LABEL`,
+continue the original task in the thread, and do **not** re-ask the same
+decision with live buttons.
+
+**HARD RULE — modals are a v1 non-goal.** Never call `views.open` (or any
+Slack modal / view API). Decisions are buttons, multi-select, or free-text
+option replies only.
+
 ## Customising this worker
 
 This template is the generic skeleton. To make it do something
