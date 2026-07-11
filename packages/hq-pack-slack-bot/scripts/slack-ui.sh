@@ -5,7 +5,8 @@
 # Deps: bash, jq, curl (python3 ok)
 #
 # Subcommands:
-#   post   Build (and optionally send) a chat.postMessage Block Kit payload.
+#   post     Build (and optionally send) a chat.postMessage Block Kit payload.
+#   report   Create/edit a Slack canvas report and post an in-thread TL;DR + link.
 #
 # Never string-interpolates into JSON — all payloads are built with jq.
 # Compatible with bash 3.2+ (macOS /bin/bash).
@@ -18,6 +19,27 @@ SECTION_TEXT_MAX=3000
 MAX_FIELDS=4
 MAX_BLOCKS=50
 CONTINUED_PREFIX="(continued) "
+DRYRUN_CANVAS_ID="F_DRYRUN_CANVAS"
+
+# canvases.create / canvases.edit errors that mean "canvas unavailable" → fallback
+is_canvas_unavailable_error() {
+  case "$1" in
+    missing_scope|not_allowed_token_type|canvas_disabled|feature_not_enabled|paid_teams_only|method_not_supported_for_channel_type|unknown_method)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+bot_token() {
+  local token="${SLACK_BOT_TOKEN:-}"
+  if [ -z "$token" ]; then
+    token="${HQ_SLACK_BOT_TOKEN:-}"
+  fi
+  printf '%s' "$token"
+}
 
 usage_post() {
   cat <<'EOF'
@@ -82,14 +104,72 @@ Examples:
 EOF
 }
 
+usage_report() {
+  cat <<'EOF'
+Usage: slack-ui.sh report [options]
+
+Create or update a Slack canvas from a markdown file, then post a short
+TL;DR + canvas link in the target channel/thread (chat.postMessage).
+
+Create mode (default):
+  canvases.create with {title, document_content:{type:"markdown", markdown}}
+  then chat.postMessage with TL;DR + link to https://slack.com/canvas/<id>
+
+Living / update mode (--update <canvas-id>):
+  canvases.edit with replace document_content, then the same TL;DR message.
+
+When canvas support is unavailable (--force-fallback, or live API errors such
+as missing_scope / canvas_disabled / paid_teams_only / …), automatically
+falls back to a deploy-and-link style chat.postMessage (exit 0) and says so
+on stderr.
+
+Options:
+  --file <path>             Markdown file to put in the canvas (required).
+  --title <text>            Canvas title (required).
+  --tldr <text>             Short TL;DR shown in the in-thread preview (required).
+  --channel <id>            Target channel id (required).
+  --thread <ts>             Optional thread_ts (post as a thread reply).
+  --update <canvas-id>      Edit an existing canvas instead of creating one.
+  --fallback-url <url>      Optional URL used in deploy-and-link fallback mode.
+  --force-fallback          Skip canvas APIs; emit deploy-and-link message only.
+  --dry-run                 Print API request JSON lines to stdout; do not call
+                            Slack. Create mode uses canvas_id F_DRYRUN_CANVAS
+                            in the message link. With --force-fallback, only the
+                            chat.postMessage line is printed (plus stderr notice).
+  -h, --help                Show this help.
+
+Dry-run output (create/update, not force-fallback):
+  Line 1: {"api":"canvases.create"|"canvases.edit","payload":{...}}
+  Line 2: {"api":"chat.postMessage","payload":{...}}
+
+Examples:
+  bash scripts/slack-ui.sh report \
+    --file /tmp/report.md \
+    --title "Incident write-up" \
+    --tldr "Root cause was a bad deploy; mitigated." \
+    --channel C01234567 \
+    --thread 1710000000.000100 \
+    --dry-run
+
+  bash scripts/slack-ui.sh report \
+    --file /tmp/report.md \
+    --title "Incident write-up" \
+    --tldr "Updated with postmortem notes." \
+    --channel C01234567 \
+    --update F0123CANVAS \
+    --dry-run
+EOF
+}
+
 usage() {
   cat <<'EOF'
 Usage: slack-ui.sh <command> [options]
 
 Commands:
-  post    Build/send a structured Block Kit status message (chat.postMessage)
+  post      Build/send a structured Block Kit status message (chat.postMessage)
+  report    Create/edit a Slack canvas report + in-thread TL;DR preview
 
-Run `slack-ui.sh post --help` for post flags and limit behavior.
+Run `slack-ui.sh post --help` or `slack-ui.sh report --help` for flags.
 EOF
 }
 
@@ -270,10 +350,8 @@ assemble_payload_from_file() {
 
 send_payload() {
   local payload="$1"
-  local token="${SLACK_BOT_TOKEN:-}"
-  if [ -z "$token" ]; then
-    token="${HQ_SLACK_BOT_TOKEN:-}"
-  fi
+  local token
+  token="$(bot_token)"
   [ -n "$token" ] || die "no token: set SLACK_BOT_TOKEN or HQ_SLACK_BOT_TOKEN"
 
   local resp ok err
@@ -288,6 +366,249 @@ send_payload() {
     die "chat.postMessage failed: $err"
   fi
   printf '%s' "$resp" | jq -c '{ok:true, ts:(.ts // null), channel:(.channel // null)}'
+}
+
+# POST canvases.create or canvases.edit. Prints raw Slack JSON response to stdout.
+# Does not die on ok:false (caller decides fallback vs hard error).
+send_canvas_api() {
+  local method="$1"
+  local payload="$2"
+  local token
+  token="$(bot_token)"
+  [ -n "$token" ] || die "no token: set SLACK_BOT_TOKEN or HQ_SLACK_BOT_TOKEN"
+
+  local resp
+  resp="$(curl -fsS -X POST "https://slack.com/api/${method}" \
+    -H "Authorization: Bearer ${token}" \
+    -H "Content-Type: application/json; charset=utf-8" \
+    --data "$payload")" || die "curl ${method} failed"
+  printf '%s' "$resp"
+}
+
+# Build chat.postMessage payload for a successful canvas report preview.
+# Args: channel thread tldr canvas_id
+build_report_canvas_message() {
+  local channel="$1" thread="$2" tldr="$3" canvas_id="$4"
+  local canvas_url link_md text
+
+  canvas_url="https://slack.com/canvas/${canvas_id}"
+  link_md="<${canvas_url}|Open canvas report>"
+  text="$(printf '%s\n%s' "$tldr" "$canvas_url")"
+  text="$(truncate_str "$text" 3000)"
+
+  jq -nc \
+    --arg text "$text" \
+    --arg tldr "$tldr" \
+    --arg link_md "$link_md" \
+    --arg channel "$channel" \
+    --arg thread "$thread" \
+    '
+      {
+        text: $text,
+        blocks: [
+          {type: "section", text: {type: "mrkdwn", text: $tldr}},
+          {type: "section", text: {type: "mrkdwn", text: $link_md}},
+          {type: "context", elements: [{type: "mrkdwn", text: "Canvas report"}]}
+        ]
+      }
+      + (if $channel != "" then {channel: $channel} else {} end)
+      + (if $thread != "" then {thread_ts: $thread} else {} end)
+    '
+}
+
+# Build chat.postMessage payload for deploy-and-link fallback.
+# Args: channel thread tldr fallback_url (may be empty)
+build_report_fallback_message() {
+  local channel="$1" thread="$2" tldr="$3" fallback_url="$4"
+  local link_section text
+
+  if [ -n "$fallback_url" ]; then
+    link_section="Full report: <${fallback_url}|view report>"
+    text="$(printf '%s\nFull report: %s' "$tldr" "$fallback_url")"
+  else
+    link_section="Full report should be shipped via the /deploy skill (canvas unavailable)."
+    text="$(printf '%s\n%s' "$tldr" "$link_section")"
+  fi
+  text="$(truncate_str "$text" 3000)"
+
+  jq -nc \
+    --arg text "$text" \
+    --arg tldr "$tldr" \
+    --arg link_section "$link_section" \
+    --arg channel "$channel" \
+    --arg thread "$thread" \
+    '
+      {
+        text: $text,
+        blocks: [
+          {type: "section", text: {type: "mrkdwn", text: $tldr}},
+          {type: "section", text: {type: "mrkdwn", text: $link_section}},
+          {type: "context", elements: [{type: "mrkdwn", text: "Deploy-and-link fallback (canvas unavailable)"}]}
+        ]
+      }
+      + (if $channel != "" then {channel: $channel} else {} end)
+      + (if $thread != "" then {thread_ts: $thread} else {} end)
+    '
+}
+
+# Emit fallback notice + message (dry-run print or live send). Exit 0.
+report_fallback() {
+  local reason="$1" channel="$2" thread="$3" tldr="$4" fallback_url="$5" dry_run="$6"
+  local msg envelope
+
+  printf 'slack-ui.sh report: canvas unavailable (%s); falling back to deploy-and-link\n' \
+    "$reason" >&2
+
+  msg="$(build_report_fallback_message "$channel" "$thread" "$tldr" "$fallback_url")"
+
+  if [ "$dry_run" -eq 1 ]; then
+    envelope="$(jq -nc --argjson payload "$msg" '{api:"chat.postMessage", payload:$payload}')"
+    printf '%s\n' "$envelope"
+  else
+    send_payload "$msg"
+  fi
+  return 0
+}
+
+cmd_report() {
+  local file="" title="" tldr="" channel="" thread=""
+  local update_id="" fallback_url=""
+  local dry_run=0 force_fallback=0
+  local canvas_payload canvas_api canvas_id msg envelope resp ok err
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -h|--help)
+        usage_report
+        return 0
+        ;;
+      --file)
+        [ $# -ge 2 ] || die "--file requires an argument"
+        file="$2"
+        shift 2
+        ;;
+      --title)
+        [ $# -ge 2 ] || die "--title requires an argument"
+        title="$2"
+        shift 2
+        ;;
+      --tldr)
+        [ $# -ge 2 ] || die "--tldr requires an argument"
+        tldr="$2"
+        shift 2
+        ;;
+      --channel)
+        [ $# -ge 2 ] || die "--channel requires an argument"
+        channel="$2"
+        shift 2
+        ;;
+      --thread)
+        [ $# -ge 2 ] || die "--thread requires an argument"
+        thread="$2"
+        shift 2
+        ;;
+      --update)
+        [ $# -ge 2 ] || die "--update requires an argument"
+        update_id="$2"
+        shift 2
+        ;;
+      --fallback-url)
+        [ $# -ge 2 ] || die "--fallback-url requires an argument"
+        fallback_url="$2"
+        shift 2
+        ;;
+      --force-fallback)
+        force_fallback=1
+        shift
+        ;;
+      --dry-run)
+        dry_run=1
+        shift
+        ;;
+      --)
+        shift
+        break
+        ;;
+      -*)
+        die "unknown option: $1 (try --help)"
+        ;;
+      *)
+        die "unexpected argument: $1 (try --help)"
+        ;;
+    esac
+  done
+
+  [ -n "$file" ] || die "--file is required"
+  [ -f "$file" ] || die "--file not readable: $file"
+  [ -r "$file" ] || die "--file not readable: $file"
+  [ -n "$title" ] || die "--title is required"
+  [ -n "$tldr" ] || die "--tldr is required"
+  [ -n "$channel" ] || die "--channel is required"
+
+  # Force fallback: skip canvas entirely (used by tests + operator override).
+  if [ "$force_fallback" -eq 1 ]; then
+    report_fallback "force-fallback" "$channel" "$thread" "$tldr" "$fallback_url" "$dry_run"
+    return 0
+  fi
+
+  # Read markdown via jq --rawfile so contents stay JSON-safe (no string-interp).
+  if [ -n "$update_id" ]; then
+    canvas_api="canvases.edit"
+    canvas_payload="$(jq -nc \
+      --arg canvas_id "$update_id" \
+      --rawfile md "$file" \
+      '{
+        canvas_id: $canvas_id,
+        changes: [{
+          operation: "replace",
+          document_content: {type: "markdown", markdown: $md}
+        }]
+      }')"
+    canvas_id="$update_id"
+  else
+    canvas_api="canvases.create"
+    canvas_payload="$(jq -nc \
+      --arg title "$title" \
+      --rawfile md "$file" \
+      '{
+        title: $title,
+        document_content: {type: "markdown", markdown: $md}
+      }')"
+    canvas_id=""
+  fi
+
+  if [ "$dry_run" -eq 1 ]; then
+    if [ -z "$canvas_id" ]; then
+      canvas_id="$DRYRUN_CANVAS_ID"
+    fi
+    envelope="$(jq -nc --arg api "$canvas_api" --argjson payload "$canvas_payload" \
+      '{api:$api, payload:$payload}')"
+    printf '%s\n' "$envelope"
+    msg="$(build_report_canvas_message "$channel" "$thread" "$tldr" "$canvas_id")"
+    envelope="$(jq -nc --argjson payload "$msg" '{api:"chat.postMessage", payload:$payload}')"
+    printf '%s\n' "$envelope"
+    return 0
+  fi
+
+  # Live canvas call
+  resp="$(send_canvas_api "$canvas_api" "$canvas_payload")"
+  ok="$(printf '%s' "$resp" | jq -r '.ok // false')"
+  if [ "$ok" != "true" ]; then
+    err="$(printf '%s' "$resp" | jq -r '.error // "unknown_error"')"
+    if is_canvas_unavailable_error "$err"; then
+      report_fallback "$err" "$channel" "$thread" "$tldr" "$fallback_url" "$dry_run"
+      return 0
+    fi
+    die "${canvas_api} failed: $err"
+  fi
+
+  if [ -z "$canvas_id" ]; then
+    canvas_id="$(printf '%s' "$resp" | jq -r '.canvas_id // empty')"
+    [ -n "$canvas_id" ] || die "canvases.create ok but no canvas_id in response"
+  fi
+
+  msg="$(build_report_canvas_message "$channel" "$thread" "$tldr" "$canvas_id")"
+  send_payload "$msg"
 }
 
 cmd_post() {
@@ -523,6 +844,10 @@ main() {
     post)
       shift
       cmd_post "$@"
+      ;;
+    report)
+      shift
+      cmd_report "$@"
       ;;
     *)
       die "unknown command: $1 (try --help)"

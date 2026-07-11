@@ -252,6 +252,150 @@ for flag in --title --body --field --context --channel --thread --text-only --dr
 done
 
 # ---------------------------------------------------------------------------
+# 7. report create mode dry-run: 2 JSON lines (canvases.create + chat.postMessage)
+# ---------------------------------------------------------------------------
+REPORT_MD="$(mktemp "${TMPDIR:-/tmp}/slack-ui-report.XXXXXX.md")"
+printf '%s\n' '# Hello' '' 'Body paragraph with **bold**.' >"$REPORT_MD"
+MD_CONTENTS="$(cat "$REPORT_MD")"
+
+REPORT_CREATE_OUT="$(
+  bash "$SLACK_UI" report \
+    --file "$REPORT_MD" \
+    --title "Incident write-up" \
+    --tldr "Root cause found; mitigated." \
+    --channel C01234567 \
+    --thread 1710000000.000100 \
+    --dry-run
+)"
+
+assert_eq "report create: two JSON lines" \
+  "$(printf '%s\n' "$REPORT_CREATE_OUT" | wc -l | tr -d '[:space:]')" "2"
+
+LINE1="$(printf '%s\n' "$REPORT_CREATE_OUT" | sed -n '1p')"
+LINE2="$(printf '%s\n' "$REPORT_CREATE_OUT" | sed -n '2p')"
+
+assert_ok "report create: line1 valid JSON" jq -e . <<<"$LINE1"
+assert_ok "report create: line2 valid JSON" jq -e . <<<"$LINE2"
+
+assert_eq "report create: line1 api" \
+  "$(jq -r '.api' <<<"$LINE1")" "canvases.create"
+
+assert_eq "report create: payload.title" \
+  "$(jq -r '.payload.title' <<<"$LINE1")" "Incident write-up"
+
+assert_eq "report create: markdown equals file" \
+  "$(jq -r '.payload.document_content.markdown' <<<"$LINE1")" "$MD_CONTENTS"
+
+assert_eq "report create: document type" \
+  "$(jq -r '.payload.document_content.type' <<<"$LINE1")" "markdown"
+
+assert_eq "report create: line2 api" \
+  "$(jq -r '.api' <<<"$LINE2")" "chat.postMessage"
+
+assert_eq "report create: channel" \
+  "$(jq -r '.payload.channel' <<<"$LINE2")" "C01234567"
+
+assert_eq "report create: thread_ts" \
+  "$(jq -r '.payload.thread_ts' <<<"$LINE2")" "1710000000.000100"
+
+assert_ok "report create: text contains tldr and dryrun canvas id" \
+  python3 -c 'import json,sys; t=json.loads(sys.argv[1])["payload"]["text"]; assert "Root cause found; mitigated." in t and "F_DRYRUN_CANVAS" in t' "$LINE2"
+
+# ---------------------------------------------------------------------------
+# 8. report update mode dry-run: canvases.edit + replace
+# ---------------------------------------------------------------------------
+REPORT_UPDATE_OUT="$(
+  bash "$SLACK_UI" report \
+    --file "$REPORT_MD" \
+    --title "Incident write-up" \
+    --tldr "Updated notes." \
+    --channel C99 \
+    --update F0123CANVAS \
+    --dry-run
+)"
+
+assert_eq "report update: two JSON lines" \
+  "$(printf '%s\n' "$REPORT_UPDATE_OUT" | wc -l | tr -d '[:space:]')" "2"
+
+U1="$(printf '%s\n' "$REPORT_UPDATE_OUT" | sed -n '1p')"
+U2="$(printf '%s\n' "$REPORT_UPDATE_OUT" | sed -n '2p')"
+
+assert_eq "report update: line1 api" \
+  "$(jq -r '.api' <<<"$U1")" "canvases.edit"
+
+assert_eq "report update: canvas_id" \
+  "$(jq -r '.payload.canvas_id' <<<"$U1")" "F0123CANVAS"
+
+assert_eq "report update: operation replace" \
+  "$(jq -r '.payload.changes[0].operation' <<<"$U1")" "replace"
+
+assert_eq "report update: line2 api" \
+  "$(jq -r '.api' <<<"$U2")" "chat.postMessage"
+
+assert_ok "report update: message links given canvas id" \
+  python3 -c 'import json,sys; t=json.loads(sys.argv[1])["payload"]["text"]; assert "F0123CANVAS" in t' "$U2"
+
+# ---------------------------------------------------------------------------
+# 9. report force-fallback dry-run: single chat.postMessage + stderr notice
+# ---------------------------------------------------------------------------
+set +e
+FB_OUT="$(
+  bash "$SLACK_UI" report \
+    --file "$REPORT_MD" \
+    --title "T" \
+    --tldr "Fallback TLDR here." \
+    --channel C1 \
+    --force-fallback \
+    --dry-run \
+    2>/tmp/slack-ui-fb-err.$$
+)"
+FB_RC=$?
+FB_ERR="$(cat /tmp/slack-ui-fb-err.$$)"
+rm -f /tmp/slack-ui-fb-err.$$
+set -e
+
+assert_eq "report fallback: exit 0" "$FB_RC" "0"
+assert_eq "report fallback: one JSON line" \
+  "$(printf '%s\n' "$FB_OUT" | wc -l | tr -d '[:space:]')" "1"
+assert_eq "report fallback: api chat.postMessage" \
+  "$(jq -r '.api' <<<"$FB_OUT")" "chat.postMessage"
+assert_ok "report fallback: text contains tldr" \
+  python3 -c 'import json,sys; t=json.loads(sys.argv[1])["payload"]["text"]; assert "Fallback TLDR here." in t' "$FB_OUT"
+assert_ok "report fallback: stderr mentions falling back / deploy-and-link" \
+  python3 -c 'import sys; t=sys.argv[1].lower(); assert "falling back" in t and "deploy-and-link" in t' "$FB_ERR"
+
+set +e
+FB_URL_OUT="$(
+  bash "$SLACK_UI" report \
+    --file "$REPORT_MD" \
+    --title "T" \
+    --tldr "With URL TLDR." \
+    --channel C1 \
+    --force-fallback \
+    --fallback-url "https://example.com/report" \
+    --dry-run \
+    2>/dev/null
+)"
+FB_URL_RC=$?
+set -e
+assert_eq "report fallback-url: exit 0" "$FB_URL_RC" "0"
+assert_ok "report fallback-url: text contains url" \
+  python3 -c 'import json,sys; t=json.loads(sys.argv[1])["payload"]["text"]; assert "https://example.com/report" in t and "With URL TLDR." in t' "$FB_URL_OUT"
+
+# ---------------------------------------------------------------------------
+# 10. report validation: missing --file or --tldr exits nonzero
+# ---------------------------------------------------------------------------
+assert_fail "report missing --file" \
+  bash "$SLACK_UI" report \
+    --title "T" --tldr "x" --channel C1 --dry-run
+
+assert_fail "report missing --tldr" \
+  bash "$SLACK_UI" report \
+    --file "$REPORT_MD" --title "T" --channel C1 --dry-run
+
+rm -f "$REPORT_MD"
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo

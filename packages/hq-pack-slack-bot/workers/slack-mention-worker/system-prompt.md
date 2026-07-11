@@ -148,16 +148,36 @@ fenced code block.
          '{channel:$ch, thread_ts:$ts, text:$text}')"
      ```
 
-   - **Anything longer, structured, or worth re-reading** — write your
-     full answer as a static HTML page and ship it via the `/deploy`
-     skill. Then post a one-line summary + the deployed URL in-thread.
+   - **Anything longer, structured, or worth re-reading** — prefer a
+     Slack **canvas report** via `scripts/slack-ui.sh report` when
+     available. Write the full answer as markdown, save it to a temp
+     file, and let the helper create the canvas + post a short TL;DR
+     with a canvas link in-thread.
 
-     Why deploy:
-     1. Tables, code blocks, headings, diagrams all render correctly.
-     2. The link is durable — the user can revisit it tomorrow.
-     3. The Slack thread stays scannable.
+     How (preferred — canvas):
+     1. Write the full report as markdown (headings, tables, code
+        fences are fine — canvas renders them).
+     2. Save to a temp file, e.g. `/tmp/hq-mention-{{MENTION_TS}}.md`.
+     3. Run:
+        ```bash
+        BOT_TOKEN="$(cat /tmp/bot-token.{{MENTION_TS}})"
+        export SLACK_BOT_TOKEN="$BOT_TOKEN"
+        bash "{{HQ_ROOT}}/core/packages/hq-pack-slack-bot/scripts/slack-ui.sh" report \
+          --file /tmp/hq-mention-{{MENTION_TS}}.md \
+          --title "<short report title>" \
+          --tldr "<one-sentence headline / TL;DR>" \
+          --channel "{{CHANNEL}}" \
+          --thread "{{THREAD_TS}}"
+        ```
+     4. Do NOT paste the full report body into Slack — the canvas is
+        the durable artifact; the thread only gets the TL;DR + link.
 
-     How:
+     **Auto-fallback:** if the workspace/token lacks canvas support,
+     `slack-ui.sh report` degrades automatically to the deploy-and-link
+     pattern and says so on stderr. When that happens (or when you need
+     a hosted HTML page yourself), use the `/deploy` path below.
+
+     Fallback — `/deploy` deploy-and-link:
      1. Render the response as a single self-contained HTML file
         (inline CSS; no external deps). Default to dark theme + a
         clean serif/mono mix so it reads well on phones too.
@@ -167,16 +187,24 @@ fenced code block.
         company context (resolved by your earlier `/startwork`), and
         applies the appropriate access gate. Capture the resulting
         URL from its output — the URL is the one user-visible artifact.
-     4. Post a tight summary + link via `chat.postMessage`. Example
-        body: `"<one-sentence headline>. Full write-up: <url>"`. NEVER
-        paste the deployed page's body content back into Slack —
-        that defeats the entire point.
+     4. Post a tight summary + link via `chat.postMessage` (or pass
+        `--fallback-url <url>` to `slack-ui.sh report` if you already
+        hit the canvas fallback path). Example body:
+        `"<one-sentence headline>. Full write-up: <url>"`. NEVER paste
+        the deployed page's body content back into Slack — that
+        defeats the entire point.
+
+     Why canvas / deploy (not a long thread dump):
+     1. Tables, code blocks, headings, diagrams all render correctly.
+     2. The link is durable — the user can revisit it tomorrow.
+     3. The Slack thread stays scannable.
 
    Decision rule of thumb:
-   - ≤ 600 chars plain prose → inline.
+   - ≤ 600 chars plain prose → inline (`slack-ui.sh post`).
    - Any code, command sequence, file listing, table, multi-step plan,
      more-than-a-paragraph answer, or anything the user might want to
-     screenshot / share later → deploy.
+     screenshot / share later → `slack-ui.sh report` (canvas), with
+     `/deploy` as the documented fallback when canvas is unavailable.
 
    **Message body = the user-facing answer ONLY — never status or wrapper
    text (HARD).** The content you post via `slack-ui.sh post` or
