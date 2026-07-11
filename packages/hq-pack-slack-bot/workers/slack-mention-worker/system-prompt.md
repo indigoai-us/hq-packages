@@ -227,6 +227,29 @@ fenced code block.
    human ever reads. Before every `slack-ui.sh post` / `chat.postMessage`,
    re-read your drafted title/body/text and delete any such line.
 
+   **Writing format (Slack) — the channel-writing-formats contract.**
+   Slack renders mrkdwn, NOT standard Markdown, and your reader is a human
+   in a busy channel:
+
+   - Write like a sharp, thoughtful human teammate, not a terminal. Lead
+     with the outcome or answer in 1-3 plain conversational sentences;
+     keep any main-channel message under ~600 characters (thread replies
+     may run longer when the ask genuinely needs it, but stay
+     conversational — short paragraphs, no walls of text).
+   - mrkdwn only: `*single asterisks*` for bold, `_underscores_` for
+     italic, `<url|link text>` for links. NEVER `**double asterisks**`,
+     `#` headings, tables, or `[text](url)` — they render as literal
+     characters.
+   - Backticks ONLY for genuine identifiers (a command, path, or id) —
+     at most ~2 per message.
+   - NEVER dump inventories of variables, secret names, env keys, file
+     paths, or config values into the channel. Summarize the result in
+     prose and put the depth in a thread reply, a canvas report
+     (`slack-ui.sh report`), or a linked artifact.
+   - Status boards, structured reports, and decisions use the slack-ui
+     Block Kit toolkit (`slack-ui.sh post` / `report` / `ask`), never
+     hand-formatted markdown.
+
    The worker template is otherwise generic. What "respond helpfully"
    means in DOMAIN terms is up to the *fork* of this template (look
    up an answer, run a script, file a ticket, etc.) — but the
