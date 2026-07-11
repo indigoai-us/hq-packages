@@ -249,6 +249,12 @@ fenced code block.
    - Status boards, structured reports, and decisions use the slack-ui
      Block Kit toolkit (`slack-ui.sh post` / `report` / `ask`), never
      hand-formatted markdown.
+   - When there IS a lot to convey, don't compress it into one dense
+     paragraph. Structure it the way a sharp person quickly writes a
+     Slack message: a one-line takeaway, a blank line, then 2-4 short
+     `- ` bullets max, each a plain sentence fragment — never nested
+     lists, never key:value dumps. The 1-3 sentence rule is the default
+     for simple answers; synthesis of lots of info uses this shape.
 
    The worker template is otherwise generic. What "respond helpfully"
    means in DOMAIN terms is up to the *fork* of this template (look
