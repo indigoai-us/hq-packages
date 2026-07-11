@@ -11,20 +11,13 @@ allowed-tools: Read, Grep, Glob, Bash, Agent, Write, Edit, AskUserQuestion
 
 Find places where the architecture is the bug. Pattern adapted from `mattpocock/skills` `improve-codebase-architecture`.
 
-## Glossary (use these terms exactly)
+## Glossary — see `/codebase-design`
 
-Consistent vocabulary is the entire point. Don't drift into "component," "service," "boundary."
+`/codebase-design` is the **single source of truth** for the deep-module vocabulary — **module, interface, implementation, depth, seam, adapter, leverage, locality**. Load it for the full definitions and use those terms exactly; never drift into "component," "service," "API," or "boundary."
 
-- **Module** — anything with an interface and an implementation (function, class, package, slice).
-- **Interface** — everything a caller must know to use the module: types, invariants, error modes, ordering, config. Not just the type signature.
-- **Implementation** — the code inside.
-- **Depth** — leverage at the interface: lots of behaviour behind a small interface. **Deep** = high leverage. **Shallow** = interface nearly as complex as the implementation.
-- **Seam** — where an interface lives; a place behaviour can be altered without editing in place.
-- **Adapter** — a concrete thing satisfying an interface at a seam.
-- **Leverage** — what callers get from depth.
-- **Locality** — what maintainers get from depth: change, bugs, knowledge concentrated in one place.
+One-line summary: a **deep** module puts a lot of behaviour behind a small **interface** at a clean **seam** — **depth** buys **leverage** for callers and **locality** for maintainers.
 
-Key heuristics:
+Key heuristics (full treatment in `/codebase-design`):
 
 - **Deletion test:** imagine deleting the module. If complexity vanishes, it was a pass-through. If complexity reappears across N callers, it was earning its keep.
 - **The interface is the test surface.**
@@ -81,8 +74,11 @@ Output via numbered list, NOT `AskUserQuestion` first (the list is too long for 
 **Solution (plain English):** <what would change>
 **Benefits:** locality: <X>, leverage: <Y>, test improvement: <Z>
 **Score:** <total> (deletion: <d>, leverage: <l>, locality: <lo>, test: <t>, cost: <c>)
+**Recommendation:** <Strong / Worth exploring / Speculative>
 **ADR conflicts:** <none / contradicts ADR-NNNN — re-open because …>
 ```
+
+The **Recommendation** badge is a plain-English read on top of the numeric score: `Strong` = high score and low risk, tackle first; `Worth exploring` = real friction but non-trivial cost or uncertainty; `Speculative` = plausible but the case isn't proven yet. Show both — the number ranks, the badge conveys confidence.
 
 Then ask via `AskUserQuestion` (multiSelect: true): "Which candidates do you want to explore?" with up to 4 options (paginate if more).
 
@@ -95,6 +91,8 @@ For each picked candidate, drop into a one-question-at-a-time design conversatio
 - What's the interface — types, invariants, error modes, ordering, config?
 - What tests survive the change? What new tests does the seam enable?
 - Are there alternative interface shapes worth considering?
+
+**Design it twice.** When the interface shape is non-obvious, don't settle on the first design. Reuse HQ's Explore fan-out: spin up parallel `Agent` sub-agents to design the deepened interface several *radically different* ways (e.g. a data-oriented shape, a callback/handler shape, a builder/pipeline shape). Then compare the returns on **depth** (behaviour-per-interface), **locality** (where change concentrates), and **seam placement** — and bring the winner (or a hybrid) back into the grilling conversation. See `/codebase-design`'s DESIGN-IT-TWICE.md for the pattern.
 
 **Side effects happen inline:**
 

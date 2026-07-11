@@ -1,5 +1,5 @@
 name: hq-pack-engineering
-version: 1.3.0
+version: 1.4.0
 publisher: '@indigoai-us'
 access: public
 description: 'Engineering capabilities for HQ — code review, debugging, testing, PR lifecycle, story execution (Ralph), and the worker team that executes coding work. Install when you use HQ to manage repos.'
@@ -21,11 +21,13 @@ contributes:
   skills:
     - architect
     - clean-worktree
+    - codebase-design
     - commit-main
     - deep-plan
     - diagnose
     - discover
     - document-release
+    - domain-modeling
     - execute-task
     - investigate
     - land
@@ -38,6 +40,8 @@ contributes:
     - run-project
     - ship
     - tdd
+    - to-tickets
+    - wayfinder
   hooks:
     # PreToolUse warn/redirect: nudge competing browser MCP tools toward the
     # agent-browser CLI (non-blocking). SessionStart: install reminder if missing.

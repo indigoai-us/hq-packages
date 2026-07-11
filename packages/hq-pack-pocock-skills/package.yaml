@@ -1,28 +1,36 @@
 name: hq-pack-pocock-skills
-version: 1.0.0
+version: 1.1.0
 publisher: '@indigoai-us'
 access: public
-description: "Matt Pocock's engineering + productivity skills (diagnose, tdd, triage, prototype, handoff, caveman, write-a-skill, …) ported from the cross-editor skills bundle."
+description: "Matt Pocock's engineering + productivity skills (grilling, diagnosing-bugs, tdd, triage, prototype, to-spec, to-tickets, implement, wayfinder, domain-modeling, codebase-design, code-review, handoff, teach, writing-great-skills, …) ported from the upstream cross-editor skills bundle."
 license: 'MIT'
 repository: 'https://github.com/mattpocock/skills'
 requires:
   hqCore: '>=12.0.0'
 contributes:
   skills:
-    - diagnose
+    - ask-matt
+    - code-review
+    - codebase-design
+    - diagnosing-bugs
+    - domain-modeling
+    - grill-me
     - grill-with-docs
-    - triage
+    - grilling
+    - handoff
+    - implement
     - improve-codebase-architecture
+    - prototype
+    - research
+    - resolving-merge-conflicts
     - setup-matt-pocock-skills
     - tdd
-    - to-issues
-    - to-prd
-    - zoom-out
-    - prototype
-    - caveman
-    - grill-me
-    - handoff
-    - write-a-skill
+    - teach
+    - to-spec
+    - to-tickets
+    - triage
+    - wayfinder
+    - writing-great-skills
   knowledge:
     - pocock-skills
 author:
@@ -32,9 +40,8 @@ author:
 upstream:
   repo: 'https://github.com/mattpocock/skills'
   ref: 'main'
-  ported_commit: 'be55a7970319ede7965edbb02b5e41cba1ca82c9'
+  ported_commit: '391a2701dd948f94f56a39f7533f8eea9a859c87'
   license: 'MIT'
-  ported_at: '2026-06-06T23:38:02Z'
+  ported_at: '2026-07-11T02:36:16Z'
   kind: port
-capabilities: []   # derived by security-scan static inspection: no contributes.scripts/hooks, no network/fs/secrets surface in any shipped file.
-
+capabilities: []   # derived by security-scan static inspection: no contributes.scripts/hooks. Only shipped script is skills/diagnosing-bugs/scripts/hitl-loop.template.sh — an inert, user-instantiated terminal prompt template (no network/fs-mutation/secrets surface).
