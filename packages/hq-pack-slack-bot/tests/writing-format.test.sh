@@ -25,6 +25,8 @@ require "NEVER dump inventories"
 require "thread reply, a canvas report"
 require "Block Kit toolkit"
 require "sharp, thoughtful human teammate"
+require "one-line takeaway, a blank line, then 2-4 short"
+require "never key:value dumps"
 
 [ "$fail" -eq 0 ] && echo "PASS: writing-format contract present"
 exit "$fail"
