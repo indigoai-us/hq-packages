@@ -17,6 +17,7 @@ contributes:
   knowledge: []
   skills:
     - run-bot
+    - slack-ui
   hooks: []
   policies: []
   commands: []
@@ -26,6 +27,7 @@ contributes:
   # self-contained — claude-worker.sh + claude-worker-template.sh +
   # claude-pty-spawn.py are vendored copies of personal/tools/ originals
   # so the pack runs without any personal/ symlinks.
+  # slack-ui.sh is the Block Kit structured-status helper (US-001).
   scripts:
     - watch.sh
     - parse-mentions.py
@@ -33,3 +35,4 @@ contributes:
     - claude-worker-template.sh
     - claude-worker.sh
     - claude-pty-spawn.py
+    - slack-ui.sh

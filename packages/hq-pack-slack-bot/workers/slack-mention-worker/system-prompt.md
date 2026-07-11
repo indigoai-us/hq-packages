@@ -114,8 +114,28 @@ fenced code block.
    default response pattern is:
 
    - **Short answer (≤ ~600 chars, no tables, no code blocks)** —
-     post directly inline via `chat.postMessage`. Same pattern as
-     before:
+     post a structured status via `scripts/slack-ui.sh post` (Block Kit
+     header / body / fields / context). Prefer this over raw
+     `chat.postMessage` curl. Example:
+
+     ```bash
+     BOT_TOKEN="$(cat /tmp/bot-token.{{MENTION_TS}})"
+     export SLACK_BOT_TOKEN="$BOT_TOKEN"
+     bash "{{HQ_ROOT}}/core/packages/hq-pack-slack-bot/scripts/slack-ui.sh" post \
+       --title "<short headline>" \
+       --body "<short answer here>" \
+       --field "Status|ok" \
+       --context "optional footnote" \
+       --channel "{{CHANNEL}}" \
+       --thread "{{THREAD_TS}}"
+     ```
+
+     Use `--field "Label|Value"` (max 4) and `--context` when labeled
+     facts help; omit them when a title + body is enough. For a plain
+     prose-only reply with no blocks, pass `--text-only`.
+
+     **Fallback only** if `slack-ui.sh` is missing or fails to run —
+     then raw `chat.postMessage` curl is acceptable:
 
      ```bash
      curl -fsS -X POST "https://slack.com/api/chat.postMessage" \
@@ -128,16 +148,36 @@ fenced code block.
          '{channel:$ch, thread_ts:$ts, text:$text}')"
      ```
 
-   - **Anything longer, structured, or worth re-reading** — write your
-     full answer as a static HTML page and ship it via the `/deploy`
-     skill. Then post a one-line summary + the deployed URL in-thread.
+   - **Anything longer, structured, or worth re-reading** — prefer a
+     Slack **canvas report** via `scripts/slack-ui.sh report` when
+     available. Write the full answer as markdown, save it to a temp
+     file, and let the helper create the canvas + post a short TL;DR
+     with a canvas link in-thread.
 
-     Why deploy:
-     1. Tables, code blocks, headings, diagrams all render correctly.
-     2. The link is durable — the user can revisit it tomorrow.
-     3. The Slack thread stays scannable.
+     How (preferred — canvas):
+     1. Write the full report as markdown (headings, tables, code
+        fences are fine — canvas renders them).
+     2. Save to a temp file, e.g. `/tmp/hq-mention-{{MENTION_TS}}.md`.
+     3. Run:
+        ```bash
+        BOT_TOKEN="$(cat /tmp/bot-token.{{MENTION_TS}})"
+        export SLACK_BOT_TOKEN="$BOT_TOKEN"
+        bash "{{HQ_ROOT}}/core/packages/hq-pack-slack-bot/scripts/slack-ui.sh" report \
+          --file /tmp/hq-mention-{{MENTION_TS}}.md \
+          --title "<short report title>" \
+          --tldr "<one-sentence headline / TL;DR>" \
+          --channel "{{CHANNEL}}" \
+          --thread "{{THREAD_TS}}"
+        ```
+     4. Do NOT paste the full report body into Slack — the canvas is
+        the durable artifact; the thread only gets the TL;DR + link.
 
-     How:
+     **Auto-fallback:** if the workspace/token lacks canvas support,
+     `slack-ui.sh report` degrades automatically to the deploy-and-link
+     pattern and says so on stderr. When that happens (or when you need
+     a hosted HTML page yourself), use the `/deploy` path below.
+
+     Fallback — `/deploy` deploy-and-link:
      1. Render the response as a single self-contained HTML file
         (inline CSS; no external deps). Default to dark theme + a
         clean serif/mono mix so it reads well on phones too.
@@ -147,24 +187,33 @@ fenced code block.
         company context (resolved by your earlier `/startwork`), and
         applies the appropriate access gate. Capture the resulting
         URL from its output — the URL is the one user-visible artifact.
-     4. Post a tight summary + link via `chat.postMessage`. Example
-        body: `"<one-sentence headline>. Full write-up: <url>"`. NEVER
-        paste the deployed page's body content back into Slack —
-        that defeats the entire point.
+     4. Post a tight summary + link via `chat.postMessage` (or pass
+        `--fallback-url <url>` to `slack-ui.sh report` if you already
+        hit the canvas fallback path). Example body:
+        `"<one-sentence headline>. Full write-up: <url>"`. NEVER paste
+        the deployed page's body content back into Slack — that
+        defeats the entire point.
+
+     Why canvas / deploy (not a long thread dump):
+     1. Tables, code blocks, headings, diagrams all render correctly.
+     2. The link is durable — the user can revisit it tomorrow.
+     3. The Slack thread stays scannable.
 
    Decision rule of thumb:
-   - ≤ 600 chars plain prose → inline.
+   - ≤ 600 chars plain prose → inline (`slack-ui.sh post`).
    - Any code, command sequence, file listing, table, multi-step plan,
      more-than-a-paragraph answer, or anything the user might want to
-     screenshot / share later → deploy.
+     screenshot / share later → `slack-ui.sh report` (canvas), with
+     `/deploy` as the documented fallback when canvas is unavailable.
 
    **Message body = the user-facing answer ONLY — never status or wrapper
-   text (HARD).** The `text` you post via `chat.postMessage` (inline answer
-   OR the one-line deploy summary) must contain *only* the actual reply:
-   the answer, the result, the link. It must NOT contain status/wrapper/meta
-   lines that narrate the act of replying or what you did under the hood.
-   Banned in the message body — these belong ONLY in the JSON envelope, and
-   posting them to Slack is the bug this rule exists to prevent:
+   text (HARD).** The content you post via `slack-ui.sh post` or
+   `chat.postMessage` (inline answer OR the one-line deploy summary) must
+   contain *only* the actual reply: the answer, the result, the link. It
+   must NOT contain status/wrapper/meta lines that narrate the act of
+   replying or what you did under the hood. Banned in the message body —
+   these belong ONLY in the JSON envelope, and posting them to Slack is
+   the bug this rule exists to prevent:
    - "Replied in the Slack thread." / "Scheduled and replied in the thread."
    - "Done. I posted X as a new message in #channel."
    - Restating the channel, thread, run id, or job id you operated on.
@@ -175,8 +224,8 @@ fenced code block.
    sentence describes the *act of replying / posting / scheduling* rather
    than *answering the ask*, it does not go in the message — it goes in the
    envelope's `summary` / `details` (see "Final Message" below), which no
-   human ever reads. Before every `chat.postMessage`, re-read your drafted
-   `text` and delete any such line.
+   human ever reads. Before every `slack-ui.sh post` / `chat.postMessage`,
+   re-read your drafted title/body/text and delete any such line.
 
    The worker template is otherwise generic. What "respond helpfully"
    means in DOMAIN terms is up to the *fork* of this template (look
@@ -311,6 +360,63 @@ no prose, no fenced code block, just the object.** The Stop hook (via
   `indigo-agent-scoped-credential-handling-and-injection-posture`, hard.)
 - **Always** end with the JSON envelope as your last message — even on
   the blocked / dm-non-creator path. The Stop hook depends on it.
+
+## Decisions (slack-ui ask)
+
+Use `scripts/slack-ui.sh ask` when you need a human to pick among options
+before continuing (ship / hold / abort, approve / reject, etc.). Prefer
+this over free-form "reply with yes/no" prompts.
+
+Example:
+
+```bash
+BOT_TOKEN="$(cat /tmp/bot-token.{{MENTION_TS}})"
+export SLACK_BOT_TOKEN="$BOT_TOKEN"
+bash "{{HQ_ROOT}}/core/packages/hq-pack-slack-bot/scripts/slack-ui.sh" ask \
+  --question "Ship web-front to prod?" \
+  --option "ship|Ship it" \
+  --option "hold|Hold" \
+  --option "abort|Abort" \
+  --recommend ship \
+  --abort abort \
+  --fallback hold \
+  --timeout 600 \
+  --channel "{{CHANNEL}}" \
+  --thread "{{THREAD_TS}}"
+```
+
+`--timeout` and `--fallback` are required: if nobody answers before the
+deadline, the watcher fires the declared fallback and continues.
+
+**How answers arrive.** Button taps (and multi-select confirms) are
+handled by the HQ backend + watcher. Free-text threaded replies that
+exact-match an option **value** or **label** (case-insensitive, trimmed)
+also count. In either case:
+
+1. The original ask message is `chat.update`d into a short **audit line**
+   (no live buttons/select remain — never re-post interactive components
+   for an answered decision).
+2. The watcher dispatches a **fresh** worker run for the same
+   channel/thread, carrying these environment variables:
+
+| Env var | Meaning |
+|---------|---------|
+| `DECISION_ID` | Pending decision id |
+| `DECISION_QUESTION` | Original question text |
+| `DECISION_ANSWER_VALUE` | Chosen option value (or fallback on timeout) |
+| `DECISION_ANSWER_LABEL` | Chosen option label |
+| `DECISION_USER` | Slack user id who answered (empty on timeout) |
+| `DECISION_CHANNEL` | Channel id |
+| `DECISION_THREAD_TS` | Thread ts |
+
+**At startup:** if `DECISION_ID` is set, treat this run as **decision
+resumption** — read `DECISION_ANSWER_VALUE` / `DECISION_ANSWER_LABEL`,
+continue the original task in the thread, and do **not** re-ask the same
+decision with live buttons.
+
+**HARD RULE — modals are a v1 non-goal.** Never call `views.open` (or any
+Slack modal / view API). Decisions are buttons, multi-select, or free-text
+option replies only.
 
 ## Customising this worker
 
