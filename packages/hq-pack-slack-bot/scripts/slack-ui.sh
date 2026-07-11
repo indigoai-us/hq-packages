@@ -7,6 +7,8 @@
 # Subcommands:
 #   post     Build (and optionally send) a chat.postMessage Block Kit payload.
 #   report   Create/edit a Slack canvas report and post an in-thread TL;DR + link.
+#   ask      Register a decision + post interactive buttons / multi-select.
+#   resolve  Update a decision message (answered or timed-out) and mark state.
 #
 # Never string-interpolates into JSON — all payloads are built with jq.
 # Compatible with bash 3.2+ (macOS /bin/bash).
@@ -161,6 +163,108 @@ Examples:
 EOF
 }
 
+usage_ask() {
+  cat <<'EOF'
+Usage: slack-ui.sh ask [options]
+
+Register a pending decision and post an interactive Block Kit message
+(buttons for ≤3 options, or multi_static_select when --multi / >3 options).
+
+With --dry-run, print two JSON lines (hq.decisions.register then
+chat.postMessage) and still write a local pending state file. Without
+--dry-run, POST registration to $HQ_API_BASE/v1/slack/decisions, then
+chat.postMessage via the bot token.
+
+Options:
+  --question <text>       Decision question (required). Header + section body.
+  --option "value|Label"  Repeatable. At least 2 required. Buttons when ≤3
+                          and --multi is not set; multi_static_select otherwise.
+  --recommend <value>     Option value styled primary (buttons mode only).
+  --abort <value>         Option value styled danger (buttons mode only).
+  --fallback <value>      Required. Must equal one --option value (timeout path).
+  --timeout <secs>        Required positive integer. Decision expiry window.
+  --bot <app-id>          Optional bot / app id stored in registration.
+  --field "Label|Value"   Repeatable. Max 4. Same fields section as post.
+  --context <text>        Repeatable. Context block elements (plus timeout line).
+  --channel <id>          Target channel (required unless --dry-run).
+  --thread <ts>           Optional thread_ts.
+  --multi                 Force multi_static_select even with ≤3 options.
+  --decision-id <id>      Override auto-minted 26-char uppercase decision id.
+  --state-dir <dir>       Pending file dir (default:
+                          ${HQ_DECISIONS_DIR:-$HOME/.hq/slack-decisions}).
+  --dry-run               Print register + postMessage JSON lines; write
+                          pending file with message_ts DRYRUN_TS.
+  -h, --help              Show this help.
+
+Notes:
+  - More than 3 options without --multi is an error (never >3 buttons).
+  - action_id form: hqd:{decision_id}:{value} (buttons) or
+    hqd:{decision_id}:submit (multi_static_select).
+  - Live mode requires HQ_API_BASE; auth header uses HQ_API_TOKEN.
+
+Examples:
+  bash scripts/slack-ui.sh ask \
+    --question "Ship to prod?" \
+    --option "yes|Yes, ship" \
+    --option "no|No, hold" \
+    --option "later|Defer" \
+    --recommend yes \
+    --abort no \
+    --fallback later \
+    --timeout 300 \
+    --channel C01234567 \
+    --dry-run
+EOF
+}
+
+usage_resolve() {
+  cat <<'EOF'
+Usage: slack-ui.sh resolve [options]
+
+Update a decision message (chat.update) after answer or timeout, strip
+actions blocks, and rewrite the local pending state file if present.
+
+With --dry-run, print one JSON line {"api":"chat.update","payload":{...}}.
+Without --dry-run, POST chat.update with the bot token.
+
+Options:
+  --decision-id <id>      Decision id (required).
+  --channel <id>          Channel of the original message (required).
+  --ts <ts>               Message ts to update (required).
+  --question <text>       Optional question text prefixed onto the section.
+  --answer-label <text>   Display label of the chosen option (required unless
+                          --timed-out).
+  --answer-value <val>    Value stored as action/value in the pending file.
+  --user <uid>            Slack user id who answered (required unless --timed-out).
+  --answered-at <ISO8601> Timestamp (default: UTC now).
+  --timed-out             Timeout path; mutually exclusive with --user.
+  --fallback-label <text> Required with --timed-out.
+  --state-dir <dir>       Pending file dir (default:
+                          ${HQ_DECISIONS_DIR:-$HOME/.hq/slack-decisions}).
+  --dry-run               Print chat.update JSON line; do not call Slack.
+  -h, --help              Show this help.
+
+Examples:
+  bash scripts/slack-ui.sh resolve \
+    --decision-id TESTDECISION0000000000000001 \
+    --channel C01234567 \
+    --ts 1710000000.000100 \
+    --question "Ship to prod?" \
+    --answer-label "Yes, ship" \
+    --answer-value yes \
+    --user U0123 \
+    --dry-run
+
+  bash scripts/slack-ui.sh resolve \
+    --decision-id TESTDECISION0000000000000001 \
+    --channel C01234567 \
+    --ts 1710000000.000100 \
+    --timed-out \
+    --fallback-label "Defer" \
+    --dry-run
+EOF
+}
+
 usage() {
   cat <<'EOF'
 Usage: slack-ui.sh <command> [options]
@@ -168,8 +272,10 @@ Usage: slack-ui.sh <command> [options]
 Commands:
   post      Build/send a structured Block Kit status message (chat.postMessage)
   report    Create/edit a Slack canvas report + in-thread TL;DR preview
+  ask       Register a decision + post interactive buttons / multi-select
+  resolve   Update a decision message after answer or timeout
 
-Run `slack-ui.sh post --help` or `slack-ui.sh report --help` for flags.
+Run `slack-ui.sh <command> --help` for flags (post, report, ask, resolve).
 EOF
 }
 
@@ -831,6 +937,623 @@ cmd_post() {
   rm -rf "$tmpdir"
 }
 
+# Mint a 26-char uppercase alphanumeric decision id (time + random, no colons).
+mint_decision_id() {
+  python3 -c '
+import time, random, string
+alphabet = string.ascii_uppercase + string.digits
+seed = f"{time.time_ns():x}{random.getrandbits(64):016x}"
+rng = random.Random(seed)
+print("".join(rng.choice(alphabet) for _ in range(26)))
+'
+}
+
+# POST chat.update. Mirrors send_payload auth/error handling.
+send_chat_update() {
+  local payload="$1"
+  local token
+  token="$(bot_token)"
+  [ -n "$token" ] || die "no token: set SLACK_BOT_TOKEN or HQ_SLACK_BOT_TOKEN"
+
+  local resp ok err
+  resp="$(curl -fsS -X POST "https://slack.com/api/chat.update" \
+    -H "Authorization: Bearer ${token}" \
+    -H "Content-Type: application/json; charset=utf-8" \
+    --data "$payload")" || die "curl chat.update failed"
+
+  ok="$(printf '%s' "$resp" | jq -r '.ok // false')"
+  if [ "$ok" != "true" ]; then
+    err="$(printf '%s' "$resp" | jq -r '.error // "unknown_error"')"
+    die "chat.update failed: $err"
+  fi
+  printf '%s' "$resp" | jq -c '{ok:true, ts:(.ts // null), channel:(.channel // null)}'
+}
+
+# Atomically rewrite pending state file merging extra keys (jq-built).
+# Args: path existing_json_or_empty merge_json
+write_pending_file() {
+  local path="$1" base_json="$2" merge_json="$3"
+  local dir tmp
+  dir="$(dirname "$path")"
+  mkdir -p "$dir"
+  tmp="${path}.tmp.$$"
+  if [ -n "$base_json" ]; then
+    jq -nc --argjson base "$base_json" --argjson extra "$merge_json" \
+      '$base + $extra' >"$tmp"
+  else
+    printf '%s\n' "$merge_json" >"$tmp"
+  fi
+  mv -f "$tmp" "$path"
+}
+
+cmd_ask() {
+  local question="" recommend="" abort="" fallback="" timeout="" bot=""
+  local channel="" thread="" decision_id="" state_dir=""
+  local multi=0 dry_run=0
+  local field_count=0 context_count=0 option_count=0
+  local tmpdir fields_file contexts_file options_file
+  local f label value
+
+  state_dir="${HQ_DECISIONS_DIR:-$HOME/.hq/slack-decisions}"
+
+  tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/slack-ui-ask.XXXXXX")"
+  fields_file="$tmpdir/fields.txt"
+  contexts_file="$tmpdir/contexts.txt"
+  options_file="$tmpdir/options.txt"
+  : >"$fields_file"
+  : >"$contexts_file"
+  : >"$options_file"
+  # shellcheck disable=SC2064
+  trap 'rm -rf "$tmpdir"' EXIT
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -h|--help)
+        usage_ask
+        trap - EXIT
+        rm -rf "$tmpdir"
+        return 0
+        ;;
+      --question)
+        [ $# -ge 2 ] || die "--question requires an argument"
+        question="$2"
+        shift 2
+        ;;
+      --option)
+        [ $# -ge 2 ] || die "--option requires an argument"
+        f="$2"
+        case "$f" in
+          *"|"*) ;;
+          *) die "--option must be \"value|Label\" (missing |): $f" ;;
+        esac
+        value="${f%%|*}"
+        label="${f#*|}"
+        [ -n "$value" ] || die "--option value is empty: $f"
+        [ -n "$label" ] || die "--option label is empty: $f"
+        printf '%s\n' "$f" >>"$options_file"
+        option_count=$((option_count + 1))
+        shift 2
+        ;;
+      --recommend)
+        [ $# -ge 2 ] || die "--recommend requires an argument"
+        recommend="$2"
+        shift 2
+        ;;
+      --abort)
+        [ $# -ge 2 ] || die "--abort requires an argument"
+        abort="$2"
+        shift 2
+        ;;
+      --fallback)
+        [ $# -ge 2 ] || die "--fallback requires an argument"
+        fallback="$2"
+        shift 2
+        ;;
+      --timeout)
+        [ $# -ge 2 ] || die "--timeout requires an argument"
+        timeout="$2"
+        shift 2
+        ;;
+      --bot)
+        [ $# -ge 2 ] || die "--bot requires an argument"
+        bot="$2"
+        shift 2
+        ;;
+      --field)
+        [ $# -ge 2 ] || die "--field requires an argument"
+        field_count=$((field_count + 1))
+        if [ "$field_count" -gt "$MAX_FIELDS" ]; then
+          die "too many --field values: ${field_count} (max ${MAX_FIELDS})"
+        fi
+        f="$2"
+        case "$f" in
+          *"|"*) ;;
+          *) die "--field must be \"Label|Value\" (missing |): $f" ;;
+        esac
+        printf '%s\n' "$f" >>"$fields_file"
+        shift 2
+        ;;
+      --context)
+        [ $# -ge 2 ] || die "--context requires an argument"
+        context_count=$((context_count + 1))
+        printf '%s\n' "$2" >>"$contexts_file"
+        shift 2
+        ;;
+      --channel)
+        [ $# -ge 2 ] || die "--channel requires an argument"
+        channel="$2"
+        shift 2
+        ;;
+      --thread)
+        [ $# -ge 2 ] || die "--thread requires an argument"
+        thread="$2"
+        shift 2
+        ;;
+      --multi)
+        multi=1
+        shift
+        ;;
+      --decision-id)
+        [ $# -ge 2 ] || die "--decision-id requires an argument"
+        decision_id="$2"
+        shift 2
+        ;;
+      --state-dir)
+        [ $# -ge 2 ] || die "--state-dir requires an argument"
+        state_dir="$2"
+        shift 2
+        ;;
+      --dry-run)
+        dry_run=1
+        shift
+        ;;
+      --)
+        shift
+        break
+        ;;
+      -*)
+        die "unknown option: $1 (try --help)"
+        ;;
+      *)
+        die "unexpected argument: $1 (try --help)"
+        ;;
+    esac
+  done
+
+  [ -n "$question" ] || die "--question is required"
+  [ "$option_count" -ge 2 ] || die "at least 2 --option values are required (got ${option_count})"
+  [ -n "$fallback" ] || die "--fallback is required"
+  [ -n "$timeout" ] || die "--timeout is required"
+  case "$timeout" in
+    ''|*[!0-9]*) die "--timeout must be a positive integer" ;;
+  esac
+  if [ "$timeout" -le 0 ]; then
+    die "--timeout must be a positive integer"
+  fi
+  if [ "$dry_run" -eq 0 ]; then
+    [ -n "$channel" ] || die "--channel is required when sending (omit only with --dry-run)"
+  fi
+
+  if [ "$option_count" -gt 3 ] && [ "$multi" -eq 0 ]; then
+    die "more than 3 options requires --multi (never emit >3 buttons)"
+  fi
+
+  # Validate fallback is one of the option values; resolve its label.
+  local fallback_label="" found_fallback=0
+  local opt_value opt_label
+  while IFS= read -r f || [ -n "${f:-}" ]; do
+    [ -z "${f:-}" ] && continue
+    opt_value="${f%%|*}"
+    opt_label="${f#*|}"
+    if [ "$opt_value" = "$fallback" ]; then
+      found_fallback=1
+      fallback_label="$opt_label"
+    fi
+  done <"$options_file"
+  [ "$found_fallback" -eq 1 ] || die "--fallback value is not among --option values: $fallback"
+
+  if [ -z "$decision_id" ]; then
+    decision_id="$(mint_decision_id)"
+    [ -n "$decision_id" ] || die "failed to mint decision id"
+  fi
+
+  local now_s expires_at
+  now_s="$(date +%s)"
+  expires_at=$((now_s + timeout))
+
+  # Build options JSON array [{value,label}, ...]
+  local options_json="[]"
+  while IFS= read -r f || [ -n "${f:-}" ]; do
+    [ -z "${f:-}" ] && continue
+    opt_value="${f%%|*}"
+    opt_label="${f#*|}"
+    options_json="$(jq -nc \
+      --argjson acc "$options_json" \
+      --arg value "$opt_value" \
+      --arg label "$opt_label" \
+      '$acc + [{value: $value, label: $label}]')"
+  done <"$options_file"
+
+  # Registration payload
+  local reg_payload
+  reg_payload="$(jq -nc \
+    --arg decision_id "$decision_id" \
+    --arg bot "$bot" \
+    --arg channel "$channel" \
+    --arg thread_ts "$thread" \
+    --arg question "$question" \
+    --argjson options "$options_json" \
+    --arg recommended "$recommend" \
+    --arg fallback "$fallback" \
+    --argjson expires_at "$expires_at" \
+    '{
+      decision_id: $decision_id,
+      bot: $bot,
+      channel: $channel,
+      thread_ts: $thread_ts,
+      question: $question,
+      options: $options,
+      recommended: $recommended,
+      fallback: $fallback,
+      expires_at: $expires_at
+    }')"
+
+  # --- Build Block Kit message ---
+  local header_text
+  header_text="$(truncate_str "Decision needed: ${question}" "$HEADER_MAX")"
+
+  local blocks_json="[]"
+  blocks_json="$(jq -nc \
+    --argjson acc "$blocks_json" \
+    --arg t "$header_text" \
+    '$acc + [{type:"header", text:{type:"plain_text", text:$t, emoji:true}}]')"
+
+  blocks_json="$(jq -nc \
+    --argjson acc "$blocks_json" \
+    --arg q "$question" \
+    '$acc + [{type:"section", text:{type:"mrkdwn", text:$q}}]')"
+
+  if [ "$field_count" -gt 0 ]; then
+    local fields_json="[]"
+    while IFS= read -r f || [ -n "${f:-}" ]; do
+      [ -z "${f:-}" ] && continue
+      label="${f%%|*}"
+      value="${f#*|}"
+      fields_json="$(jq -nc \
+        --argjson acc "$fields_json" \
+        --arg label "$label" \
+        --arg value "$value" \
+        '$acc + [{type:"mrkdwn", text:("*" + $label + "*\n" + $value)}]')"
+    done <"$fields_file"
+    blocks_json="$(jq -nc \
+      --argjson acc "$blocks_json" \
+      --argjson fields "$fields_json" \
+      '$acc + [{type:"section", fields:$fields}]')"
+  fi
+
+  # Actions block: multi_static_select or buttons
+  local use_multi=0
+  if [ "$multi" -eq 1 ] || [ "$option_count" -gt 3 ]; then
+    use_multi=1
+  fi
+
+  if [ "$use_multi" -eq 1 ]; then
+    local select_options="[]"
+    while IFS= read -r f || [ -n "${f:-}" ]; do
+      [ -z "${f:-}" ] && continue
+      opt_value="${f%%|*}"
+      opt_label="${f#*|}"
+      select_options="$(jq -nc \
+        --argjson acc "$select_options" \
+        --arg value "$opt_value" \
+        --arg label "$opt_label" \
+        '$acc + [{text:{type:"plain_text", text:$label}, value:$value}]')"
+    done <"$options_file"
+
+    blocks_json="$(jq -nc \
+      --argjson acc "$blocks_json" \
+      --arg decision_id "$decision_id" \
+      --argjson options "$select_options" \
+      '
+        $acc + [{
+          type: "actions",
+          elements: [{
+            type: "multi_static_select",
+            action_id: ("hqd:" + $decision_id + ":submit"),
+            options: $options,
+            confirm: {
+              title: {type: "plain_text", text: "Confirm selection"},
+              text: {type: "mrkdwn", text: "Apply this selection?"},
+              confirm: {type: "plain_text", text: "Confirm"},
+              deny: {type: "plain_text", text: "Cancel"}
+            }
+          }]
+        }]
+      ')"
+  else
+    local elements_json="[]"
+    while IFS= read -r f || [ -n "${f:-}" ]; do
+      [ -z "${f:-}" ] && continue
+      opt_value="${f%%|*}"
+      opt_label="${f#*|}"
+      elements_json="$(jq -nc \
+        --argjson acc "$elements_json" \
+        --arg decision_id "$decision_id" \
+        --arg value "$opt_value" \
+        --arg label "$opt_label" \
+        --arg recommend "$recommend" \
+        --arg abort "$abort" \
+        '
+          $acc + [
+            {
+              type: "button",
+              action_id: ("hqd:" + $decision_id + ":" + $value),
+              value: $value,
+              text: {type: "plain_text", text: $label}
+            }
+            + (if $recommend != "" and $value == $recommend then {style: "primary"} else {} end)
+            + (if $abort != "" and $value == $abort then {style: "danger"} else {} end)
+          ]
+        ')"
+    done <"$options_file"
+
+    blocks_json="$(jq -nc \
+      --argjson acc "$blocks_json" \
+      --argjson elements "$elements_json" \
+      '$acc + [{type:"actions", elements:$elements}]')"
+  fi
+
+  # Context block: --context texts + timeout/fallback line
+  local elements_ctx="[]"
+  local c
+  if [ -f "$contexts_file" ]; then
+    while IFS= read -r c || [ -n "${c:-}" ]; do
+      [ -z "${c:-}" ] && continue
+      elements_ctx="$(jq -nc \
+        --argjson acc "$elements_ctx" \
+        --arg t "$c" \
+        '$acc + [{type:"mrkdwn", text:$t}]')"
+    done <"$contexts_file"
+  fi
+  local timeout_line
+  timeout_line="Times out in ${timeout}s → fallback: ${fallback_label}"
+  elements_ctx="$(jq -nc \
+    --argjson acc "$elements_ctx" \
+    --arg t "$timeout_line" \
+    '$acc + [{type:"mrkdwn", text:$t}]')"
+
+  blocks_json="$(jq -nc \
+    --argjson acc "$blocks_json" \
+    --argjson elements "$elements_ctx" \
+    '$acc + [{type:"context", elements:$elements}]')"
+
+  local fallback_text
+  fallback_text="$(truncate_str "Decision needed: ${question}" 3000)"
+
+  local msg_payload
+  msg_payload="$(jq -nc \
+    --arg text "$fallback_text" \
+    --arg channel "$channel" \
+    --arg thread "$thread" \
+    --argjson blocks "$blocks_json" \
+    '
+      {text: $text, blocks: $blocks}
+      + (if $channel != "" then {channel: $channel} else {} end)
+      + (if $thread != "" then {thread_ts: $thread} else {} end)
+    ')"
+
+  local message_ts=""
+  local envelope
+
+  if [ "$dry_run" -eq 1 ]; then
+    envelope="$(jq -nc --argjson payload "$reg_payload" \
+      '{api:"hq.decisions.register", payload:$payload}')"
+    printf '%s\n' "$envelope"
+    envelope="$(jq -nc --argjson payload "$msg_payload" \
+      '{api:"chat.postMessage", payload:$payload}')"
+    printf '%s\n' "$envelope"
+    message_ts="DRYRUN_TS"
+  else
+    [ -n "${HQ_API_BASE:-}" ] || die "HQ_API_BASE is required for live ask (or pass --dry-run)"
+
+    local reg_resp
+    reg_resp="$(curl -fsS -X POST "${HQ_API_BASE}/v1/slack/decisions" \
+      -H "Authorization: Bearer ${HQ_API_TOKEN:-}" \
+      -H "Content-Type: application/json; charset=utf-8" \
+      --data "$reg_payload")" || die "curl hq.decisions.register failed"
+
+    local send_resp
+    send_resp="$(send_payload "$msg_payload")"
+    message_ts="$(printf '%s' "$send_resp" | jq -r '.ts // empty')"
+    [ -n "$message_ts" ] || die "chat.postMessage ok but no ts in response"
+  fi
+
+  # Write pending file: registration + message_ts
+  local pending_path pending_json
+  pending_path="${state_dir}/${decision_id}.json"
+  pending_json="$(jq -nc \
+    --argjson reg "$reg_payload" \
+    --arg message_ts "$message_ts" \
+    '$reg + {message_ts: $message_ts}')"
+  write_pending_file "$pending_path" "" "$pending_json"
+
+  trap - EXIT
+  rm -rf "$tmpdir"
+}
+
+cmd_resolve() {
+  local decision_id="" channel="" ts="" question="" answer_label="" answer_value=""
+  local user="" answered_at="" fallback_label="" state_dir=""
+  local timed_out=0 dry_run=0
+
+  state_dir="${HQ_DECISIONS_DIR:-$HOME/.hq/slack-decisions}"
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -h|--help)
+        usage_resolve
+        return 0
+        ;;
+      --decision-id)
+        [ $# -ge 2 ] || die "--decision-id requires an argument"
+        decision_id="$2"
+        shift 2
+        ;;
+      --channel)
+        [ $# -ge 2 ] || die "--channel requires an argument"
+        channel="$2"
+        shift 2
+        ;;
+      --ts)
+        [ $# -ge 2 ] || die "--ts requires an argument"
+        ts="$2"
+        shift 2
+        ;;
+      --question)
+        [ $# -ge 2 ] || die "--question requires an argument"
+        question="$2"
+        shift 2
+        ;;
+      --answer-label)
+        [ $# -ge 2 ] || die "--answer-label requires an argument"
+        answer_label="$2"
+        shift 2
+        ;;
+      --answer-value)
+        [ $# -ge 2 ] || die "--answer-value requires an argument"
+        answer_value="$2"
+        shift 2
+        ;;
+      --user)
+        [ $# -ge 2 ] || die "--user requires an argument"
+        user="$2"
+        shift 2
+        ;;
+      --answered-at)
+        [ $# -ge 2 ] || die "--answered-at requires an argument"
+        answered_at="$2"
+        shift 2
+        ;;
+      --timed-out)
+        timed_out=1
+        shift
+        ;;
+      --fallback-label)
+        [ $# -ge 2 ] || die "--fallback-label requires an argument"
+        fallback_label="$2"
+        shift 2
+        ;;
+      --state-dir)
+        [ $# -ge 2 ] || die "--state-dir requires an argument"
+        state_dir="$2"
+        shift 2
+        ;;
+      --dry-run)
+        dry_run=1
+        shift
+        ;;
+      --)
+        shift
+        break
+        ;;
+      -*)
+        die "unknown option: $1 (try --help)"
+        ;;
+      *)
+        die "unexpected argument: $1 (try --help)"
+        ;;
+    esac
+  done
+
+  [ -n "$decision_id" ] || die "--decision-id is required"
+  [ -n "$channel" ] || die "--channel is required"
+  [ -n "$ts" ] || die "--ts is required"
+
+  if [ "$timed_out" -eq 1 ] && [ -n "$user" ]; then
+    die "--timed-out and --user are mutually exclusive"
+  fi
+
+  if [ "$timed_out" -eq 1 ]; then
+    [ -n "$fallback_label" ] || die "--fallback-label is required with --timed-out"
+  else
+    [ -n "$user" ] || die "--user is required (or pass --timed-out)"
+    [ -n "$answer_label" ] || die "--answer-label is required (or pass --timed-out)"
+  fi
+
+  if [ -z "$answered_at" ]; then
+    answered_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+  fi
+
+  local section_text context_text fallback_text
+
+  if [ "$timed_out" -eq 1 ]; then
+    section_text="⏳ Decision timed out — fallback applied: *${fallback_label}*"
+    if [ -n "$question" ]; then
+      section_text="$(printf '%s\n%s' "$question" "$section_text")"
+    fi
+    context_text="No answer before the deadline; declared fallback fired at ${answered_at}"
+    fallback_text="Decision timed out — fallback applied: ${fallback_label}"
+  else
+    section_text="✅ Decision resolved: *${answer_label}*"
+    if [ -n "$question" ]; then
+      section_text="$(printf '%s\n%s' "$question" "$section_text")"
+    fi
+    context_text="Answered by <@${user}> at ${answered_at}"
+    fallback_text="Decision resolved: ${answer_label}"
+  fi
+
+  local update_payload
+  update_payload="$(jq -nc \
+    --arg channel "$channel" \
+    --arg ts "$ts" \
+    --arg text "$fallback_text" \
+    --arg section "$section_text" \
+    --arg context "$context_text" \
+    '{
+      channel: $channel,
+      ts: $ts,
+      text: $text,
+      blocks: [
+        {type: "section", text: {type: "mrkdwn", text: $section}},
+        {type: "context", elements: [{type: "mrkdwn", text: $context}]}
+      ]
+    }')"
+
+  # Rewrite pending file if present
+  local pending_path
+  pending_path="${state_dir}/${decision_id}.json"
+  if [ -f "$pending_path" ]; then
+    local existing merge_json action_val value_val
+    existing="$(cat "$pending_path")"
+    if [ "$timed_out" -eq 1 ]; then
+      action_val="timeout"
+      value_val="${answer_value:-}"
+    else
+      action_val="${answer_value:-}"
+      value_val="${answer_value:-}"
+    fi
+    merge_json="$(jq -nc \
+      --arg action "$action_val" \
+      --arg value "$value_val" \
+      --arg user "$user" \
+      --arg answered_at "$answered_at" \
+      '{
+        resolved: true,
+        action: $action,
+        value: $value,
+        user: $user,
+        answered_at: $answered_at
+      }')"
+    write_pending_file "$pending_path" "$existing" "$merge_json"
+  fi
+
+  if [ "$dry_run" -eq 1 ]; then
+    jq -nc --argjson payload "$update_payload" '{api:"chat.update", payload:$payload}'
+  else
+    send_chat_update "$update_payload"
+  fi
+}
+
 main() {
   if [ $# -eq 0 ]; then
     usage
@@ -848,6 +1571,14 @@ main() {
     report)
       shift
       cmd_report "$@"
+      ;;
+    ask)
+      shift
+      cmd_ask "$@"
+      ;;
+    resolve)
+      shift
+      cmd_resolve "$@"
       ;;
     *)
       die "unknown command: $1 (try --help)"

@@ -396,6 +396,236 @@ assert_fail "report missing --tldr" \
 rm -f "$REPORT_MD"
 
 # ---------------------------------------------------------------------------
+# 11. ask dry-run: 2 JSON lines, register + postMessage, buttons, pending file
+# ---------------------------------------------------------------------------
+ASK_STATE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/slack-ui-ask-state.XXXXXX")"
+ASK_DECISION_ID="TESTDECISION0000000000000001"
+ASK_TIMEOUT=120
+ASK_NOW="$(date +%s)"
+ASK_EXPIRES_LO=$((ASK_NOW + ASK_TIMEOUT - 5))
+ASK_EXPIRES_HI=$((ASK_NOW + ASK_TIMEOUT + 5))
+
+ASK_OUT="$(
+  bash "$SLACK_UI" ask \
+    --question "Ship to prod?" \
+    --option "yes|Yes, ship" \
+    --option "no|No, hold" \
+    --option "later|Defer" \
+    --recommend yes \
+    --abort no \
+    --fallback later \
+    --timeout "$ASK_TIMEOUT" \
+    --channel C01234567 \
+    --thread 1710000000.000100 \
+    --decision-id "$ASK_DECISION_ID" \
+    --state-dir "$ASK_STATE_DIR" \
+    --context "from CI" \
+    --dry-run
+)"
+
+assert_eq "ask dry-run: two JSON lines" \
+  "$(printf '%s\n' "$ASK_OUT" | wc -l | tr -d '[:space:]')" "2"
+
+ASK_L1="$(printf '%s\n' "$ASK_OUT" | sed -n '1p')"
+ASK_L2="$(printf '%s\n' "$ASK_OUT" | sed -n '2p')"
+
+assert_ok "ask dry-run: line1 valid JSON" jq -e . <<<"$ASK_L1"
+assert_ok "ask dry-run: line2 valid JSON" jq -e . <<<"$ASK_L2"
+
+assert_eq "ask dry-run: line1 api" \
+  "$(jq -r '.api' <<<"$ASK_L1")" "hq.decisions.register"
+
+assert_eq "ask dry-run: line2 api" \
+  "$(jq -r '.api' <<<"$ASK_L2")" "chat.postMessage"
+
+assert_eq "ask register: decision_id override" \
+  "$(jq -r '.payload.decision_id' <<<"$ASK_L1")" "$ASK_DECISION_ID"
+
+assert_eq "ask register: fallback" \
+  "$(jq -r '.payload.fallback' <<<"$ASK_L1")" "later"
+
+assert_eq "ask register: three options" \
+  "$(jq -r '.payload.options | length' <<<"$ASK_L1")" "3"
+
+ASK_EXPIRES="$(jq -r '.payload.expires_at' <<<"$ASK_L1")"
+assert_ok "ask register: expires_at within ±5s of now+timeout" \
+  python3 -c 'import sys; e=int(sys.argv[1]); lo=int(sys.argv[2]); hi=int(sys.argv[3]); assert lo<=e<=hi, (e,lo,hi)' \
+  "$ASK_EXPIRES" "$ASK_EXPIRES_LO" "$ASK_EXPIRES_HI"
+
+assert_ok "ask message: 3 buttons, action_ids, styles" \
+  python3 - <<'PY' "$ASK_L2" "$ASK_DECISION_ID"
+import json, sys
+payload = json.loads(sys.argv[1])["payload"]
+did = sys.argv[2]
+actions = [b for b in payload["blocks"] if b.get("type") == "actions"]
+assert len(actions) == 1, actions
+els = actions[0]["elements"]
+assert len(els) == 3, els
+assert all(e.get("type") == "button" for e in els), els
+prefix = f"hqd:{did}:"
+assert all(e["action_id"].startswith(prefix) for e in els), [e["action_id"] for e in els]
+by_val = {e["value"]: e for e in els}
+assert by_val["yes"].get("style") == "primary", by_val["yes"]
+assert by_val["no"].get("style") == "danger", by_val["no"]
+assert "style" not in by_val["later"], by_val["later"]
+print("ok")
+PY
+
+assert_ok "ask message: context mentions fallback" \
+  python3 -c '
+import json,sys
+p=json.loads(sys.argv[1])["payload"]
+ctx=[b for b in p["blocks"] if b.get("type")=="context"]
+assert ctx, "no context"
+texts=" ".join(e.get("text","") for e in ctx[0]["elements"])
+assert "fallback" in texts.lower() and "Defer" in texts, texts
+' "$ASK_L2"
+
+assert_ok "ask pending file: decision_id + DRYRUN_TS" \
+  python3 -c '
+import json,sys,os
+path=os.path.join(sys.argv[1], sys.argv[2]+".json")
+assert os.path.isfile(path), path
+d=json.load(open(path))
+assert d["decision_id"]==sys.argv[2]
+assert d["message_ts"]=="DRYRUN_TS"
+' "$ASK_STATE_DIR" "$ASK_DECISION_ID"
+
+# ---------------------------------------------------------------------------
+# 12. ask: 4 options without --multi fails; --multi emits multi_static_select
+# ---------------------------------------------------------------------------
+assert_fail "ask 4 options without --multi fails" \
+  bash "$SLACK_UI" ask \
+    --question "Pick" \
+    --option "a|A" --option "b|B" --option "c|C" --option "d|D" \
+    --fallback a \
+    --timeout 60 \
+    --channel C1 \
+    --dry-run
+
+MULTI_OUT="$(
+  bash "$SLACK_UI" ask \
+    --question "Pick many" \
+    --option "a|A" --option "b|B" --option "c|C" --option "d|D" \
+    --fallback a \
+    --timeout 60 \
+    --channel C1 \
+    --multi \
+    --decision-id "TESTDECISION0000000000000002" \
+    --state-dir "$ASK_STATE_DIR" \
+    --dry-run
+)"
+
+MULTI_L2="$(printf '%s\n' "$MULTI_OUT" | sed -n '2p')"
+assert_ok "ask --multi: multi_static_select with confirm, no buttons" \
+  python3 -c '
+import json,sys
+p=json.loads(sys.argv[1])["payload"]
+actions=[b for b in p["blocks"] if b.get("type")=="actions"]
+assert len(actions)==1
+els=actions[0]["elements"]
+assert len(els)==1 and els[0]["type"]=="multi_static_select"
+assert "confirm" in els[0] and isinstance(els[0]["confirm"], dict)
+assert not any(e.get("type")=="button" for e in els)
+assert els[0]["action_id"].endswith(":submit")
+' "$MULTI_L2"
+
+# ---------------------------------------------------------------------------
+# 13. ask: --fallback not among options fails
+# ---------------------------------------------------------------------------
+assert_fail "ask fallback not in options fails" \
+  bash "$SLACK_UI" ask \
+    --question "Q" \
+    --option "a|A" --option "b|B" \
+    --fallback z \
+    --timeout 60 \
+    --channel C1 \
+    --dry-run
+
+# ---------------------------------------------------------------------------
+# 14. resolve dry-run (answered): chat.update, no actions, answer + user
+# ---------------------------------------------------------------------------
+RESOLVE_OUT="$(
+  bash "$SLACK_UI" resolve \
+    --decision-id "$ASK_DECISION_ID" \
+    --channel C01234567 \
+    --ts 1710000000.000100 \
+    --question "Ship to prod?" \
+    --answer-label "Yes, ship" \
+    --answer-value yes \
+    --user U0123ABC \
+    --answered-at "2026-01-15T12:00:00Z" \
+    --state-dir "$ASK_STATE_DIR" \
+    --dry-run
+)"
+
+assert_eq "resolve answered: one JSON line" \
+  "$(printf '%s\n' "$RESOLVE_OUT" | wc -l | tr -d '[:space:]')" "1"
+
+assert_ok "resolve answered: valid JSON" jq -e . <<<"$RESOLVE_OUT"
+
+assert_eq "resolve answered: api chat.update" \
+  "$(jq -r '.api' <<<"$RESOLVE_OUT")" "chat.update"
+
+assert_ok "resolve answered: zero actions blocks, answer label, user in context" \
+  python3 -c '
+import json,sys
+p=json.loads(sys.argv[1])["payload"]
+assert all(b.get("type")!="actions" for b in p["blocks"])
+blob=json.dumps(p)
+assert "Yes, ship" in blob
+assert "U0123ABC" in blob
+sec=[b for b in p["blocks"] if b.get("type")=="section"]
+assert sec and "Yes, ship" in sec[0]["text"]["text"]
+ctx=[b for b in p["blocks"] if b.get("type")=="context"]
+assert ctx and "U0123ABC" in ctx[0]["elements"][0]["text"]
+' "$RESOLVE_OUT"
+
+assert_ok "resolve answered: pending resolved true + action" \
+  python3 -c '
+import json,sys,os
+path=os.path.join(sys.argv[1], sys.argv[2]+".json")
+d=json.load(open(path))
+assert d.get("resolved") is True, d
+assert d.get("action")=="yes", d
+' "$ASK_STATE_DIR" "$ASK_DECISION_ID"
+
+# ---------------------------------------------------------------------------
+# 15. resolve --timed-out: fallback applied text; mutual exclusion with --user
+# ---------------------------------------------------------------------------
+TIMEOUT_OUT="$(
+  bash "$SLACK_UI" resolve \
+    --decision-id "TESTDECISION0000000000000002" \
+    --channel C1 \
+    --ts 99.001 \
+    --timed-out \
+    --fallback-label "Defer" \
+    --state-dir "$ASK_STATE_DIR" \
+    --dry-run
+)"
+
+assert_ok "resolve timed-out: contains fallback applied + label" \
+  python3 -c '
+import json,sys
+p=json.loads(sys.argv[1])["payload"]
+blob=json.dumps(p)
+assert "fallback applied" in blob.lower()
+assert "Defer" in blob
+' "$TIMEOUT_OUT"
+
+assert_fail "resolve timed-out + user mutually exclusive" \
+  bash "$SLACK_UI" resolve \
+    --decision-id X \
+    --channel C1 \
+    --ts 1.0 \
+    --timed-out \
+    --fallback-label "X" \
+    --user U1 \
+    --dry-run
+
+rm -rf "$ASK_STATE_DIR"
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo
