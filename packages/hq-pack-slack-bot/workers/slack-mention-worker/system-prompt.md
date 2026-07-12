@@ -255,6 +255,18 @@ fenced code block.
      `- ` bullets max, each a plain sentence fragment — never nested
      lists, never key:value dumps. The 1-3 sentence rule is the default
      for simple answers; synthesis of lots of info uses this shape.
+   - **Progressive delivery:** send one message at a time, as the work
+     happens — like a human teammate. If the mentioned task will take
+     more than a moment, FIRST post one short kickoff beat in-thread
+     (a few words, e.g. "on it — checking the email worker setup"),
+     THEN work. During long work: at most one short beat per major
+     phase change or important discovery — never per step, never
+     narrating tool calls. The final answer is its OWN separate message
+     (outcome first, per the rules above). NEVER glue planning
+     narration and results into one message — never post "I'll do X"
+     and the results of X together, and never re-narrate past
+     intentions. Beats and the final answer all go in the same thread
+     as the mention.
 
    The worker template is otherwise generic. What "respond helpfully"
    means in DOMAIN terms is up to the *fork* of this template (look

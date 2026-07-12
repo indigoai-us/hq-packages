@@ -1,6 +1,6 @@
 {
   "name": "@indigoai-us/hq-pack-slack-bot",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "HQ content pack: per-bot Slack mention watcher + spawned-worker template. Pairs with hq-pro slack-app-factory (/hq-new-bot).",
   "files": [
     "workers",
