@@ -99,7 +99,7 @@ jobs:
             echo "Publishing $name@$version from $package_dir"
             # npm exchanges the GitHub Actions OIDC token with the trusted
             # publisher configured for this repository and workflow.
-            npm publish "$package_dir" --access public
+            npm publish "./$package_dir" --access public
             ((published += 1))
           done
 
