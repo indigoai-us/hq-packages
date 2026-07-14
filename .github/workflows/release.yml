@@ -15,8 +15,11 @@ concurrency:
   group: release-npm
   cancel-in-progress: false
 
+# Trusted publisher (OIDC) — no long-lived NPM_TOKEN.
+# Each package must list this repo + workflow as a trusted publisher on npmjs.com.
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   release:
@@ -29,6 +32,10 @@ jobs:
         with:
           node-version: 20
           registry-url: https://registry.npmjs.org
+
+      # Trusted publishing requires a recent npm that speaks GitHub OIDC.
+      - name: Ensure npm supports trusted publishing
+        run: npm install -g npm@latest
 
       - name: Run pack tests (gate)
         shell: bash
@@ -50,19 +57,14 @@ jobs:
       - name: Publish changed packages
         shell: bash
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
         run: |
           set -euo pipefail
           shopt -s nullglob
 
-          if [[ -z "${NODE_AUTH_TOKEN:-}" ]]; then
-            echo "::notice::NPM_TOKEN is not configured; publishing is skipped."
-            exit 0
-          fi
-
           published=0
           skipped=0
+          failed=0
 
           for package_json in packages/*/package.json; do
             package_dir="$(dirname "$package_json")"
@@ -90,12 +92,17 @@ jobs:
               continue
             fi
 
-            echo "Publishing $name@$version from $package_dir"
-            # Publish the folder from the repo root so npm uses the root .npmrc
-            # (with the auth token written by setup-node); npm does not walk up
-            # parent dirs for project config, so `cd $package_dir` would lose it.
-            npm publish "$package_dir" --access public
-            ((published += 1))
+            echo "Publishing $name@$version from $package_dir (trusted publisher / OIDC)"
+            # Publish from repo root so npm uses root config; --provenance pairs with OIDC.
+            if npm publish "$package_dir" --access public --provenance; then
+              ((published += 1))
+            else
+              echo "::error::Failed to publish $name@$version (is trusted publisher configured for this package?)"
+              ((failed += 1))
+            fi
           done
 
-          echo "Summary: published=$published skipped=$skipped"
+          echo "Summary: published=$published skipped=$skipped failed=$failed"
+          if ((failed > 0)); then
+            exit 1
+          fi
