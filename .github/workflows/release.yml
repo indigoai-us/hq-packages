@@ -17,18 +17,20 @@ concurrency:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   release:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 24
           registry-url: https://registry.npmjs.org
+          package-manager-cache: false
 
       - name: Run pack tests (gate)
         shell: bash
@@ -50,16 +52,10 @@ jobs:
       - name: Publish changed packages
         shell: bash
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
         run: |
           set -euo pipefail
           shopt -s nullglob
-
-          if [[ -z "${NODE_AUTH_TOKEN:-}" ]]; then
-            echo "::notice::NPM_TOKEN is not configured; publishing is skipped."
-            exit 0
-          fi
 
           published=0
           skipped=0
@@ -76,6 +72,16 @@ jobs:
 
             name="$(node -p "require('./$package_json').name")"
             version="$(node -p "require('./$package_json').version")"
+
+            package_manifest="$package_dir/package.yaml"
+            if [[ -f "$package_manifest" ]]; then
+              manifest_version="$(sed -n 's/^version:[[:space:]]*//p' "$package_manifest")"
+              if [[ -z "$manifest_version" || "$manifest_version" != "$version" ]]; then
+                echo "::error file=$package_json::package.json version '$version' does not match package.yaml version '${manifest_version:-missing}'"
+                exit 1
+              fi
+            fi
+
             published_version="$(npm view "$name@$version" version 2>/dev/null || true)"
 
             if [[ "$published_version" == "$version" ]]; then
@@ -91,9 +97,8 @@ jobs:
             fi
 
             echo "Publishing $name@$version from $package_dir"
-            # Publish the folder from the repo root so npm uses the root .npmrc
-            # (with the auth token written by setup-node); npm does not walk up
-            # parent dirs for project config, so `cd $package_dir` would lose it.
+            # npm exchanges the GitHub Actions OIDC token with the trusted
+            # publisher configured for this repository and workflow.
             npm publish "$package_dir" --access public
             ((published += 1))
           done
