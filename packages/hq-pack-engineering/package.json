@@ -1,0 +1,32 @@
+{
+  "name": "@indigoai-us/hq-pack-engineering",
+  "version": "1.4.0",
+  "description": "HQ content pack: engineering capabilities — code review, debugging, testing, PR lifecycle, story execution (Ralph), ship meta-pipeline, and the worker team that executes coding work",
+  "files": [
+    "workers",
+    "skills",
+    "knowledge",
+    "policies",
+    "hooks",
+    "package.yaml",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/indigoai-us/hq-packages.git",
+    "directory": "packages/hq-pack-engineering"
+  },
+  "keywords": [
+    "hq",
+    "hq-pack",
+    "engineering",
+    "ship",
+    "review",
+    "land",
+    "workers"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
+}
