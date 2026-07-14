@@ -15,9 +15,11 @@ concurrency:
   group: release-npm
   cancel-in-progress: false
 
+# Trusted publisher on npm must list this exact workflow filename: release.yml
+# (org/repo + filename must match each package's Trusted Publisher config).
 permissions:
   contents: read
-  id-token: write
+  id-token: write # Required for OIDC → npm trusted publishing
 
 jobs:
   release:
@@ -28,9 +30,16 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
+          # Trusted publishing needs Node >= 22.14 and npm CLI >= 11.5.1
           node-version: 24
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
+
+      - name: Ensure npm supports trusted publishing
+        run: |
+          set -euo pipefail
+          npm install -g npm@latest
+          npm --version
 
       - name: Run pack tests (gate)
         shell: bash
@@ -57,6 +66,7 @@ jobs:
           set -euo pipefail
           shopt -s nullglob
 
+          expected_repo='https://github.com/indigoai-us/hq-packages.git'
           published=0
           skipped=0
 
@@ -72,6 +82,7 @@ jobs:
 
             name="$(node -p "require('./$package_json').name")"
             version="$(node -p "require('./$package_json').version")"
+            repo_url="$(node -p "const r=require('./$package_json').repository; typeof r === 'string' ? r : (r && r.url) || ''")"
 
             package_manifest="$package_dir/package.yaml"
             if [[ -f "$package_manifest" ]]; then
@@ -90,15 +101,21 @@ jobs:
               continue
             fi
 
+            if [[ "$repo_url" != "$expected_repo" ]]; then
+              echo "::error file=$package_json::repository.url must be '$expected_repo' for npm trusted publishing (got '${repo_url:-missing}')"
+              exit 1
+            fi
+
             if [[ "${DRY_RUN:-false}" == "true" ]]; then
               echo "DRY_RUN=true: would publish $name@$version from $package_dir"
               ((skipped += 1))
               continue
             fi
 
-            echo "Publishing $name@$version from $package_dir"
-            # npm exchanges the GitHub Actions OIDC token with the trusted
-            # publisher configured for this repository and workflow.
+            echo "Publishing $name@$version from $package_dir via trusted publisher (OIDC)"
+            # ./ prefix: bare "packages/foo" is parsed as github:packages/foo.
+            # No NPM_TOKEN: npm exchanges the Actions OIDC token with the
+            # trusted publisher configured for this repo + release.yml.
             npm publish "./$package_dir" --access public
             ((published += 1))
           done
