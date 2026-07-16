@@ -39,6 +39,45 @@ def _clean(b):
     return b
 
 
+def _looks_like_bypass_prompt(raw_bytes):
+    """Return true for the bypass confirmation despite ANSI redraw noise."""
+    # "2. Yes, I accept" is the accept option of the bypass-mode warning.
+    return b'yes,iaccept' in _clean(raw_bytes).lower()
+
+
+class BypassGate:
+    """Detect the bypass prompt over arbitrarily split PTY reads once."""
+
+    def __init__(self):
+        self.recent = b''
+        self.accepted = False
+
+    def feed(self, data):
+        if self.accepted:
+            return False
+        self.recent = (self.recent + data)[-8192:]
+        if not _looks_like_bypass_prompt(self.recent):
+            return False
+        # Mark first so redraws cannot inject a second Down+Enter pair.
+        self.accepted = True
+        self.recent = b''
+        return True
+
+
+def _accept_bypass_gate(gate, fd, data):
+    """Send the already-decided bypass answer exactly once."""
+    if not gate.feed(data):
+        return False
+    try:
+        time.sleep(0.3)
+        os.write(fd, b'\x1b[B')  # Down: select "Yes, I accept".
+        time.sleep(0.2)
+        os.write(fd, b'\r')      # Enter: confirm.
+    except OSError:
+        pass
+    return True
+
+
 def set_raw_ish(fd):
     attrs = termios.tcgetattr(fd)
     iflag, oflag, cflag, lflag, ispeed, ospeed, cc = attrs
@@ -82,7 +121,7 @@ def main():
     exit_code = 0
     dlg_buf = b''
     trust_done = False
-    bypass_done = False
+    bypass_gate = BypassGate()
     try:
         while True:
             try:
@@ -98,7 +137,7 @@ def main():
                     break
                 out_f.write(data)
                 out_f.flush()
-                if not (trust_done and bypass_done):
+                if not (trust_done and bypass_gate.accepted):
                     dlg_buf = (dlg_buf + data)[-8000:]
                     txt = _clean(dlg_buf)
                     if (not trust_done) and b'trustthisfolder' in txt.lower():
@@ -106,12 +145,7 @@ def main():
                         os.write(fd, b'\r')
                         trust_done = True
                         dlg_buf = b''
-                    elif (not bypass_done) and b'Yes,Iaccept' in txt:
-                        time.sleep(0.4)
-                        os.write(fd, b'\x1b[B')
-                        time.sleep(0.25)
-                        os.write(fd, b'\r')
-                        bypass_done = True
+                    elif _accept_bypass_gate(bypass_gate, fd, data):
                         dlg_buf = b''
             wpid, status = os.waitpid(pid, os.WNOHANG)
             if wpid == pid:

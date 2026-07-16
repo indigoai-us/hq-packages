@@ -110,30 +110,6 @@ if [ -z "$BOT_SLUG" ]; then
   exit 64
 fi
 
-# Auto-derive personUid from the operator's `hq` CLI secrets cache when
-# `-u` wasn't passed. The `~/.hq/secrets-cache/<scopeUid>/` directories
-# are created on first vault touch; the personal-scope one is named
-# exactly with the operator's `prs_*` personUid (the SSM-hierarchy
-# scope prefix). Fall back to a clear error with override hint if
-# nothing's there (fresh machine that's never touched personal vault).
-if [ -z "$PERSON_UID" ]; then
-  PERSON_UID="$(ls -d "$HOME"/.hq/secrets-cache/prs_* 2>/dev/null | head -1 | xargs -n1 basename 2>/dev/null || true)"
-  [ -n "$PERSON_UID" ] && PERSON_UID_SRC="cache:~/.hq/secrets-cache/$PERSON_UID/"
-fi
-if [ -z "$PERSON_UID" ]; then
-  echo "FATAL: could not auto-derive your HQ personUid from ~/.hq/secrets-cache/" >&2
-  echo "       Run any personal-vault command once (e.g. \`hq secrets --personal list\`) and retry," >&2
-  echo "       or pass -u <prs_personUid> explicitly." >&2
-  exit 64
-fi
-case "$PERSON_UID" in
-  prs_*) ;;
-  *)
-    echo "FATAL: personUid '$PERSON_UID' has unexpected shape (expected prs_…)" >&2
-    exit 64 ;;
-esac
-[ -n "$PERSON_UID_SRC" ] || PERSON_UID_SRC="arg:-u"
-
 # Allow `-c personal` as an alias for --personal.
 if [ "$COMPANY" = "personal" ]; then
   USE_PERSONAL=1
@@ -199,12 +175,72 @@ if [ -z "$WORKSPACE" ]; then
   exit 64
 fi
 
-# Slug + workspace + personUid → vault secret names. Mirrors
+# Slug + workspace → vault secret suffixes. Mirrors
 # botSecretKey() / botCreatorKey() in hq-pro
 # src/slack-apps/normalize-name.ts — keep in sync.
 _norm() { echo "$1" | tr '[:lower:]-.' '[:upper:]__' | tr -cd 'A-Z0-9_'; }
 BOT_UC="$(_norm "$BOT_SLUG")"
 WS_UC="$(_norm "$WORKSPACE")"
+# The model credential is scoped with the bot token and injected directly
+# into every detached worker by `hq secrets exec`; it is never inherited
+# from the host environment.
+MODEL_SECRET="ANTHROPIC_API_KEY"
+
+# Resolve the noninteractive worker identity only after scope + workspace
+# are known. The normal cache path is cheap, but a fresh machine has no
+# `~/.hq/secrets-cache/prs_*` entry yet. In that case (or when the cache is
+# ambiguous) the selected vault itself is authoritative: exactly one
+# `<prs_…>/HQ_SLACK_BOT_TOKEN_<BOT>_<WORKSPACE>` entry identifies the bot's
+# owner. Never choose an arbitrary match.
+if [ -z "$PERSON_UID" ]; then
+  _cache_matches=()
+  if [ -d "$HOME/.hq/secrets-cache" ]; then
+    while IFS= read -r _cache_dir; do
+      [ -d "$_cache_dir" ] || continue
+      _cache_matches+=("$(basename "$_cache_dir")")
+    done < <(find "$HOME/.hq/secrets-cache" -mindepth 1 -maxdepth 1 -type d -name 'prs_*' -print 2>/dev/null | sort)
+  fi
+  if [ "${#_cache_matches[@]}" -eq 1 ]; then
+    PERSON_UID="${_cache_matches[0]}"
+    PERSON_UID_SRC="cache:~/.hq/secrets-cache/$PERSON_UID/"
+  fi
+fi
+
+if [ -z "$PERSON_UID" ]; then
+  _person_uid_matches="$(HQ_NO_UPDATE_CHECK=1 hq secrets "${HQ_SCOPE_ARGS[@]}" list 2>/dev/null \
+    | awk -v token_name="HQ_SLACK_BOT_TOKEN_${BOT_UC}_${WS_UC}" '
+        split($1, parts, "/") == 2 &&
+        parts[1] ~ /^prs_[A-Za-z0-9_]+$/ &&
+        parts[2] == token_name { print parts[1] }
+      ' \
+    | sort -u)"
+  _person_uid_count="$(printf '%s\n' "$_person_uid_matches" | awk 'NF' | wc -l | tr -d '[:space:]')"
+  case "$_person_uid_count" in
+    1)
+      PERSON_UID="$(printf '%s\n' "$_person_uid_matches" | awk 'NF { print; exit }')"
+      PERSON_UID_SRC="vault:$PERSON_UID/HQ_SLACK_BOT_TOKEN_${BOT_UC}_${WS_UC}" ;;
+    0)
+      echo "FATAL: could not resolve an HQ personUid for $SCOPE_LABEL/$WORKSPACE" >&2
+      echo "       no ${BOT_UC} bot token matching <prs_…>/HQ_SLACK_BOT_TOKEN_${BOT_UC}_${WS_UC} was found" >&2
+      echo "       pass -u <prs_personUid> explicitly, or create/grant the bot token in this selected vault." >&2
+      exit 64 ;;
+    *)
+      echo "FATAL: ambiguous HQ personUid for $SCOPE_LABEL/$WORKSPACE" >&2
+      echo "       multiple <prs_…>/HQ_SLACK_BOT_TOKEN_${BOT_UC}_${WS_UC} entries were found; pass -u <prs_personUid>." >&2
+      exit 64 ;;
+  esac
+fi
+unset _cache_dir _person_uid_matches _person_uid_count
+case "$PERSON_UID" in
+  prs_*) ;;
+  *)
+    echo "FATAL: personUid '$PERSON_UID' has unexpected shape (expected prs_…)" >&2
+    exit 64 ;;
+esac
+[ -n "$PERSON_UID_SRC" ] || PERSON_UID_SRC="arg:-u"
+
+# Slug + workspace + personUid → vault secret names. Mirrors
+# botSecretKey() / botCreatorKey() in hq-pro.
 # `<prs_…>/HQ_SLACK_BOT_TOKEN_<NAME>_<WORKSPACE>` — slash is the SSM
 # hierarchy separator so multiple operators can share a company vault
 # without colliding. personUid passes through verbatim (HQ uids
@@ -312,6 +348,17 @@ if [ "$CHECK_ONLY" -eq 0 ]; then
     echo "FATAL: missing $TEMPLATE_DIR/system-prompt.md — pack workers/ tree corrupt?" >&2
     exit 1
   fi
+fi
+
+# ── Pre-flight: worker model credential ───────────────────────────────────
+# Detached workers cannot use the interactive host's Claude Code auth broker.
+# Prove that the selected vault scope can inject a model key before Slack
+# connectivity succeeds and the watcher arms with workers that cannot start.
+if ! HQ_NO_UPDATE_CHECK=1 hq secrets "${HQ_SCOPE_ARGS[@]}" exec --only "$MODEL_SECRET" -- \
+  sh -c '[ -n "$ANTHROPIC_API_KEY" ]' >/dev/null 2>&1; then
+  echo "FATAL: $MODEL_SECRET not loadable from $SCOPE_LABEL vault for workers" >&2
+  echo "       set/grant $MODEL_SECRET in the selected vault, then retry." >&2
+  exit 1
 fi
 
 # ── Load token from vault (scope picked by --personal or -c <slug>) ────────
@@ -511,6 +558,7 @@ if [ "$CHECK_ONLY" -eq 1 ]; then
   echo "  scope:        $SCOPE_LABEL"
   echo "  person_uid:   $PERSON_UID (source: $PERSON_UID_SRC)"
   echo "  secret:       $SECRET_NAME"
+  echo "  model:        $MODEL_SECRET (loadable via scoped hq secrets exec)"
   if [ -n "${USER_TOKEN:-}" ]; then
     echo "  user_token:   $USER_TOKEN_SECRET (loaded; search backstop available)"
   else
@@ -1046,11 +1094,11 @@ EOF
           CLAUDE_EFFORT \
           CLAUDECODE \
           ANTHROPIC_BASE_URL \
-          ANTHROPIC_API_KEY \
           AI_AGENT \
           BAGGAGE
     export CLAUDE_STREAM_IDLE_TIMEOUT_MS=600000
-    nohup "$TEMPLATE_RUNNER" \
+    HQ_NO_UPDATE_CHECK=1 nohup hq secrets "${HQ_SCOPE_ARGS[@]}" exec --only "$MODEL_SECRET" -- \
+      "$TEMPLATE_RUNNER" \
       -t "$WORKER_TEMPLATE" \
       -n "$agent_name" \
       --timeout "$WORKER_TIMEOUT_SECS" \
@@ -1266,7 +1314,6 @@ EOF
           CLAUDE_EFFORT \
           CLAUDECODE \
           ANTHROPIC_BASE_URL \
-          ANTHROPIC_API_KEY \
           AI_AGENT \
           BAGGAGE
     export CLAUDE_STREAM_IDLE_TIMEOUT_MS=600000
@@ -1277,7 +1324,8 @@ EOF
     export DECISION_USER="$user"
     export DECISION_CHANNEL="$channel"
     export DECISION_THREAD_TS="$thread_ts"
-    nohup "$TEMPLATE_RUNNER" \
+    HQ_NO_UPDATE_CHECK=1 nohup hq secrets "${HQ_SCOPE_ARGS[@]}" exec --only "$MODEL_SECRET" -- \
+      "$TEMPLATE_RUNNER" \
       -t "$WORKER_TEMPLATE" \
       -n "$agent_name" \
       --timeout "$WORKER_TIMEOUT_SECS" \

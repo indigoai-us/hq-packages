@@ -1,6 +1,6 @@
 ---
 name: run-bot
-description: Run an HQ-issued Slack bot — arm a per-bot @-mention watcher that spawns an autonomous Claude worker per mention. Pass the bot's slug (e.g. `hassaan`), a scope flag (`-c <company-slug>` or `--personal`), and optionally a workspace (`-w <slack-team-domain>`; auto-derived for `--personal` from SLACK_CREDENTIALS_JSON). The operator's HQ personUid is auto-derived from `~/.hq/secrets-cache/prs_*/` (the dir name IS the personUid); pass `-u <prs_…>` only to override (e.g. for cross-operator company-vault setups). The watcher resolves `<personUid>/HQ_SLACK_BOT_TOKEN_<NAME>_<WORKSPACE>` from the chosen vault, infers the creator's Slack user_id (used as a DM gate), enumerates the bot's channels (periodically re-polled so newly-added channels start polling automatically), and dispatches workers. Workers respond in-thread, ignore DMs from non-creators, and never call AskUserQuestion.
+description: Run an HQ-issued Slack bot — arm a per-bot @-mention watcher that spawns an autonomous Claude worker per mention. Pass the bot's slug (e.g. `hassaan`), a scope flag (`-c <company-slug>` or `--personal`), and optionally a workspace (`-w <slack-team-domain>`; auto-derived for `--personal` from SLACK_CREDENTIALS_JSON). The watcher resolves scope/workspace before personUid, using the sole local cache entry or an exact selected-vault bot-token namespace match; pass `-u <prs_…>` to override. It verifies and injects scoped `ANTHROPIC_API_KEY` into detached workers, handles the one-time bypass-permissions gate, resolves `<personUid>/HQ_SLACK_BOT_TOKEN_<NAME>_<WORKSPACE>`, infers the creator's Slack user_id (used as a DM gate), enumerates channels, and dispatches workers. Workers respond in-thread, ignore DMs from non-creators, and never call AskUserQuestion.
 allowed-tools: Bash, Read, Monitor, TaskStop
 ---
 
@@ -33,13 +33,13 @@ Required arguments:
   (e.g. `indigo-ai`). Optional `-w <workspace>` flag; in `--personal`
   scope the watcher auto-derives it from `SLACK_CREDENTIALS_JSON` in
   the personal vault.
-- The **creator's HQ personUid** (`-u <prs_…>`). Optional —
-  auto-derived from `~/.hq/secrets-cache/prs_*/` (the directory `hq`
-  creates the first time you touch a personal-vault secret; the dir
-  name IS the personUid). Pass `-u` explicitly only when running a
-  watcher for a bot created by someone else in a shared company
-  vault, or on a machine where the cache directory doesn't exist
-  yet. The vault secret key is namespaced by this personUid —
+- The **creator's HQ personUid** (`-u <prs_…>`). Optional — the watcher
+  uses the sole `~/.hq/secrets-cache/prs_*/` entry when available. On a
+  cacheless (or ambiguous) machine it searches the selected vault for the
+  exact bot-token namespace and accepts only one match. Pass `-u`
+  explicitly when no unique match exists or when running a watcher for a
+  bot created by someone else in a shared company vault. The vault secret
+  key is namespaced by this personUid —
   `<prs_…>/HQ_SLACK_BOT_TOKEN_<NAME>_<WORKSPACE>` — so a shared
   company vault can hold the same bot slug under multiple operators
   without colliding.
@@ -75,12 +75,13 @@ common case):
      <bot-slug> { -c <company> | --personal } [-w <workspace>] [-u <prs_personUid>] --check
    ```
 
-   `--check` runs the startup pre-flight (workspace resolution, token
-   load, auth.test, users.conversations sample call, creator inference)
-   and exits 0 if everything is wired, non-zero with a clear error
-   otherwise. The output lines `workspace:` and `creator:` tell you
-   what the watcher resolved and where from. Always run `--check`
-   before arming — it's cheap to iterate on.
+   `--check` runs the startup pre-flight (scope/workspace + personUid
+   resolution, scoped `ANTHROPIC_API_KEY` load, token load, auth.test,
+   users.conversations sample call, creator inference) and exits 0 if
+   everything is wired, non-zero with a clear error otherwise. The output
+   lines `workspace:`, `person_uid:`, `model:`, and `creator:` tell you
+   what the watcher resolved and where from. Always run `--check` before
+   arming — it's cheap to iterate on.
 
 2. **Arm the watcher** via the `Monitor` tool:
 
@@ -167,6 +168,10 @@ common case):
 - **Never** include `AskUserQuestion` in the worker's allowed tools.
   Denied via both settings and system prompt — same belt-and-suspenders
   pattern as monitor-liveops.
+- **First-run bypass gate is automatic.** The vendored PTY wrapper detects
+  Claude's ANSI-rendered `Bypass Permissions` confirmation and sends the
+  already-decided Down + Enter answer exactly once. A worker must not wait
+  for an operator to clear this known launch gate.
 - If the bot token is missing from the chosen vault, abort with a
   clear error — do not poll without auth.
 - The DM gate is enforced inside the worker, not the watcher. The
@@ -205,6 +210,10 @@ creator id, so you can confirm before arming.
   the channel stays in the polling set. Created by `/hq-new-bot` and
   installed
   per-workspace via the OAuth callback.
+- Vault secret `ANTHROPIC_API_KEY` in the same selected personal/company
+  scope. The watcher requires it during `--check` and injects it only into
+  each detached worker via `hq secrets <scope> exec`; it never relies on
+  the host's interactive Claude Code authentication.
 - `hq` CLI on PATH.
 - `claude` CLI on PATH. The pack vendors its own worker dispatcher
   (`scripts/claude-worker.sh` + `scripts/claude-pty-spawn.py` +
