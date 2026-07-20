@@ -149,13 +149,9 @@ learned_from: discover/<repo>@<head_sha_short>
 ---
 ```
 
-If ≥1 policy was written, run:
-
-```bash
-bash core/scripts/build-policy-digest.sh
-```
-
-…so the next session loads it.
+If ≥1 policy was written, stop — digests are retired. The next session will
+pick up new policies via `inject-policy-on-trigger` (SessionStart). Do **not**
+run `build-policy-digest.sh` (script removed).
 
 ## Phase 6 — Index & report
 

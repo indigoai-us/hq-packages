@@ -59,8 +59,10 @@ actual repo names, URLs, workflow names, KPI probes) before touching anything.
 
 1. Resolve each PR ref → `{repo, number, title, branch, base}`. Anchor every
    `gh` call with `-R owner/repo`.
-2. Resolve the owning company; load `companies/{co}/policies/_digest.md` and
-   the manifest infra fields for deploy targets. Never guess credentials.
+2. Resolve the owning company; load company policy constraints via
+   frontmatter-only scan of `companies/{co}/policies/` (digests are retired —
+   SessionStart uses `inject-policy-on-trigger`) and the manifest infra fields
+   for deploy targets. Never guess credentials.
 3. Identify each repo's production deploy mechanism:
    - **Vercel git integration** — merge to main auto-deploys; watch via
      `vercel ls`/`vercel inspect` or the GitHub deployment status API.
