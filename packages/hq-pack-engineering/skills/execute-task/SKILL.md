@@ -495,7 +495,7 @@ Load policies via frontmatter-only gate. Use `bash core/scripts/read-policy-fron
 
 2. **Repo policies**: If working inside a repo, check `{repoPath}/.claude/policies/` if it exists. Same frontmatter-only pattern.
 
-3. **Global policies**: Prefer the compiled digest at `core/policies/_digest.md` if present (auto-loaded by SessionStart hook). If no digest, filter policies in `core/policies/` by `trigger` — don't load all.
+3. **Global policies**: Policy digests (`core/policies/_digest.md`) are **retired**. Filter policies in `core/policies/` by frontmatter `trigger` via `bash core/scripts/read-policy-frontmatter.sh {file}` — don't load all. SessionStart injects matching policies via `inject-policy-on-trigger`; do not look for a digest file.
 
 Include applicable policy rules in worker prompts (step 6b) under `### Applicable Policies`.
 
