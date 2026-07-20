@@ -1,7 +1,7 @@
 ---
 name: deep-plan
 description: Deep project planning — research subagents (codebase / HQ / repo) + 3-tier 15-question interview (Strategic / Architecture / Quality) with smart-skip and pushback. Use for large or strategically important PRDs. For lightweight planning, use /plan instead. Adversarial spec review is delegated to /review-plan after generation.
-allowed-tools: Task, Read, Write, Edit, Grep, Glob, Bash(git:*), Bash(qmd:*), Bash(ls:*), Bash(date:*), Bash(stat:*), Bash(core/scripts/read-policy-frontmatter.sh:*), Bash(core/scripts/build-policy-digest.sh:*), Bash(npx:*), Bash, AskUserQuestion
+allowed-tools: Task, Read, Write, Edit, Grep, Glob, Bash(git:*), Bash(qmd:*), Bash(ls:*), Bash(date:*), Bash(stat:*), Bash(core/scripts/read-policy-frontmatter.sh:*), Bash(npx:*), Bash, AskUserQuestion
 ---
 
 # Deep Plan — Research-First PRD Generation
