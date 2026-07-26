@@ -1,6 +1,6 @@
 ---
 name: run-bot
-description: Run an HQ-issued Slack bot — arm a per-bot @-mention watcher that spawns an autonomous Claude worker per mention. Pass the bot's slug (e.g. `hassaan`), a scope flag (`-c <company-slug>` or `--personal`), and optionally a workspace (`-w <slack-team-domain>`; auto-derived for `--personal` from SLACK_CREDENTIALS_JSON). The watcher resolves scope/workspace before personUid, using the sole local cache entry or an exact selected-vault bot-token namespace match; pass `-u <prs_…>` to override. It verifies and injects scoped `ANTHROPIC_API_KEY` into detached workers, handles the one-time bypass-permissions gate, resolves `<personUid>/HQ_SLACK_BOT_TOKEN_<NAME>_<WORKSPACE>`, infers the creator's Slack user_id (used as a DM gate), enumerates channels, and dispatches workers. Workers respond in-thread, ignore DMs from non-creators, and never call AskUserQuestion.
+description: Run an HQ-issued Slack bot — arm a per-bot @-mention watcher that spawns an autonomous Claude worker per mention. Pass the bot's slug (e.g. `my-bot`), a scope flag (`-c <company-slug>` or `--personal`), and optionally a workspace (`-w <slack-team-domain>`; auto-derived for `--personal` from SLACK_CREDENTIALS_JSON). The watcher resolves scope/workspace before personUid, using the sole local cache entry or an exact selected-vault bot-token namespace match; pass `-u <prs_…>` to override. It verifies and injects scoped `ANTHROPIC_API_KEY` into detached workers, handles the one-time bypass-permissions gate, resolves `<personUid>/HQ_SLACK_BOT_TOKEN_<NAME>_<WORKSPACE>`, infers the creator's Slack user_id (used as a DM gate), enumerates channels, and dispatches workers. Workers respond in-thread, ignore DMs from non-creators, and never call AskUserQuestion.
 allowed-tools: Bash, Read, Monitor, TaskStop
 ---
 
@@ -30,7 +30,7 @@ Required arguments:
   style.) Should match the `<company>` the operator passed to
   `/hq-new-bot` at create time — that's the scope where the token landed.
 - A **workspace** — the Slack `team_domain` the bot is installed in
-  (e.g. `indigo-ai`). Optional `-w <workspace>` flag; in `--personal`
+  (e.g. `acme-ai`). Optional `-w <workspace>` flag; in `--personal`
   scope the watcher auto-derives it from `SLACK_CREDENTIALS_JSON` in
   the personal vault.
 - The **creator's HQ personUid** (`-u <prs_…>`). Optional — the watcher
@@ -54,16 +54,16 @@ multiple operators. On company installs the install-callback also
 writes an ACL row at `(cmp_X, <personUid>/*)` granting the operator
 admin, so they can read their own secrets back.
 
-Examples (operator's HQ personUid `prs_01HASSAAN` is auto-derived
-from `~/.hq/secrets-cache/prs_01HASSAAN/`, so `-u` is omitted in the
+Examples (operator's HQ personUid `prs_01ALICE` is auto-derived
+from `~/.hq/secrets-cache/prs_01ALICE/`, so `-u` is omitted in the
 common case):
 
 | Args | Vault secret read |
 |------|-------------------|
-| `hassaan --personal` | personal vault → `prs_01HASSAAN/HQ_SLACK_BOT_TOKEN_HASSAAN_INDIGO_AI` (workspace + personUid auto-derived) |
-| `support-bot -c indigo -w indigo-ai` | indigo company vault → `prs_01HASSAAN/HQ_SLACK_BOT_TOKEN_SUPPORT_BOT_INDIGO_AI` |
-| `my-cool-bot -c personal -w acme-co` | personal vault (alias) → `prs_01HASSAAN/HQ_SLACK_BOT_TOKEN_MY_COOL_BOT_ACME_CO` |
-| `shared-bot -c indigo -u prs_01ALICE` | indigo company vault, Alice's bot → `prs_01ALICE/HQ_SLACK_BOT_TOKEN_SHARED_BOT_INDIGO_AI` (requires Alice already granted you ACL admin on `prs_01ALICE/*`) |
+| `my-bot --personal` | personal vault → `prs_01ALICE/HQ_SLACK_BOT_TOKEN_MY_BOT_ACME_AI` (workspace + personUid auto-derived) |
+| `support-bot -c acme -w acme-ai` | acme company vault → `prs_01ALICE/HQ_SLACK_BOT_TOKEN_SUPPORT_BOT_ACME_AI` |
+| `my-cool-bot -c personal -w acme-co` | personal vault (alias) → `prs_01ALICE/HQ_SLACK_BOT_TOKEN_MY_COOL_BOT_ACME_CO` |
+| `shared-bot -c acme -u prs_01BOB` | acme company vault, Alice's bot → `prs_01BOB/HQ_SLACK_BOT_TOKEN_SHARED_BOT_ACME_AI` (requires Alice already granted you ACL admin on `prs_01BOB/*`) |
 
 ## Procedure
 
@@ -224,7 +224,7 @@ creator id, so you can confirm before arming.
 
 If the vault token comes from an app created via `/hq-new-bot`, the
 bot already has all the required scopes — that's the canonical
-Hassaan's-Assistant scope set.
+the bot's scope set.
 
 ## Forking
 

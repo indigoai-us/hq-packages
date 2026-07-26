@@ -65,11 +65,11 @@ bash core/packages/hq-pack-slack-bot/scripts/watch.sh \
 
 | Arg | What it does |
 |-----|--------------|
-| `<bot-slug>` | Lowercase-dashed bot name (e.g. `hassaan`). Combined with workspace + personUid to resolve vault secret `<personUid>/HQ_SLACK_BOT_TOKEN_<NAME>_<WORKSPACE>`. |
+| `<bot-slug>` | Lowercase-dashed bot name (e.g. `my-bot`). Combined with workspace + personUid to resolve vault secret `<personUid>/HQ_SLACK_BOT_TOKEN_<NAME>_<WORKSPACE>`. |
 | `-u <prs_personUid>` | Override for the auto-derived operator personUid. The watcher first uses the sole `~/.hq/secrets-cache/prs_*/` entry; on a cacheless (or ambiguous) machine it finds the exact `<prs_…>/HQ_SLACK_BOT_TOKEN_<NAME>_<WORKSPACE>` entry in the selected vault. Pass `-u` when that vault has no unique match or when running someone else's bot. |
 | `-c <company-slug>` | Pull the token from that company's HQ vault. `-c personal` is an alias for `--personal`. |
 | `--personal` | Pull the token from the operator's personal vault. |
-| `-w <workspace>` | Slack `team_domain` the bot is installed in (e.g. `indigo-ai`). Required for company scope; optional for `--personal` (auto-derived from `SLACK_CREDENTIALS_JSON.team_domain`). |
+| `-w <workspace>` | Slack `team_domain` the bot is installed in (e.g. `acme-ai`). Required for company scope; optional for `--personal` (auto-derived from `SLACK_CREDENTIALS_JSON.team_domain`). |
 | `--check` | Run startup pre-flight only and exit 0 (workspace + noninteractive identity + model credential load, token load, auth.test, channels sample call, creator inference). |
 
 ## What the watcher does
@@ -142,10 +142,10 @@ protocol + JSON envelope + DM gate intact, replace the placeholder
 
 ## Credential handling & injection posture (governed)
 
-This pack is conformant with the HQ governing policy
-`indigo-agent-scoped-credential-handling-and-injection-posture`
-(`companies/indigo/policies/`, enforcement: **hard**) — it is brought
-into conformance, not granted a carve-out. The contract:
+This pack is conformant with the installing company's governing policy
+for agent-scoped credential handling and injection posture
+(`companies/{co}/policies/`, enforcement: **hard** where defined) — it is
+brought into conformance, not granted a carve-out. The contract:
 
 - **Vault is the sole source.** The bot token is resolved ONLY from the
   HQ vault via `hq secrets <scope> get --reveal

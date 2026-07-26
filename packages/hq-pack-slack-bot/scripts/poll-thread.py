@@ -16,7 +16,7 @@ Required env:
   BOT_TOKEN
 
 Required args:
-  --channel <id>          Slack channel id (e.g. C079H1XBN9Y)
+  --channel <id>          Slack channel id (e.g. C0123456789)
   --thread-ts <ts>        The thread to poll
   --bot <user_id>         Bot user id to filter out from REPLY events
 

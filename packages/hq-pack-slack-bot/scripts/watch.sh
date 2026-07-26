@@ -13,7 +13,7 @@
 #     HQ_SLACK_BOT_TOKEN_<UPPER_BOT>_<UPPER_WORKSPACE>
 #       in  --personal  OR  --company <slug>
 #
-# Workspace = Slack team_domain (e.g. "indigo-ai"). The workspace
+# Workspace = Slack team_domain (e.g. "acme-ai"). The workspace
 # component lets the same bot slug live in multiple workspaces without
 # colliding on vault keys. Resolution order:
 #   1. Explicit -w <workspace-slug>.

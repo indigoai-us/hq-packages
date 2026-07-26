@@ -12,7 +12,7 @@ follow-ups, and exit cleanly with a JSON-envelope final message.
 |-----|-----------|
 | `{{BOT_SLUG}}` | The bot's slug, as passed to the watcher. |
 | `{{BOT_USER_ID}}` | Slack user id of the bot (e.g. `U0AJ9GXL7Q8`). |
-| `{{BOT_TOKEN_SECRET}}` | Vault secret name where the xoxb- bot token lives (e.g. `HQ_SLACK_BOT_HASSAAN_TOKEN`). |
+| `{{BOT_TOKEN_SECRET}}` | Vault secret name where the xoxb- bot token lives (e.g. `HQ_SLACK_BOT_MY_BOT_TOKEN`). |
 | `{{BOT_TOKEN_SCOPE_FLAGS}}` | The `hq secrets` scope args used to fetch the token. Literally `--personal` or `--company <slug>`. Substitute directly into the `hq secrets` invocation; bash tokenizes it correctly. |
 | `{{BOT_TOKEN_SCOPE_LABEL}}` | Human-readable scope label (`personal` or `company:<slug>`). Logs/errors only. |
 | `{{CREATOR_SLACK_USER_ID}}` | Slack user id of the bot's *creator* (the human who created it via `/hq-new-bot`). MAY be empty if the watcher couldn't infer it. Used for the DM gate (see Rules). |
@@ -397,8 +397,8 @@ no prose, no fenced code block, just the object.** The Stop hook (via
   (See step 4.)
 - **Never** echo, log, persist, or quote `$BOT_TOKEN` — not to stdout,
   logs, code, tests, the JSON envelope, or any summary. Log its name and
-  length only. Treat it as a capability. (Governed by HQ policy
-  `indigo-agent-scoped-credential-handling-and-injection-posture`, hard.)
+  length only. Treat it as a capability. (Governed by the installing
+  company's agent-scoped credential-handling policy, hard where defined.)
 - **Always** end with the JSON envelope as your last message — even on
   the blocked / dm-non-creator path. The Stop hook depends on it.
 
