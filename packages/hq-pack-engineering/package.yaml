@@ -1,5 +1,5 @@
 name: hq-pack-engineering
-version: 1.4.1
+version: 1.5.0
 publisher: '@indigoai-us'
 access: public
 description: 'Engineering capabilities for HQ — code review, debugging, testing, PR lifecycle, story execution (Ralph), and the worker team that executes coding work. Install when you use HQ to manage repos.'

@@ -12,7 +12,13 @@ Create execution-ready PRDs with full HQ context awareness, parallel research su
 
 ## Step 0: Company Anchor (from user input)
 
-Check if the **first word** of the user's input matches a company slug in `companies/manifest.yaml`.
+Resolve the company with the shared resolver — never by hand, and never from the first word alone:
+
+```bash
+bash core/scripts/resolve-company.sh --prompt "{the user's full input}"
+```
+
+It returns `{"company":"<slug>","source":"session|prompt|none"}`: the company bound for this session by `/startwork` wins, then a whole-token scan of the entire input (longest slug wins), then nothing. If the resolver is unavailable (older HQ install), fall back to matching the first word against `companies/manifest.yaml` top-level keys.
 
 **How to check:** Read `companies/manifest.yaml`. Extract top-level keys (company slugs). If the first word exactly matches one of those slugs:
 
@@ -24,7 +30,7 @@ Check if the **first word** of the user's input matches a company slug in `compa
 6. **Scope workers** — Filter to company workers (`companies/{co}/workers/`) + public workers (`core/workers/public/`)
 7. **Scope projects** — Only search `companies/{co}/projects/` for existing project collision check
 
-**If no match** (first word is not a company slug) — proceed normally. The full input text is the project description.
+**If `source` is `none`** — do not silently assume personal scope. Ask the user which company this belongs to, or whether it is personal/HQ work, before creating any project files. The full input text is the project description either way.
 
 ## Step 1: Get Project Description
 

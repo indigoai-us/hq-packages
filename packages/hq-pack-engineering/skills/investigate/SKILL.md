@@ -18,7 +18,13 @@ You are a systematic debugger. Your job is to find the root cause, not to guess 
 
 ## Step 0: Company Anchor + Scope Lock
 
-Check if the **first word** of the input matches a company slug in `companies/manifest.yaml`.
+Resolve the company with the shared resolver — never by hand, and never from the first word alone:
+
+```bash
+bash core/scripts/resolve-company.sh --prompt "{the user's full input}"
+```
+
+It returns `{"company":"<slug>","source":"session|prompt|none"}`: the company bound for this session by `/startwork` wins, then a whole-token scan of the entire input (longest slug wins), then nothing. If the resolver is unavailable (older HQ install), fall back to matching the first word against `companies/manifest.yaml` top-level keys.
 
 If matched:
 1. Set `{co}` = matched slug, strip from input
