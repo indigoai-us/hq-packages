@@ -10,21 +10,33 @@ Create execution-ready PRDs with full HQ context awareness. Lightweight flow —
 
 **Important:** Do NOT implement. Just create the PRD.
 
-## Step 0: Company Anchor (from user input)
+## Step 0: Company Anchor (resolver, not first word)
 
-Check if the **first word** of the user's input matches a company slug in `companies/manifest.yaml`.
+Resolve the company with the shared resolver — never by hand, and never from the first word alone:
 
-**How to check:** Read `companies/manifest.yaml`. Extract top-level keys (company slugs). If the first word exactly matches one of those slugs:
+```bash
+bash core/scripts/resolve-company.sh --prompt "{the user's full input}"
+```
 
-1. **Set `{co}`** = matched slug for the entire flow. Strip the slug — the remaining text is the project description
-2. **Announce:** "Anchored on **{co}**"
+It returns `{"company":"<slug>","source":"session|prompt|none"}` and resolves in this order:
+
+1. **`session`** — the company already bound for this session (`workspace/sessions/<id>/meta.yaml`, written by `/startwork`). This is authoritative. The user already told HQ where they are, so no prompt heuristic may override it.
+2. **`prompt`** — a manifest slug appearing as a whole token anywhere in the input, not just at position 0. Longest slug wins; an exact length tie breaks on earliest occurrence.
+3. **`none`** — nothing resolved.
+
+If the resolver is unavailable (older HQ install), fall back to the previous behavior: match the first word against `companies/manifest.yaml` top-level keys.
+
+If `company` is non-empty:
+
+1. **Set `{co}`** = the resolved slug for the entire flow. If the slug was the leading word of the input, strip it — the remaining text is the project description. If it appeared mid-sentence, leave the input intact
+2. **Announce:** "Anchored on **{co}**" (add "— from this session's `/startwork`" when `source` is `session`)
 3. **Load policies (frontmatter-only)** — For each file in `companies/{co}/policies/` (skip `example-policy.md`), run `bash core/scripts/read-policy-frontmatter.sh {file}`. Note `enforcement: hard` titles. For hard-enforcement policies only, additionally read the `## Rule` section with a targeted range. The SessionStart hook also injects the company policy digest at `companies/{co}/policies/_digest.md` — prefer that if present. Apply as constraints throughout the PRD
 4. **Scope qmd searches** — If company has `qmd_collections` in manifest, use `-c {collection}` for all `qmd` calls
 5. **Pre-load repos** — Extract `{co}.repos[]` from manifest. Present as repo options in Batch 3 Q10
 6. **Scope workers** — Filter to company workers (`companies/{co}/workers/`) + public workers (`workers/public/`)
 7. **Scope projects** — Only search `companies/{co}/projects/` for existing project collision check
 
-**If no match** (first word is not a company slug) — proceed normally. The full input text is the project description.
+**If `source` is `none`** — do not silently assume personal scope. Ask the user which company this belongs to, or whether it is personal/HQ work, before creating any project files. Silently filing company work under `personal/projects/` hides it from the owning company permanently. The full input text is the project description either way.
 
 ## Step 1: Get Project Description
 
@@ -99,7 +111,7 @@ Fix any gaps before proceeding.
 
 Ask the user for project slug (or infer from description). Then:
 1. If `{co}` already set by Step 0: use it directly (skip company detection)
-   If NOT set: determine company from context (infer from description, repo, or ask the user)
+   If NOT set: ask the user. Do not infer a tenant from the description — Step 0's resolver already had the session bind and the full prompt to work with, so an inference here is a guess, and a wrong guess files the work where its company will never find it
 2. Check if `companies/{co}/projects/{name}/` exists (also check root `projects/{name}/` for personal/HQ)
    - If exists: ask the user "Project exists. Continue editing or choose different name?"
 3. Validate slug format (lowercase, hyphens only)
