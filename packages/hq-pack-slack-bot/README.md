@@ -66,31 +66,34 @@ bash core/packages/hq-pack-slack-bot/scripts/watch.sh \
 | Arg | What it does |
 |-----|--------------|
 | `<bot-slug>` | Lowercase-dashed bot name (e.g. `hassaan`). Combined with workspace + personUid to resolve vault secret `<personUid>/HQ_SLACK_BOT_TOKEN_<NAME>_<WORKSPACE>`. |
-| `-u <prs_personUid>` | Override for the auto-derived operator personUid. Optional — by default the watcher reads it from `~/.hq/secrets-cache/prs_*/` (the dir name IS the personUid; created by `hq` on first personal-vault touch). Pass `-u` only when running someone else's bot in a shared company vault, or on a machine where the cache directory doesn't exist yet. |
+| `-u <prs_personUid>` | Override for the auto-derived operator personUid. The watcher first uses the sole `~/.hq/secrets-cache/prs_*/` entry; on a cacheless (or ambiguous) machine it finds the exact `<prs_…>/HQ_SLACK_BOT_TOKEN_<NAME>_<WORKSPACE>` entry in the selected vault. Pass `-u` when that vault has no unique match or when running someone else's bot. |
 | `-c <company-slug>` | Pull the token from that company's HQ vault. `-c personal` is an alias for `--personal`. |
 | `--personal` | Pull the token from the operator's personal vault. |
 | `-w <workspace>` | Slack `team_domain` the bot is installed in (e.g. `indigo-ai`). Required for company scope; optional for `--personal` (auto-derived from `SLACK_CREDENTIALS_JSON.team_domain`). |
-| `--check` | Run startup pre-flight only and exit 0 (workspace + token load, auth.test, channels sample call, creator inference). |
+| `--check` | Run startup pre-flight only and exit 0 (workspace + noninteractive identity + model credential load, token load, auth.test, channels sample call, creator inference). |
 
 ## What the watcher does
 
-1. Resolves `<bot-slug>` + scope + workspace → vault → token, token →
-   bot user_id via `auth.test`.
-2. Infers the bot's *creator* (used as a DM gate downstream — see
+1. Resolves scope + workspace, then resolves the bot's noninteractive
+   `personUid` from the local cache or one exact selected-vault token
+   namespace. It also verifies the scoped worker model credential can load.
+2. Resolves `<bot-slug>` + scope + workspace + personUid → vault → token,
+   token → bot user_id via `auth.test`.
+3. Infers the bot's *creator* (used as a DM gate downstream — see
    below).
-3. Calls `users.conversations` to enumerate every channel the bot is a
+4. Calls `users.conversations` to enumerate every channel the bot is a
    member of (public + private + DMs + MPIMs, paginated).
-4. Polls each channel's `conversations.history` since a per-channel
+5. Polls each channel's `conversations.history` since a per-channel
    cursor.
-5. Filters for messages whose `text` contains `<@BOT_USER_ID>` — that's
+6. Filters for messages whose `text` contains `<@BOT_USER_ID>` — that's
    how Slack renders `@`-mentions over the wire.
-6. Re-polls `users.conversations` on a cadence (default 300s) and
+7. Re-polls `users.conversations` on a cadence (default 300s) and
    compares the result as a *set* against the prior list. Newly-added
    channels get a `now` cursor and start polling immediately; emits
    `CHANNEL_JOINED` / `CHANNEL_LEFT` / `CHANNELS_REFRESHED` events.
-7. Dedupes against `/tmp/hq-slack-bot.<bot-slug>.spawned/<ts>` so
+8. Dedupes against `/tmp/hq-slack-bot.<bot-slug>.spawned/<ts>` so
    restarts inside the same session don't re-spawn.
-8. **Workspace-wide search backstop.** Periodically (default 30s) calls
+9. **Workspace-wide search backstop.** Periodically (default 30s) calls
    `search.messages` for the literal `<@BOT_USER_ID>` token and dispatches
    workers for any newly-indexed hits not already spawned. This catches
    in-thread @-mentions in threads the channel + thread pollers never
@@ -103,7 +106,7 @@ bash core/packages/hq-pack-slack-bot/scripts/watch.sh \
    watcher emits `SEARCH_DISABLED` once then skips for the lifetime of
    the watcher (re-install the bot to enable). Disable entirely with
    `MENTION_SEARCH_POLL_ENABLE=0`.
-9. Calls the vendored
+10. Calls the vendored
    `scripts/claude-worker-template.sh -t slack-mention-worker` with
    per-spawn `--var` substitutions (channel, thread_ts, mention text,
    reporter, bot identity, creator id, scope flags). The runner pulls
@@ -128,6 +131,9 @@ will likely customize per use case. Out of the box it:
    responds in-thread.
 6. Exits on idle / resolved keyword / 60-minute hard cap.
 7. Emits the JSON envelope required by the Stop hook before exit.
+8. Starts through a PTY wrapper that recognizes the one-time Claude
+   bypass-permissions confirmation across ANSI redraws and sends Down + Enter
+   exactly once, so a first worker cannot hang before its prompt runs.
 
 `workers/slack-mention-worker/system-prompt.md` is the easiest place
 to teach the worker something domain-specific — keep the interaction
@@ -156,6 +162,11 @@ into conformance, not granted a carve-out. The contract:
 - **Per-entity identity.** Each bot is its own per-entity Slack app with
   its own scoped token; the watcher never falls back to another entity's
   credential.
+- **Worker model credential is scoped and injected.** `ANTHROPIC_API_KEY`
+  must be present in the same selected vault scope. The watcher verifies it
+  in `--check` and launches every detached worker through `hq secrets
+  <scope> exec --only ANTHROPIC_API_KEY -- …`; it never inherits or deletes
+  a host-managed model key.
 - **Verify identity before acting.** The watcher runs `auth.test` to
   bind the token to its real `bot_user_id` before arming.
 - **Scoped client-held credential, not a broker endpoint.** Capability
@@ -181,7 +192,8 @@ Slack user_id at startup, in this order:
    `@`-mentions and only responds in channels.
 
 The `--check` output reports both the resolved creator id and the
-source it came from, so you can confirm before arming.
+source it came from, along with the resolved `person_uid` and loadable model
+credential, so you can confirm before arming.
 
 ## Operational notes
 

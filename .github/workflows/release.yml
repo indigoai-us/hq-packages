@@ -15,20 +15,31 @@ concurrency:
   group: release-npm
   cancel-in-progress: false
 
+# Trusted publisher on npm must list this exact workflow filename: release.yml
+# (org/repo + filename must match each package's Trusted Publisher config).
 permissions:
   contents: read
+  id-token: write # Required for OIDC → npm trusted publishing
 
 jobs:
   release:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: 20
+          # Trusted publishing needs Node >= 22.14 and npm CLI >= 11.5.1
+          node-version: 24
           registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Ensure npm supports trusted publishing
+        run: |
+          set -euo pipefail
+          npm install -g npm@latest
+          npm --version
 
       - name: Run pack tests (gate)
         shell: bash
@@ -50,19 +61,16 @@ jobs:
       - name: Publish changed packages
         shell: bash
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
         run: |
           set -euo pipefail
           shopt -s nullglob
 
-          if [[ -z "${NODE_AUTH_TOKEN:-}" ]]; then
-            echo "::notice::NPM_TOKEN is not configured; publishing is skipped."
-            exit 0
-          fi
-
+          expected_repo='https://github.com/indigoai-us/hq-packages.git'
           published=0
           skipped=0
+          failed=0
+          failed_names=()
 
           for package_json in packages/*/package.json; do
             package_dir="$(dirname "$package_json")"
@@ -76,6 +84,17 @@ jobs:
 
             name="$(node -p "require('./$package_json').name")"
             version="$(node -p "require('./$package_json').version")"
+            repo_url="$(node -p "const r=require('./$package_json').repository; typeof r === 'string' ? r : (r && r.url) || ''")"
+
+            package_manifest="$package_dir/package.yaml"
+            if [[ -f "$package_manifest" ]]; then
+              manifest_version="$(sed -n 's/^version:[[:space:]]*//p' "$package_manifest")"
+              if [[ -z "$manifest_version" || "$manifest_version" != "$version" ]]; then
+                echo "::error file=$package_json::package.json version '$version' does not match package.yaml version '${manifest_version:-missing}'"
+                exit 1
+              fi
+            fi
+
             published_version="$(npm view "$name@$version" version 2>/dev/null || true)"
 
             if [[ "$published_version" == "$version" ]]; then
@@ -84,18 +103,34 @@ jobs:
               continue
             fi
 
+            if [[ "$repo_url" != "$expected_repo" ]]; then
+              echo "::error file=$package_json::repository.url must be '$expected_repo' for npm trusted publishing (got '${repo_url:-missing}')"
+              exit 1
+            fi
+
             if [[ "${DRY_RUN:-false}" == "true" ]]; then
               echo "DRY_RUN=true: would publish $name@$version from $package_dir"
               ((skipped += 1))
               continue
             fi
 
-            echo "Publishing $name@$version from $package_dir"
-            # Publish the folder from the repo root so npm uses the root .npmrc
-            # (with the auth token written by setup-node); npm does not walk up
-            # parent dirs for project config, so `cd $package_dir` would lose it.
-            npm publish "$package_dir" --access public
-            ((published += 1))
+            echo "Publishing $name@$version from $package_dir via trusted publisher (OIDC)"
+            # ./ prefix: bare "packages/foo" is parsed as github:packages/foo.
+            # No NPM_TOKEN: npm exchanges the Actions OIDC token with the
+            # trusted publisher configured for this repo + release.yml.
+            # Continue on per-pack failure so one missing TP binding does not
+            # block later packs that are correctly configured.
+            if npm publish "./$package_dir" --access public; then
+              ((published += 1))
+            else
+              echo "::error::Failed to publish $name@$version (often missing npm Trusted Publisher for this package + release.yml)"
+              failed_names+=("$name@$version")
+              ((failed += 1))
+            fi
           done
 
-          echo "Summary: published=$published skipped=$skipped"
+          echo "Summary: published=$published skipped=$skipped failed=$failed"
+          if ((failed > 0)); then
+            echo "::error::Publish failures: ${failed_names[*]}"
+            exit 1
+          fi

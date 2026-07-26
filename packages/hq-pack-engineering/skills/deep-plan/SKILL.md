@@ -1,7 +1,7 @@
 ---
 name: deep-plan
 description: Deep project planning — research subagents (codebase / HQ / repo) + 3-tier 15-question interview (Strategic / Architecture / Quality) with smart-skip and pushback. Use for large or strategically important PRDs. For lightweight planning, use /plan instead. Adversarial spec review is delegated to /review-plan after generation.
-allowed-tools: Task, Read, Write, Edit, Grep, Glob, Bash(git:*), Bash(qmd:*), Bash(ls:*), Bash(date:*), Bash(stat:*), Bash(core/scripts/read-policy-frontmatter.sh:*), Bash(core/scripts/build-policy-digest.sh:*), Bash(npx:*), Bash, AskUserQuestion
+allowed-tools: Task, Read, Write, Edit, Grep, Glob, Bash(git:*), Bash(qmd:*), Bash(ls:*), Bash(date:*), Bash(stat:*), Bash(core/scripts/read-policy-frontmatter.sh:*), Bash(npx:*), Bash, AskUserQuestion
 ---
 
 # Deep Plan — Research-First PRD Generation
@@ -24,7 +24,7 @@ It returns `{"company":"<slug>","source":"session|prompt|none"}`: the company bo
 
 1. **Set `{co}`** = matched slug for the entire flow. Strip the slug — the remaining text is the project description
 2. **Announce:** "Anchored on **{co}**"
-3. **Load policies (frontmatter-only)** — For each file in `companies/{co}/policies/` (skip `example-policy.md`), run `bash core/scripts/read-policy-frontmatter.sh {file}`. Note `enforcement: hard` titles. For hard-enforcement policies only, additionally read the `## Rule` section with a targeted range. The SessionStart hook also injects the company policy digest at `companies/{co}/policies/_digest.md` — prefer that if present. Apply as constraints throughout the PRD
+3. **Load policies (frontmatter-only)** — For each file in `companies/{co}/policies/` (skip `example-policy.md`, `README.md`, and any `_digest.md` leftover), run `bash core/scripts/read-policy-frontmatter.sh {file}`. Note `enforcement: hard` titles. For hard-enforcement policies only, additionally read the `## Rule` section with a targeted range. Policy digests (`**/policies/_digest.md`) are **retired** — SessionStart now injects matching policies via `inject-policy-on-trigger`; do not look for or prefer a digest file. Apply hard rules as constraints throughout the PRD
 4. **Scope qmd searches** — If company has `qmd_collections` in manifest, use `-c {collection}` for all `qmd` calls
 5. **Pre-load repos** — Extract `{co}.repos[]` from manifest. Present as repo options in the Architecture tier repo question
 6. **Scope workers** — Filter to company workers (`companies/{co}/workers/`) + public workers (`core/workers/public/`)
@@ -70,7 +70,7 @@ If `{co}` is anchored, scope all searches to that company.
 - Already loaded in Step 0 (frontmatter-only). Do NOT re-read here. Note constraints from that scan
 
 **Repo Policies (if repo resolved):**
-- If target repo identified, list files in `{repoPath}/.claude/policies/` (if dir exists), then for each run `bash core/scripts/read-policy-frontmatter.sh {file}`. Prefer the repo digest at `{repoPath}/.claude/policies/_digest.md` if present (SessionStart hook injects it). For hard-enforcement policies, additionally read the `## Rule` section
+- If target repo identified, list files in `{repoPath}/.claude/policies/` (if dir exists; skip `README.md` / `_digest.md`), then for each run `bash core/scripts/read-policy-frontmatter.sh {file}`. Do not prefer a digest file (retired). For hard-enforcement policies, additionally read the `## Rule` section
 
 **Target Repo (if repo specified or discovered):**
 - If anchored: company repos already pre-loaded from manifest. Present as options
