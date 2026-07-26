@@ -19,9 +19,10 @@ failure/heal/re-verify cycle plus standing monitoring. A PR is not "shipped"
 when it merges; it is shipped when the live user-facing path works and a
 standing monitor is watching it.
 
-Reference implementation of the full loop: the 2026-07-08 session that shipped
-hq-console PRs #419/#420 + hq-pro #1028 (Team signup funnel) — journal at
-`companies/indigo/projects/hq-selfserve-team-signup/journal/2026-07-08-new-buyer-create-company.md`.
+A worked example of the full loop looks like: one session takes a paired
+frontend and backend PR from open through merged, deployed, smoke-verified
+against the live signup path, and monitored until the declared KPIs are healthy
+— with the session journal kept in that project's `journal/` directory.
 
 ## Input
 
