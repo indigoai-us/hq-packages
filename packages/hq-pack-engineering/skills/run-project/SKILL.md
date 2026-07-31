@@ -40,6 +40,13 @@ If no execution mode is supplied, route to `--inline`. This is the default becau
 
 Use `--interactive` only when the user asks to steer edits directly in the parent session. Use `--ralph-mode` for long unattended runs where you do not want to be prompted between stories — it executes the identical worker-authoritative story loop, just without the pauses.
 
+**Recommendation posture:** always recommend `--inline`. Inline runs **continuously — no pause between stories** — except when either condition holds:
+
+1. The PRD has **more than 10 incomplete stories** → pause at the preflight plan for one approval, then run continuously.
+2. A story **requires session mode** (its notes or classification demand parent-driven interactive steering) → pause before that story only, run it interactively, then resume continuous flow.
+
+Everything else auto-continues exactly like ralph-mode. Failed or blocked stories still stop the queue.
+
 > **Note on the legacy detached orchestrator.** Earlier versions of this skill launched a detached shell subprocess (`nohup bash run-project.sh … --engine claude`) that ran one headless builder per story. That path is retired. `run-project.sh`'s execution loop is frozen and kept only for `--status`, `--dry-run`, and `--help`; it no longer runs stories, and it has no `claude` builder. Ralph now runs inline in the active session — no detached process, no per-story subprocess, no `claude -p` billing surface. The `--engine`/`--builder`, `--swarm`, `--tmux`, `--codex-autofix`, and `--no-monitor` flags belonged to that retired loop and are no longer accepted.
 
 ## Step 2 — Status, Help, and Dry Run
@@ -80,7 +87,7 @@ spawn_agent({
 wait_agent(...)
 ```
 
-Display the plan and ask the user to approve, adjust, switch to `--interactive`, switch to `--ralph-mode`, or stop. If structured question tooling is unavailable, use the plain-text fallback required by `core/policies/hq-codex-decision-gate-fallback.md`.
+Display the plan. If the queue has **≤10 incomplete stories and none require session mode**, proceed directly into the story loop without an approval stop. Otherwise (>10 stories, or session-mode stories present) ask the user to approve, adjust, switch to `--interactive`, switch to `--ralph-mode`, or stop. If structured question tooling is unavailable, use the plain-text fallback required by `core/policies/hq-codex-decision-gate-fallback.md`.
 
 ### 3b. Story Loop
 
@@ -135,7 +142,7 @@ wait_agent(...)
 7. Mark `passes: true` only after status is `passed`, worker proof passes, back-pressure is acceptable, and commit verification succeeds.
 8. Update `workspace/orchestrator/{project}/state.json`.
 9. Narrate one line per story to the user: `[{story_id}] {status} · {files_changed} files · {first_commit_short_sha}`. Anything longer goes to `workspace/threads/journal/<date>/<story-id>.md`, not the parent transcript.
-10. Pause between stories for continue / adjust / stop.
+10. Auto-continue to the next incomplete story until the queue is empty or a story is `failed`/`blocked` (then surface and stop). Pause only per the recommendation-posture exceptions in Step 1: >10 incomplete stories (single preflight approval) or a story that requires session mode (pause before that story only).
 
 ### 3c. Regression Gates
 
@@ -153,7 +160,7 @@ On failure, surface the summary and ask whether to fix, adjust, stop, or switch 
 
 - Use exactly one preflight explorer, one story worker per story, and one regression-gate worker at gate cadence.
 - Do not simulate `/execute-task` by spawning worker-phase agents from the parent. If the story worker cannot run `/execute-task`, pause and switch modes.
-- Do not swarm in default inline mode. `--swarm` belongs to Ralph/headless; extra review or QA agents in inline mode require a high-risk trigger or explicit user opt-in after naming the cost.
+- **Prefer sub-agent swarming for speed.** When incomplete stories are mutually independent (no dependency edges between them and no overlapping declared files), spawn their story workers **in parallel** — one worker per story, dispatched in the same batch — instead of serially. Validate each returned JSON, worker proof, and commit per story as replies arrive; run regression gates after the batch. Stories with dependencies or file overlap still run sequentially. Extra review or QA agents beyond the story workers still require a high-risk trigger or explicit user opt-in after naming the cost.
 - Do not read raw test logs, full `*.output.json`, or long command output in the parent. Use compact JSON, strip `stdout_tail` / `stderr_tail`, or cap inspection with `tail -c`.
 
 ## Step 4 — Parent-Driven Interactive Codex Execution
@@ -204,7 +211,7 @@ If any pre-flight check cannot be satisfied, stop and surface it; do not start t
 The operational differences from default inline are then:
 
 1. **Skip the preflight approval gate (Step 3a).** Still spawn the one read-only explorer to build the plan, but do not pause for approval — log the plan to `workspace/orchestrator/{project}/codex-session-plan.md` and proceed.
-2. **Auto-advance.** Run the Step 3b story loop for every approved incomplete story back to back. Do not pause between stories (skip Step 3b.10). All per-story invariants still hold: JSON-validate the worker return, enforce the worker-proof gate, verify parent-visible commits, mark `passes: true` only after verification, and update `state.json` after each story.
+2. **Auto-advance.** Run the Step 3b story loop for every approved incomplete story back to back. Do not pause between stories (Step 3b.10 already auto-advances; ralph-mode also skips the >10-story and session-mode pauses). All per-story invariants still hold: JSON-validate the worker return, enforce the worker-proof gate, verify parent-visible commits, mark `passes: true` only after verification, and update `state.json` after each story.
 3. **Run regression gates on cadence.** Apply Step 3c every 3 completed stories exactly as in inline mode.
 4. **Report once.** Emit one compact line per story to the transcript (`[{story_id}] {status} · {files_changed} files · {first_commit_short_sha}`); send anything longer to `workspace/threads/journal/<date>/<story-id>.md`. Surface a single summary at the end rather than pausing throughout.
 5. **Bound wedge time.** A worker that never returns must not stall the run forever. Set a per-story soft budget (default ~20 min; honor `--timeout N` minutes if passed). If a story's `wait_agent` exceeds it, treat the story as `blocked` with reason `TIMEOUT`, stop, and surface it — do not silently move on. Slow back-pressure (e.g. heavy E2E) is the usual cause; the bound keeps an unattended run from hanging indefinitely.
@@ -228,7 +235,7 @@ After either mode completes:
 
 - **Do not reference `.Codex/commands/run-project.md` as required source** — that file may not exist. This skill is the Codex router.
 - **Do not assume Claude-only primitives** — `Task`, `ExitPlanMode`, `/checkpoint`, and `/compact` are not Codex requirements. Use `spawn_agent` / `wait_agent` for default inline isolation.
-- **Default is inline** — a bare `/run-project {project}` uses story-level `spawn_agent(agent_type: "worker")` execution and nested `/execute-task` worker phases.
+- **Default is inline** — a bare `/run-project {project}` uses story-level `spawn_agent(agent_type: "worker")` execution and nested `/execute-task` worker phases. Inline auto-continues between stories (no pauses) unless the PRD has >10 incomplete stories or a story requires session mode; prefer parallel sub-agent swarming for independent stories.
 - **Ralph/headless is the unattended inline loop** — it is the same worker-authoritative `spawn_agent(agent_type: "worker")` story loop as default inline, run without preflight approval or between-story pauses. There is no detached subprocess, no separate engine, and no `claude -p`. Do not pass or accept `--engine`/`--builder`; `run-project.sh` has no `claude` builder and its execution loop is frozen.
 - **Preserve HQ invariants** — PRD `userStories[].passes`, file locks, active-run coordination, commits per story, and quality gates remain required in every mode.
 - **Ask before mode changes** — switching from default inline to parent-driven interactive or Ralph/headless is a user-facing execution semantic. Preserve the decision gate with text fallback if needed.
