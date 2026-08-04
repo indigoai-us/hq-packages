@@ -11,7 +11,7 @@ allowed-tools: Bash, Read, Grep, Glob, Write, Edit, Agent, AskUserQuestion, Task
 
 # Ship
 
-**REVIEW → LAND → DEPLOY → SMOKE → HEAL (on any failure) → MONITOR.**
+**REVIEW → LAND → DEPLOY → SMOKE → HEAL (on any failure) → MONITOR → DOCUMENT.**
 
 This skill is a meta-pipeline that composes existing pack skills into one
 closed loop. It does not reimplement them — it sequences them and owns the
@@ -35,7 +35,8 @@ Accepts any combination of:
   "checkout redirect lands on Stripe"). If omitted, derive one in Step 0 and
   confirm it with the user.
 - **Flags** — `--no-monitor` (skip Step 6 standing monitor), `--skip-review`
-  (only when the PRs already carry a completed paranoid review this session).
+  (only when the PRs already carry a completed paranoid review this session),
+  `--no-docs` (skip Step 7 documentation sync).
 
 ## Done Criteria (define BEFORE executing)
 
@@ -52,6 +53,11 @@ The pipeline is complete only when ALL of these are observably true:
    task), OR `--no-monitor` was passed.
 5. Every KPI in the checklist reads healthy, and the final report includes the
    KPI table.
+
+Documentation sync (Step 7) is deliberately NOT in this list. A change is
+"shipped" when the live path works and a monitor watches it — whether the docs
+got updated does not gate that status. Docs run last, foreground, after the
+above are all true.
 
 Write these as concrete, checkable statements for THIS run in Step 0 (with the
 actual repo names, URLs, workflow names, KPI probes) before touching anything.
@@ -189,7 +195,31 @@ facilities:
 Multiple independent watches (e.g. two repos' deploys) run as parallel
 background monitors, not serially.
 
-## Step 7: Report
+## Step 7: DOCUMENT (foreground, last — after everything above is green)
+
+Only after Steps 1–6 are done (merged, deployed, smoked, monitored) sync the
+documentation to match what shipped. This runs **foreground and last** — never
+in the background, never racing the ship work, never a gate on "shipped". Skip
+the whole step with `--no-docs`.
+
+Compose the two existing doc skills; do not reimplement them:
+
+1. **In-repo docs** — run `hq-pack-engineering:document-release` for the shipped
+   repos. Syncs README, CLAUDE.md, architecture docs, and INDEX files to match
+   the diff. (This overlaps with what `/handoff` runs, but running it here — with
+   the shipped diff hot in session — produces higher-fidelity edits than a later
+   headless handoff subagent reconstructing the diff from git. It is idempotent,
+   so the overlap is harmless.)
+2. **Published docs site** — run `publish-docs`. It resolves the active company's
+   docs-site sync skill (e.g. `{co}:sync-docs`) and runs it foreground, or cleanly
+   no-ops if the company has no published docs site. This covers the standalone
+   docs-site repo (e.g. `docs.getindigo.ai`) that `document-release` never touches.
+
+A failure in either doc skill is reported plainly in Step 8 but does NOT retroact
+the ship's merged/deployed/smoked status — surface it and let the user decide
+whether to heal or hand it off. Docs are not in the Done Criteria.
+
+## Step 8: Report
 
 ```
 Ship Complete
@@ -200,6 +230,7 @@ Deploys:  {repo}: {vercel READY | workflow success | manual done}  (each)
 Smoke:    {what was exercised} → PASS  (artifacts cleaned: {yes | handed off})
 Heals:    {none | N failures root-caused and re-landed, one line each}
 Monitor:  {existing verified | created: name + schedule + alert channel}
+Docs:     {in-repo synced + site published <url> | in-repo synced, no site | skipped (--no-docs)}
 
 KPI Table
 | KPI | Probe | Status |
@@ -223,3 +254,7 @@ Then journal the ship per session-journal discipline.
 - Company isolation: one company's credentials and deploy targets only.
 - Failures are reported plainly and immediately; healing is transparent in the
   final report, not hidden.
+- Documentation (Step 7) is foreground, last, and non-gating: it runs only after
+  the ship is verified, never in the background, and a docs failure never
+  downgrades a merged/deployed/smoked ship. Compose `document-release` +
+  `publish-docs`; do not reimplement doc logic here.
