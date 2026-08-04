@@ -1,6 +1,6 @@
 {
   "name": "@indigoai-us/hq-pack-engineering",
-  "version": "1.5.1",
+  "version": "1.6.0",
   "description": "HQ content pack: engineering capabilities — code review, debugging, testing, PR lifecycle, story execution (Ralph), and the worker team that executes coding work",
   "files": [
     "hooks",
