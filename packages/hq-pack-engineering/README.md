@@ -35,7 +35,6 @@ All under bare names — `/tdd`, `/review`, `/architect`, etc. work unchanged af
 | `document-release` | Post-ship documentation sync — README, CLAUDE.md, architecture docs, INDEX files |
 | `domain-modeling` | Build and sharpen a project's domain glossary in `CONTEXT.md`; hand ADRs to `/adr` |
 | `execute-task` | Execute a single PRD story through coordinated worker phases (Ralph pattern) |
-| `ideate` | One-command idea → brainstorm → PRD pipeline as a gated background workflow — pauses only at human decisions |
 | `investigate` | Iron Law debugging — root cause investigation before any fixes, scope lock |
 | `land` | Land a PR — monitor CI, resolve review issues, merge, monitor production |
 | `land-batch` | Triage, review, sequentially merge multiple open PRs |
@@ -107,6 +106,9 @@ All bare names — cross-references stay working as long as both ends are instal
 
 `v1.7.0` — added `ideate`: the idea → brainstorm → PRD planning pipeline as one gated background workflow. Bundles a Codex workflow runner (`skills/ideate/scripts/codex-workflow.mjs`) with a `gate()` human-pause primitive implementing the hq-core workflow-gates protocol (`core/knowledge/public/hq-core/workflow-gates-spec.md`, hq-core ≥ the release carrying `core/scripts/workflow-gate.sh`); the run pauses at real decisions (weak premise, approach, open PRD questions), resumes in place on answers, and never re-asks a decision after a crash (durable answers).
 
+`v1.8.0` — `ideate` moved to hq-core (`.claude/skills/ideate/` + `core/scripts/workflow-runner.mjs`, engine-neutral Codex/Grok): the pipeline chains the core `/idea` and `/brainstorm` skills, so core is its source of truth. Installs get it from the hq-core release rather than this pack.
+
 ## License
 
 MIT. See repository root.
+
