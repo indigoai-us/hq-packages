@@ -35,6 +35,7 @@ All under bare names — `/tdd`, `/review`, `/architect`, etc. work unchanged af
 | `document-release` | Post-ship documentation sync — README, CLAUDE.md, architecture docs, INDEX files |
 | `domain-modeling` | Build and sharpen a project's domain glossary in `CONTEXT.md`; hand ADRs to `/adr` |
 | `execute-task` | Execute a single PRD story through coordinated worker phases (Ralph pattern) |
+| `ideate` | One-command idea → brainstorm → PRD pipeline as a gated background workflow — pauses only at human decisions |
 | `investigate` | Iron Law debugging — root cause investigation before any fixes, scope lock |
 | `land` | Land a PR — monitor CI, resolve review issues, merge, monitor production |
 | `land-batch` | Triage, review, sequentially merge multiple open PRs |
@@ -103,6 +104,8 @@ All bare names — cross-references stay working as long as both ends are instal
 `v1.0.0` — initial extraction from `hq-core` v14.2.x. Tracks `hq-core` major versions for breaking-change alignment.
 
 `v1.4.0` — added `codebase-design`, `domain-modeling`, `to-tickets`, and `wayfinder`, ported and genericized from [`mattpocock/skills`](https://github.com/mattpocock/skills) (upstream commit `391a270`); refreshed `diagnose` (Phase-1 red-loop gate + minimise step), `tdd` (seams, tautological/horizontal-slicing anti-patterns), and `architect` (design-it-twice, recommendation badges) with upstream improvements.
+
+`v1.7.0` — added `ideate`: the idea → brainstorm → PRD planning pipeline as one gated background workflow. Bundles a Codex workflow runner (`skills/ideate/scripts/codex-workflow.mjs`) with a `gate()` human-pause primitive implementing the hq-core workflow-gates protocol (`core/knowledge/public/hq-core/workflow-gates-spec.md`, hq-core ≥ the release carrying `core/scripts/workflow-gate.sh`); the run pauses at real decisions (weak premise, approach, open PRD questions), resumes in place on answers, and never re-asks a decision after a crash (durable answers).
 
 ## License
 
