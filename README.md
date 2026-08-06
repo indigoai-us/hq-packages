@@ -15,6 +15,12 @@ Content packs for [HQ by Indigo](https://github.com/indigoai-us/hq-core) — the
 | [`hq-pack-slack-bot`](./packages/hq-pack-slack-bot) | Per-bot Slack mention watcher + spawned-worker template. Pairs with hq-pro `/hq-new-bot`. |
 | [`hq-pack-hq-slack`](./packages/hq-pack-hq-slack) | MCP-free Slack messaging CLI (post/read/reply/DM/search/upload) acting AS you via your own Slack app's user token — plus a guided full-access app setup. |
 
+## Retired packs
+
+| Pack | Status |
+|------|--------|
+| `hq-pack-engineering` | **Absorbed into `hq-core`.** Its 24 skills (`/tdd`, `/review`, `/ship`, `/land`, `/run-project`, `/prd`, `/architect`, …), 6 workers, 4 knowledge sets, 3 policies, and 3 hooks now ship with the base release, so nothing needs installing. Extracted from core in hq-core v15.0.0 and merged back in 2026-08. Last pack version was 1.8.0; the source remains in this repo's history. Installed copies are inert once core ships the same content — remove one with `hq packs uninstall hq-pack-engineering`. |
+
 ## Install a pack
 
 ```bash
