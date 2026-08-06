@@ -1,3 +1,0 @@
-interface:
-  display_name: "Commit Main"
-  short_description: "Commit every dirty file in the current repo, only when on main."
