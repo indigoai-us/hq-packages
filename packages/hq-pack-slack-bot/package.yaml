@@ -1,5 +1,5 @@
 name: hq-pack-slack-bot
-version: 1.0.6
+version: 1.0.7
 publisher: '@indigoai-us'
 access: public
 description: 'Per-bot Slack mention watcher + spawned-worker template. Watches every channel a chosen HQ-issued Slack bot is a member of, dispatches one autonomous Claude worker per @-mention. Pairs with hq-pro slack-app-factory (/hq-new-bot).'
