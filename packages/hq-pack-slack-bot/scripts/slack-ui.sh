@@ -18,6 +18,10 @@ set -euo pipefail
 # Slack hard limits (produce payloads that will not 400)
 HEADER_MAX=150
 SECTION_TEXT_MAX=3000
+# Human-in-the-loop timeout sentinel: an ask with expiry >= this renders
+# "stays open" copy instead of a countdown (and defaults apply when --timeout
+# is omitted). 30 days, matching the decisions-store registration TTL.
+HITL_TIMEOUT_SENTINEL=2592000
 MAX_FIELDS=4
 MAX_BLOCKS=50
 CONTINUED_PREFIX="(continued) "
@@ -181,8 +185,17 @@ Options:
                           and --multi is not set; multi_static_select otherwise.
   --recommend <value>     Option value styled primary (buttons mode only).
   --abort <value>         Option value styled danger (buttons mode only).
-  --fallback <value>      Required. Must equal one --option value (timeout path).
-  --timeout <secs>        Required positive integer. Decision expiry window.
+  --fallback <value>      Optional. Must equal one --option value (timeout
+                          path). Default: the --recommend value, else the
+                          first --option value. With the default timeout the
+                          fallback is registration metadata only — it never
+                          fires on its own.
+  --timeout <secs>        Optional positive integer. Decision expiry window.
+                          Default: 2592000 (30 days) — human-in-the-loop, the
+                          question stays open until answered and the message
+                          renders "Stays open until answered" instead of a
+                          countdown. Explicit shorter values are for
+                          machine-to-machine flows only.
   --bot <app-id>          Optional bot / app id stored in registration.
   --field "Label|Value"   Repeatable. Max 4. Same fields section as post.
   --context <text>        Repeatable. Context block elements (plus timeout line).
@@ -1122,8 +1135,21 @@ cmd_ask() {
 
   [ -n "$question" ] || die "--question is required"
   [ "$option_count" -ge 2 ] || die "at least 2 --option values are required (got ${option_count})"
-  [ -n "$fallback" ] || die "--fallback is required"
-  [ -n "$timeout" ] || die "--timeout is required"
+  # Human-in-the-loop defaults (agent-voice wave 1): a decision with no
+  # explicit expiry stays open until a person answers — 30-day registration
+  # TTL, no countdown copy, no self-firing fallback. The registered fallback
+  # is still required by the decisions API, so default it to the recommended
+  # option (else the first option); with the sentinel timeout it is inert
+  # metadata.
+  if [ -z "$fallback" ]; then
+    if [ -n "$recommend" ]; then
+      fallback="$recommend"
+    else
+      fallback="$(head -n 1 "$options_file" 2>/dev/null | cut -d'|' -f1)"
+    fi
+  fi
+  [ -n "$fallback" ] || die "--fallback could not be defaulted (no options?)"
+  [ -n "$timeout" ] || timeout="$HITL_TIMEOUT_SENTINEL"
   case "$timeout" in
     ''|*[!0-9]*) die "--timeout must be a positive integer" ;;
   esac
@@ -1316,7 +1342,13 @@ cmd_ask() {
     done <"$contexts_file"
   fi
   local timeout_line
-  timeout_line="Times out in ${timeout}s → fallback: ${fallback_label}"
+  if [ "$timeout" -ge "$HITL_TIMEOUT_SENTINEL" ]; then
+    # Human-in-the-loop ask: no countdown, no fallback promise — the question
+    # stays live and a late tap wakes the agent (decision→inbox bridge).
+    timeout_line="Stays open until answered — a late tap wakes the agent."
+  else
+    timeout_line="Times out in ${timeout}s → fallback: ${fallback_label}"
+  fi
   elements_ctx="$(jq -nc \
     --argjson acc "$elements_ctx" \
     --arg t "$timeout_line" \
