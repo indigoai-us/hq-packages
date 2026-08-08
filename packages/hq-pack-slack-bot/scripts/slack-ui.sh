@@ -1133,6 +1133,31 @@ cmd_ask() {
     esac
   done
 
+  # HITL env enforcement (agent boxes; the hq-pro watcher exports
+  # HQ_SLACK_UI_HITL=1 into every dispatch run env): caller-supplied
+  # --timeout/--fallback are ignored even when the wrapper shim is BYPASSED
+  # and this lib is invoked directly — observed live 2026-08-08: Grok called
+  # the lib path itself with --timeout 120, sailing past the wrapper's strip
+  # and rendering countdown copy. The question also gains the requester's
+  # mention when it carries none (HQ_SLACK_REQUESTER, same run env). Non-agent
+  # pack consumers (env unset) keep full flag control.
+  if [ "${HQ_SLACK_UI_HITL:-}" = "1" ]; then
+    if [ -n "$timeout" ] || [ -n "$fallback" ]; then
+      echo "slack-ui ask: --timeout/--fallback are managed by the runtime (human-in-the-loop: the question stays open until answered) — ignoring." >&2
+      timeout=""
+      fallback=""
+    fi
+    case "$question" in
+      "") : ;;
+      *"<@"*) : ;;
+      *)
+        if [ -n "${HQ_SLACK_REQUESTER:-}" ]; then
+          question="<@${HQ_SLACK_REQUESTER}> ${question}"
+        fi
+        ;;
+    esac
+  fi
+
   [ -n "$question" ] || die "--question is required"
   [ "$option_count" -ge 2 ] || die "at least 2 --option values are required (got ${option_count})"
   # Human-in-the-loop defaults (agent-voice wave 1): a decision with no
