@@ -1,0 +1,33 @@
+source: "github:indigoai-us/hq-packages#packages/hq-pack-issue-orchestrator"
+name: hq-pack-issue-orchestrator
+version: 0.1.0
+publisher: '@indigoai-us'
+access: public
+description: 'Configure an existing HQ agent to manage issues from one or more sources through a guarded lifecycle. Includes a step-by-step setup interview, least-privilege permission model, durable handoff contract, health checks, and a read-only pilot before activation.'
+requires:
+  hqCore: '>=12.0.0'
+capabilities:
+  - fs
+contributes:
+  skills:
+    - issue-orchestrator-setup
+    - issue-orchestrator
+  workers: []
+  knowledge:
+    - issue-orchestrator
+  hooks: []
+  policies: []
+  commands: []
+initialization:
+  entrypoint: issue-orchestrator-setup
+  prompt: "Run /issue-orchestrator-setup to select a company, an existing agent, issue sources, goals, lifecycle, handoff, scope, permissions, and a safe pilot."
+keywords:
+  - hq
+  - hq-pack
+  - issues
+  - tickets
+  - orchestration
+  - support
+  - triage
+license: MIT
+repository: 'https://github.com/indigoai-us/hq-packages'
