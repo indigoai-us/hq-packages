@@ -1,4 +1,0 @@
-interface:
-  display_name: "Issue Orchestrator"
-  short_description: "Triage configured issue queues safely"
-  default_prompt: "Use $issue-orchestrator to run the configured issue workflow or a read-only pilot."
