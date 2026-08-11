@@ -1,0 +1,4 @@
+interface:
+  display_name: "Issue Orchestrator Setup"
+  short_description: "Configure and pilot a guarded issue agent"
+  default_prompt: "Use $issue-orchestrator-setup to configure an agent, issue sources, permissions, handoffs, and a safe pilot."
