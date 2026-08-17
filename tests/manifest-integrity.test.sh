@@ -86,16 +86,30 @@ PY
     continue
   fi
 
+  # A publishable pack MUST have package.yaml. packages/README.md states that
+  # "Each pack declares package.yaml at its root" and that the installer
+  # "Validates package.yaml against the schema", so a pack without one is
+  # unusable once published.
+  #
+  # release.yml only checks the version WHEN the file happens to exist
+  # (`if [[ -f "$package_manifest" ]]`). That is a hole rather than a
+  # deliberate allowance: adding a publishable package with no package.yaml, or
+  # deleting an existing manifest, skips the version check entirely and lets an
+  # unusable pack publish green. Requiring it here closes that at the PR, and
+  # costs nothing today — all seven current publishable packs have one.
+  package_manifest="$package_dir/package.yaml"
+  if [ ! -f "$package_manifest" ]; then
+    fail "$package_dir is publishable but has no package.yaml (required root manifest; the installer validates it)"
+    continue
+  fi
+
   # Same parser as release.yml uses, so the two cannot disagree about what the
   # manifest version is.
-  package_manifest="$package_dir/package.yaml"
-  if [ -f "$package_manifest" ]; then
-    manifest_version="$(sed -n 's/^version:[[:space:]]*//p' "$package_manifest")"
-    if [ -z "$manifest_version" ]; then
-      fail "$package_manifest has no version: line (package.json is '$version')"
-    elif [ "$manifest_version" != "$version" ]; then
-      fail "$package_json version '$version' does not match $package_manifest version '$manifest_version'"
-    fi
+  manifest_version="$(sed -n 's/^version:[[:space:]]*//p' "$package_manifest")"
+  if [ -z "$manifest_version" ]; then
+    fail "$package_manifest has no version: line (package.json is '$version')"
+  elif [ "$manifest_version" != "$version" ]; then
+    fail "$package_json version '$version' does not match $package_manifest version '$manifest_version'"
   fi
 
   if [ "$repo_url" != "$EXPECTED_REPO" ]; then
