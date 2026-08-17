@@ -9,6 +9,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Release-metadata integrity, checked at PR time. release.yml asserts the
+      # same invariants, but only on push to main — after a mismatch has already
+      # merged, which is why 5 of its 10 recent failures were this guard firing
+      # too late. Running it here, inside the repo's only required check, stops
+      # the mismatch at the PR instead. The release-time guards stay in place as
+      # defence in depth.
+      - name: Release manifest integrity
+        run: bash tests/manifest-integrity.test.sh
       - name: Run all pack test scripts
         run: |
           set -euo pipefail
