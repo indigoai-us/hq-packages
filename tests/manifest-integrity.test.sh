@@ -121,6 +121,79 @@ if [ "$checked" -eq 0 ]; then
   fail "no publishable packages found under packages/*/package.json — the glob is wrong or the layout moved"
 fi
 
+# ---------------------------------------------------------------------------
+# Advisory: packages that have never been published.
+#
+# Five of release.yml's ten failures in the 30 days to 2026-08-17 were npm E404
+# on a package being published for the FIRST time — "could not be found or you
+# do not have permission to access it", which is npm's way of saying the trusted
+# publisher binding is missing. By the time that fires the package has already
+# merged, so the author finds out from a red release run rather than from their
+# PR.
+#
+# This block surfaces it at PR time instead. It is deliberately ADVISORY and
+# never fails the build, for two reasons: it needs the network, and a required
+# check must not go red because registry.npmjs.org had a bad minute; and npm's
+# own documentation does not state whether a trusted publisher can be configured
+# before a package's first publish, so blocking a new package's merge could
+# create a deadlock we cannot resolve from here.
+# ---------------------------------------------------------------------------
+if [ "${SKIP_NPM_PROBE:-}" = "1" ]; then
+  echo "note: npm publication probe skipped (SKIP_NPM_PROBE=1)"
+elif ! command -v npm >/dev/null 2>&1; then
+  echo "note: npm not on PATH — skipping the publication probe"
+else
+  unpublished=()
+  probe_failed=0
+
+  for package_json in packages/*/package.json; do
+    package_dir="$(dirname "$package_json")"
+    read -r is_private _version _url <<<"$(python3 - "$package_json" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1]) as fh:
+    pkg = json.load(fh)
+print("true" if pkg.get("private") is True else "false", pkg.get("version") or "", "-")
+PY
+    )"
+    [ "$is_private" = "true" ] && continue
+
+    name="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("name",""))' "$package_json")"
+    [ -z "$name" ] && continue
+
+    # `npm view <name> version` exits non-zero for a package that does not
+    # exist. Distinguish "definitely absent" (E404) from "could not tell"
+    # (network/registry trouble) so a flaky probe never masquerades as a finding.
+    probe="$(npm view "$name" version 2>&1)"
+    if [ -n "$probe" ] && [ "${probe#*E404}" != "$probe" ]; then
+      unpublished+=("$name")
+    elif [ -z "$probe" ] || [ "${probe#*ERR!}" != "$probe" ]; then
+      probe_failed=1
+    fi
+  done
+
+  if [ "$probe_failed" = "1" ]; then
+    echo "note: could not reach the npm registry for every package — publication probe incomplete"
+  fi
+
+  if [ "${#unpublished[@]}" -gt 0 ]; then
+    {
+      echo "::warning::${#unpublished[@]} package(s) have never been published to npm: ${unpublished[*]}"
+      echo ""
+      echo "Before merging, configure an npm Trusted Publisher for each, or the"
+      echo "release run on main will fail with E404 'you do not have permission':"
+      echo "  Organization or user: indigoai-us"
+      echo "  Repository:           hq-packages"
+      echo "  Workflow filename:    release.yml     (filename only, with extension)"
+      echo "  Environment:          (leave empty)"
+      echo ""
+      echo "npm does not validate a trusted publisher configuration when you save"
+      echo "it, so a typo fails exactly like no configuration at all."
+    } >&2
+  fi
+fi
+
 if [ "$failures" -ne 0 ]; then
   printf '\nmanifest integrity FAILED (%s problem(s)) across %s publishable package(s)\n' \
     "$failures" "$checked" >&2
