@@ -123,7 +123,36 @@ jobs:
             if npm publish "./$package_dir" --access public; then
               ((published += 1))
             else
-              echo "::error::Failed to publish $name@$version (often missing npm Trusted Publisher for this package + release.yml)"
+              # The npm error for this is E404 "Not found - PUT ... could not be
+              # found or you do not have permission to access it", which reads
+              # like the registry is missing rather than like a configuration
+              # gap. Five of this workflow's ten failures in the 30 days to
+              # 2026-08-17 were exactly this, on packages being published for
+              # the first time. Spell out the fix rather than hinting at it.
+              {
+                echo "::error::Failed to publish $name@$version"
+                echo "If npm reported E404 / 'you do not have permission', this is almost"
+                echo "certainly a missing npm Trusted Publisher binding, not a missing package."
+                echo ""
+                echo "Configure it at:"
+                echo "  https://www.npmjs.com/package/$name/access"
+                echo "  (Settings -> Trusted Publisher -> GitHub Actions)"
+                echo ""
+                echo "Fields, exactly:"
+                echo "  Organization or user: indigoai-us"
+                echo "  Repository:           hq-packages"
+                echo "  Workflow filename:    release.yml     (filename only, with extension)"
+                echo "  Environment:          (leave empty)"
+                echo ""
+                echo "Note npm does NOT validate a trusted publisher configuration when you"
+                echo "save it, so a typo in any field fails exactly like no configuration at"
+                echo "all. Re-run this workflow after saving to confirm."
+                echo ""
+                echo "A brand-new package name may additionally require its first publish"
+                echo "before the package settings page exists. If so, publish $name@$version"
+                echo "once by hand, then configure the trusted publisher so every subsequent"
+                echo "release goes through this workflow."
+              } >&2
               failed_names+=("$name@$version")
               ((failed += 1))
             fi
