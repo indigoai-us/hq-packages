@@ -162,13 +162,26 @@ PY
     name="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("name",""))' "$package_json")"
     [ -z "$name" ] && continue
 
-    # `npm view <name> version` exits non-zero for a package that does not
-    # exist. Distinguish "definitely absent" (E404) from "could not tell"
-    # (network/registry trouble) so a flaky probe never masquerades as a finding.
-    probe="$(npm view "$name" version 2>&1)"
-    if [ -n "$probe" ] && [ "${probe#*E404}" != "$probe" ]; then
+    # Branch on npm's EXIT STATUS, not on a marker in its output. Modern npm
+    # (v11+) prints `npm error code E403` with no legacy `ERR!` marker, so a
+    # text-sniffing classifier reads a systematic registry failure as "package
+    # exists" and this whole block silently reports nothing at all — neither the
+    # warning nor the incomplete note. Exit status is the only reliable signal,
+    # and `tests.yml` does not pin an npm version, so the format WILL vary.
+    #
+    # Bounded on purpose. npm's default fetch-timeout is 300s with 2 retries, so
+    # seven sequential probes against a registry that accepts connections and
+    # then stalls could hold up a REQUIRED check for many minutes — unacceptable
+    # for a pass that is explicitly advisory. `timeout` exits 124, which lands in
+    # the inconclusive branch like any other non-E404 failure.
+    if probe="$(timeout 12 npm view "$name" version \
+      --fetch-timeout=8000 --fetch-retries=1 2>&1)"; then
+      continue
+    fi
+
+    if [ "${probe#*E404}" != "$probe" ]; then
       unpublished+=("$name")
-    elif [ -z "$probe" ] || [ "${probe#*ERR!}" != "$probe" ]; then
+    else
       probe_failed=1
     fi
   done
@@ -181,12 +194,18 @@ PY
     {
       echo "::warning::${#unpublished[@]} package(s) have never been published to npm: ${unpublished[*]}"
       echo ""
-      echo "Before merging, configure an npm Trusted Publisher for each, or the"
-      echo "release run on main will fail with E404 'you do not have permission':"
-      echo "  Organization or user: indigoai-us"
-      echo "  Repository:           hq-packages"
-      echo "  Workflow filename:    release.yml     (filename only, with extension)"
-      echo "  Environment:          (leave empty)"
+      echo "Merging as-is means the release run on main fails with E404"
+      echo "'you do not have permission'. A brand-new package needs BOTH steps,"
+      echo "in this order — there is no package settings page to bind a trusted"
+      echo "publisher to until the package exists:"
+      echo ""
+      echo "  1. Publish it once by hand, so the package exists on npm."
+      echo "  2. Then configure its Trusted Publisher, so every release after"
+      echo "     that goes through release.yml:"
+      echo "       Organization or user: indigoai-us"
+      echo "       Repository:           hq-packages"
+      echo "       Workflow filename:    release.yml   (filename only, with extension)"
+      echo "       Environment:          (leave empty)"
       echo ""
       echo "npm does not validate a trusted publisher configuration when you save"
       echo "it, so a typo fails exactly like no configuration at all."
