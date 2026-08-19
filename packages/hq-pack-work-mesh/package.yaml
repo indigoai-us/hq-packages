@@ -1,0 +1,36 @@
+name: hq-pack-work-mesh
+version: 0.1.5
+publisher: '@indigoai-us'
+access: private
+description: >
+  Upgrade a local HQ to the work mesh: listen cache service, genesis on /prd,
+  Board/Status snapshot helpers, and isolated agent-box install. Dogfood pack —
+  promote into hq-core after Indigo field-test.
+requires:
+  hqCore: '>=12.0.0'
+initialization:
+  entrypoint: work-mesh
+  prompt: >
+    Work-mesh pack is installed. Run
+    `bash core/packages/hq-pack-work-mesh/scripts/apply.sh` to drop the
+    isolated helper at ~/.hq/work-mesh/bin (survives /update-hq). On an
+    agent box without desktop MQTT, also run
+    `bash core/packages/hq-pack-work-mesh/scripts/install-listen.sh`.
+    Do not overwrite hq-agent or cloud-init user-data.
+contributes:
+  workers: []
+  knowledge:
+    - work-mesh
+  skills:
+    - work-mesh
+  hooks:
+    - SessionStart/60-work-mesh-bin
+  policies:
+    - hq-work-mesh-source-of-truth
+    - hq-work-mesh-prd-genesis
+  commands:
+    - work-mesh
+  scripts:
+    - hq-work-mesh.sh
+    - hq-work-mesh.mjs
+    - hq-work-mesh-genesis.sh

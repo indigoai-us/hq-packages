@@ -14,6 +14,7 @@ Content packs for [HQ by Indigo](https://github.com/indigoai-us/hq-core) — the
 | [`hq-pack-gstack`](./packages/hq-pack-gstack) | gstack-team workers (26 g-* skills) + `scripts/gstack-bridge.sh` |
 | [`hq-pack-slack-bot`](./packages/hq-pack-slack-bot) | Per-bot Slack mention watcher + spawned-worker template. Pairs with hq-pro `/hq-new-bot`. |
 | [`hq-pack-hq-slack`](./packages/hq-pack-hq-slack) | MCP-free Slack messaging CLI (post/read/reply/DM/search/upload) acting AS you via your own Slack app's user token — plus a guided full-access app setup. |
+| [`hq-pack-work-mesh`](./packages/hq-pack-work-mesh) | Live work mesh: listen cache, genesis on `/prd`, Board/Status helpers, isolated agent-box install. Git-only (`private` on npm until hq-core promotion). |
 
 ## Retired packs
 
