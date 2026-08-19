@@ -1,0 +1,23 @@
+{
+  "name": "@indigoai-us/hq-pack-work-mesh",
+  "version": "0.1.5",
+  "private": true,
+  "description": "HQ pack: work-mesh listen, genesis, and isolated agent install for dogfood.",
+  "files": [
+    "hooks",
+    "skills",
+    "scripts",
+    "commands",
+    "policies",
+    "knowledge",
+    "package.yaml",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/indigoai-us/hq-packages.git",
+    "directory": "packages/hq-pack-work-mesh"
+  },
+  "keywords": ["hq", "hq-pack", "work-mesh"],
+  "license": "MIT"
+}
