@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<!--
+  hq-pack-charts — sheet.one-pager
+  A survey one-pager: title, lede, four KPIs, three findings, source rail.
+  Demo organisation: Northwind Outfitters (fictional). Palette: slate.
+-->
+<html lang="en" data-ch-theme="light" data-ch-palette="slate">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Northwind Outfitters · Customer survey 2026</title>
+
+<!-- Webfonts are OPT-IN. Uncomment to use Instrument Serif / Geist; leave
+     commented and the system stack in chart.css renders offline with no
+     third-party request from the reader's browser.
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+-->
+
+<style>/* ch:css:start */
+/* GENERATED from assets/chart.css (ad62427d9525) — do not edit here. Run scripts/sync-assets.py. */
+/*
+ * hq-pack-charts — chart.css
+ *
+ * The single source of truth for every chart HQ produces.
+ *
+ * The contract, in one sentence: an HQ chart's SVG carries semantic CLASSES
+ * and never carries a colour. Re-skinning a chart is swapping the :root block
+ * below — nothing in the SVG body changes. The same contract hq-pack-diagrams
+ * uses, extended with data roles (series, ramp, hero, delta).
+ *
+ * Every --ch-* surface/ink/structure token falls back to its --dg-* twin, so a
+ * page that already carries a diagram skin (or a company brand pack mapped
+ * through the design-styles binding formula) re-skins charts for free.
+ *
+ * Do not add a colour literal to any SVG attribute. `scripts/lint-chart.py`
+ * fails the file if you do.
+ *
+ * Theme:    <html data-ch-theme="light|dark|auto">          (default: light)
+ * Palette:  <html data-ch-palette="mono|slate|moss|ember">  (default: mono)
+ * Density:  <svg class="ch ch--comfortable|ch--compact">
+ */
+
+/* ══════════════════════════════════════════════════════════════════════════
+   1. TOKENS
+   ══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Surface ─────────────────────────────────────────────────────────── */
+  --ch-paper:        var(--dg-paper, #f4f1ec);
+  --ch-paper-raised: var(--dg-paper-raised, #ffffff);
+  --ch-paper-sunk:   var(--dg-paper-sunk, rgba(27, 26, 24, 0.045));
+
+  /* ── Ink ─────────────────────────────────────────────────────────────── */
+  --ch-ink:          var(--dg-ink, #1b1a18);     /* titles, values, primary marks */
+  --ch-muted:        var(--dg-muted, #55524c);   /* subtitles, axis labels        */
+  --ch-soft:         var(--dg-soft, #8a857c);    /* source line, minor ticks      */
+
+  /* ── Structure ───────────────────────────────────────────────────────── */
+  --ch-rule:         var(--dg-rule, rgba(27, 26, 24, 0.14));        /* gridlines */
+  --ch-rule-strong:  var(--dg-rule-strong, rgba(27, 26, 24, 0.30)); /* baselines */
+
+  /* ── Data — MONO palette (the floor; every other palette overrides) ──────
+     data-1 is the hero slot. In mono the hero is ink and the rest is a
+     lightness ladder, so a mono chart never depends on hue to be read.      */
+  --ch-hero:         var(--ch-ink);
+  --ch-data-1:       var(--ch-ink);
+  --ch-data-2:       #5b5853;
+  --ch-data-3:       #8a857c;
+  --ch-data-4:       #b3ada3;
+  --ch-data-5:       #cfcac0;
+  --ch-data-6:       #e2ddd4;
+  --ch-data-fill:    0.16;      /* opacity for area / band fills             */
+  --ch-quiet:        #d9d4cb;   /* non-focal marks when one thing is hero    */
+  --ch-track:        rgba(27, 26, 24, 0.08); /* empty part of a bar / ring   */
+
+  /* ── Ramp — ordered / sequential (5 steps, light → dark) ─────────────── */
+  --ch-ramp-1:       #e6e2da;
+  --ch-ramp-2:       #c9c3b8;
+  --ch-ramp-3:       #a09a8f;
+  --ch-ramp-4:       #6d6860;
+  --ch-ramp-5:       #1b1a18;
+
+  /* ── Delta — semantic only, always paired with a sign or label ───────── */
+  --ch-up:           var(--dg-positive, #3f6b4a);
+  --ch-down:         var(--dg-negative, #9c3a2c);
+  --ch-flat:         var(--ch-muted);
+  --ch-up-tint:      var(--dg-positive-tint, rgba(63, 107, 74, 0.12));
+  --ch-down-tint:    var(--dg-negative-tint, rgba(156, 58, 44, 0.12));
+
+  /* ── Type ────────────────────────────────────────────────────────────────
+     Webfont names lead; a system stack follows so a chart renders correctly
+     with no network. Webfonts are opt-in — see assets/template.html.        */
+  --ch-font-display: var(--dg-font-display, "Instrument Serif", "Iowan Old Style",
+                     Palatino, Georgia, serif);
+  --ch-font-body:    var(--dg-font-body, "Geist", -apple-system, BlinkMacSystemFont,
+                     "Segoe UI", Inter, Roboto, system-ui, sans-serif);
+  --ch-font-mono:    var(--dg-font-mono, "Geist Mono", ui-monospace, SFMono-Regular,
+                     Menlo, Consolas, monospace);
+
+  /* ── Type scale (px, inside the SVG viewBox) ─────────────────────────────
+     Floors are a contract: 7px is the smallest label allowed in a half-width
+     card and 6px in a full-width one. Overflow goes to a <title> hover or a
+     footnote — never to smaller type.                                        */
+  --ch-fs-title:     16px;
+  --ch-fs-sub:       11.5px;
+  --ch-fs-value:     22px;
+  --ch-fs-big:       44px;
+  --ch-fs-axis:      9.5px;
+  --ch-fs-label:     10px;
+  --ch-fs-note:      9px;
+
+  /* ── Stroke ──────────────────────────────────────────────────────────── */
+  --ch-sw-hair:      0.6px;
+  --ch-sw-thin:      1px;
+  --ch-sw-line:      1.6px;
+  --ch-sw-bold:      2.4px;
+
+  /* ── Motion ──────────────────────────────────────────────────────────── */
+  --ch-dur:          900ms;
+  --ch-dur-slow:     1300ms;
+  --ch-ease:         cubic-bezier(0.22, 0.61, 0.36, 1);
+  --ch-ease-pop:     cubic-bezier(0.2, 0.7, 0.3, 1.25);
+  --ch-stagger:      28ms;
+}
+
+/* ── Palettes ───────────────────────────────────────────────────────────────
+   One palette per file. The agent picks from data semantics:
+     slate — ordered / sequential   (one series that has an order)
+     moss  — categorical, ≤ 4 kinds (unordered kinds that must be told apart)
+     ember — mono + one hero        (everything quiet except the point)
+   Unclear fit → stay on mono.                                               */
+
+[data-ch-palette="slate"] {
+  --ch-hero:    #2f5d8f;
+  --ch-data-1:  #2f5d8f;
+  --ch-data-2:  #5b7fa6;
+  --ch-data-3:  #86a1bd;
+  --ch-data-4:  #adc0d3;
+  --ch-data-5:  #cfdae5;
+  --ch-data-6:  #e6ecf2;
+  --ch-quiet:   #d6dde5;
+  --ch-track:   rgba(47, 93, 143, 0.10);
+  --ch-ramp-1:  #e6ecf2;
+  --ch-ramp-2:  #b9c9da;
+  --ch-ramp-3:  #86a1bd;
+  --ch-ramp-4:  #4f759d;
+  --ch-ramp-5:  #1f3f63;
+}
+
+[data-ch-palette="moss"] {
+  --ch-hero:    #3f6b4a;
+  --ch-data-1:  #3f6b4a;
+  --ch-data-2:  #9a7b4f;
+  --ch-data-3:  #4a6d7c;
+  --ch-data-4:  #a4584a;
+  --ch-data-5:  #8a857c;
+  --ch-data-6:  #b3ada3;
+  --ch-quiet:   #d8dcd2;
+  --ch-track:   rgba(63, 107, 74, 0.10);
+  --ch-ramp-1:  #e6ebe0;
+  --ch-ramp-2:  #bfcbb4;
+  --ch-ramp-3:  #8fa686;
+  --ch-ramp-4:  #5f8461;
+  --ch-ramp-5:  #2c4b34;
+}
+
+[data-ch-palette="ember"] {
+  --ch-hero:    #c2502f;
+  --ch-data-1:  #c2502f;
+  --ch-data-2:  #5b5853;
+  --ch-data-3:  #8a857c;
+  --ch-data-4:  #b3ada3;
+  --ch-data-5:  #cfcac0;
+  --ch-data-6:  #e2ddd4;
+  --ch-quiet:   #d9d4cb;
+  --ch-track:   rgba(194, 80, 47, 0.10);
+  --ch-ramp-1:  #f2e3dd;
+  --ch-ramp-2:  #e3b8a8;
+  --ch-ramp-3:  #d48a70;
+  --ch-ramp-4:  #c2502f;
+  --ch-ramp-5:  #7d2f18;
+}
+
+/* ── Dark theme ─────────────────────────────────────────────────────────── */
+
+[data-ch-theme="dark"] {
+  --ch-paper:        var(--dg-paper-dark, #171614);
+  --ch-paper-raised: #201f1c;
+  --ch-paper-sunk:   rgba(244, 241, 236, 0.06);
+  --ch-ink:          #f0ede6;
+  --ch-muted:        #b5b0a6;
+  --ch-soft:         #7d786f;
+  --ch-rule:         rgba(240, 237, 230, 0.14);
+  --ch-rule-strong:  rgba(240, 237, 230, 0.32);
+  --ch-data-2:       #b5b0a6;
+  --ch-data-3:       #8a857c;
+  --ch-data-4:       #64605a;
+  --ch-data-5:       #4a4741;
+  --ch-data-6:       #37342f;
+  --ch-quiet:        #3d3a35;
+  --ch-track:        rgba(240, 237, 230, 0.10);
+  --ch-ramp-1:       #37342f;
+  --ch-ramp-2:       #5c574f;
+  --ch-ramp-3:       #8a857c;
+  --ch-ramp-4:       #bfb9ae;
+  --ch-ramp-5:       #f0ede6;
+  --ch-up:           #7fb08a;
+  --ch-down:         #d8776a;
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-ch-theme="auto"] {
+    --ch-paper:        #171614;
+    --ch-paper-raised: #201f1c;
+    --ch-paper-sunk:   rgba(244, 241, 236, 0.06);
+    --ch-ink:          #f0ede6;
+    --ch-muted:        #b5b0a6;
+    --ch-soft:         #7d786f;
+    --ch-rule:         rgba(240, 237, 230, 0.14);
+    --ch-rule-strong:  rgba(240, 237, 230, 0.32);
+    --ch-quiet:        #3d3a35;
+    --ch-track:        rgba(240, 237, 230, 0.10);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   2. PAGE + CARD
+   ══════════════════════════════════════════════════════════════════════════ */
+
+html, body { margin: 0; }
+body {
+  background: var(--ch-paper);
+  color: var(--ch-ink);
+  font-family: var(--ch-font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+.ch-page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 48px 32px 72px;
+}
+.ch-page__eyebrow {
+  font-family: var(--ch-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ch-soft);
+  margin: 0 0 8px;
+}
+.ch-page__title {
+  font-family: var(--ch-font-display);
+  font-weight: 400;
+  font-size: 34px;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  margin: 0 0 8px;
+}
+.ch-page__dek {
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ch-muted);
+  max-width: 64ch;
+  margin: 0 0 32px;
+}
+
+/* Two-column grid; a .ch-card--wide spans both. */
+.ch-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+@media (max-width: 760px) { .ch-grid { grid-template-columns: 1fr; } }
+
+/* The card: h2 (conclusion) → .ch-card__sub (legend + range) → svg → .ch-card__src */
+.ch-card {
+  background: var(--ch-paper-raised);
+  border: 1px solid var(--ch-rule);
+  border-radius: 8px;
+  padding: 24px 24px 18px;
+  min-width: 0;
+}
+.ch-card--wide { grid-column: 1 / -1; }
+.ch-card--dark {
+  /* literal on purpose: the custom-property overrides below apply to this
+     element too, so background: var(--ch-ink) would resolve to the LIGHT ink */
+  background: #171614;
+  color: #f0ede6;
+  --ch-ink: #f0ede6; --ch-muted: #b5b0a6; --ch-soft: #7d786f;
+  --ch-rule: rgba(240,237,230,.14); --ch-rule-strong: rgba(240,237,230,.32);
+  --ch-paper: #171614; --ch-paper-raised: #201f1c;
+  --ch-track: rgba(240,237,230,.10); --ch-quiet: #3d3a35;
+}
+.ch-card__title {
+  font-size: var(--ch-fs-title);
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
+  margin: 0 0 4px;
+}
+.ch-card__sub {
+  font-size: var(--ch-fs-sub);
+  color: var(--ch-muted);
+  line-height: 1.4;
+  margin: 0 0 14px;
+}
+.ch-card__src {
+  font-family: var(--ch-font-mono);
+  font-size: var(--ch-fs-note);
+  letter-spacing: 0.04em;
+  color: var(--ch-soft);
+  margin: 12px 0 0;
+}
+.ch-card__note {
+  font-size: var(--ch-fs-label);
+  color: var(--ch-muted);
+  line-height: 1.45;
+  margin: 10px 0 0;
+}
+/* Editorial split: a prose column beside a wide chart. */
+.ch-card--split { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 24px; align-items: start; }
+.ch-card--split > .ch-card__prose { font-size: 13px; line-height: 1.5; color: var(--ch-muted); }
+.ch-card--split > .ch-card__prose > h2 { color: var(--ch-ink); }
+@media (max-width: 760px) { .ch-card--split { grid-template-columns: 1fr; } }
+
+/* ── Sheets — full-page report slots (spec/06-sheets.md) ──────────────── */
+.ch-sheet { max-width: 1080px; margin: 0 auto; padding: 56px 40px 64px; display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 40px; }
+.ch-sheet--fixed { width: 600px; height: 1000px; padding: 40px 36px; display: block; overflow: hidden; box-sizing: border-box; }
+.ch-sheet__main { min-width: 0; }
+.ch-sheet__eyebrow { font-family: var(--ch-font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ch-soft); margin: 0 0 12px; }
+.ch-sheet__title { font-family: var(--ch-font-display); font-weight: 400; font-size: 40px; line-height: 1.1; letter-spacing: -0.015em; margin: 0 0 12px; }
+.ch-sheet__title b { font-weight: 400; font-style: italic; color: var(--ch-hero); }
+.ch-sheet__dek { font-size: 15px; line-height: 1.5; color: var(--ch-muted); max-width: 60ch; margin: 0 0 28px; }
+.ch-sheet__kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 16px; padding: 20px 0; border-top: 1px solid var(--ch-rule-strong); border-bottom: 1px solid var(--ch-rule); margin: 0 0 32px; }
+.ch-kpi__value { font-size: 30px; font-weight: 700; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; line-height: 1; margin: 0 0 6px; }
+.ch-kpi__name { font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ch-muted); margin: 0; }
+.ch-kpi__delta { font-family: var(--ch-font-mono); font-size: 11px; margin: 4px 0 0; color: var(--ch-muted); }
+.ch-kpi__delta--up { color: var(--ch-up); }
+.ch-kpi__delta--down { color: var(--ch-down); }
+.ch-sheet__section { margin: 0 0 32px; }
+.ch-sheet__kicker { font-family: var(--ch-font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ch-soft); margin: 0 0 6px; }
+.ch-sheet__claim { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.3; margin: 0 0 14px; }
+.ch-sheet__rail { font-size: 12.5px; line-height: 1.55; color: var(--ch-muted); }
+.ch-sheet__rail h3 { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ch-soft); margin: 0 0 8px; font-weight: 600; }
+.ch-sheet__rail-block { padding: 16px; background: var(--ch-paper-sunk); border-radius: 6px; margin: 0 0 16px; }
+.ch-sheet__rail a { color: var(--ch-ink); }
+.ch-sheet__foot { font-family: var(--ch-font-mono); font-size: 10px; letter-spacing: 0.04em; color: var(--ch-soft); border-top: 1px solid var(--ch-rule); padding-top: 12px; margin-top: 24px; }
+@media (max-width: 900px) { .ch-sheet { grid-template-columns: 1fr; } }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   3. SVG ROLES — every class the chart body may use
+   ══════════════════════════════════════════════════════════════════════════ */
+
+svg.ch { display: block; width: 100%; height: auto; overflow: visible; font-family: var(--ch-font-body); }
+svg.ch text { fill: var(--ch-ink); }
+
+/* Ground + frame */
+.ch-bg      { fill: var(--ch-paper-raised); }
+.ch-band    { fill: var(--ch-paper-sunk); }
+.ch-grid    { stroke: var(--ch-rule); stroke-width: var(--ch-sw-hair); fill: none; }
+.ch-axis    { stroke: var(--ch-rule-strong); stroke-width: var(--ch-sw-thin); fill: none; }
+.ch-tick    { stroke: var(--ch-rule-strong); stroke-width: var(--ch-sw-hair); }
+.ch-rule    { stroke: var(--ch-rule); stroke-width: var(--ch-sw-hair); fill: none; }
+.ch-target  { stroke: var(--ch-ink); stroke-width: var(--ch-sw-thin); stroke-dasharray: 3 3; fill: none; }
+
+/* Text roles */
+.ch-t-value { font-size: var(--ch-fs-value); font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.ch-t-big   { font-size: var(--ch-fs-big);   font-weight: 700; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.ch-t-label { font-size: var(--ch-fs-label); fill: var(--ch-ink); }
+.ch-t-axis  { font-size: var(--ch-fs-axis);  fill: var(--ch-muted); font-variant-numeric: tabular-nums; }
+.ch-t-note  { font-size: var(--ch-fs-note);  fill: var(--ch-soft); }
+.ch-t-mono  { font-family: var(--ch-font-mono); }
+.ch-t-muted { fill: var(--ch-muted); }
+.ch-t-soft  { fill: var(--ch-soft); }
+.ch-t-hero  { fill: var(--ch-hero); }
+.ch-t-inv   { fill: var(--ch-paper-raised); }
+.ch-t-up    { fill: var(--ch-up); }
+.ch-t-down  { fill: var(--ch-down); }
+.ch-t-end   { text-anchor: end; }
+.ch-t-mid   { text-anchor: middle; }
+
+/* Marks — fills */
+.ch-mark    { fill: var(--ch-data-1); }
+.ch-hero    { fill: var(--ch-hero); }
+.ch-quiet   { fill: var(--ch-quiet); }
+.ch-track   { fill: var(--ch-track); }
+.ch-s1 { fill: var(--ch-data-1); }  .ch-s2 { fill: var(--ch-data-2); }
+.ch-s3 { fill: var(--ch-data-3); }  .ch-s4 { fill: var(--ch-data-4); }
+.ch-s5 { fill: var(--ch-data-5); }  .ch-s6 { fill: var(--ch-data-6); }
+.ch-r1 { fill: var(--ch-ramp-1); }  .ch-r2 { fill: var(--ch-ramp-2); }
+.ch-r3 { fill: var(--ch-ramp-3); }  .ch-r4 { fill: var(--ch-ramp-4); }
+.ch-r5 { fill: var(--ch-ramp-5); }
+.ch-up   { fill: var(--ch-up); }   .ch-down { fill: var(--ch-down); }  .ch-flat { fill: var(--ch-flat); }
+.ch-up-tint { fill: var(--ch-up-tint); } .ch-down-tint { fill: var(--ch-down-tint); }
+.ch-fill    { fill-opacity: var(--ch-data-fill); }   /* combine: class="ch-s1 ch-fill" */
+.ch-mask    { fill: var(--ch-paper-raised); }         /* label halo behind text       */
+
+/* Marks — strokes */
+.ch-line    { fill: none; stroke: var(--ch-data-1); stroke-width: var(--ch-sw-line); stroke-linecap: round; stroke-linejoin: round; }
+.ch-line--hero  { stroke: var(--ch-hero); stroke-width: var(--ch-sw-bold); }
+.ch-line--quiet { stroke: var(--ch-quiet); }
+.ch-line--s2 { stroke: var(--ch-data-2); } .ch-line--s3 { stroke: var(--ch-data-3); }
+.ch-line--s4 { stroke: var(--ch-data-4); } .ch-line--s5 { stroke: var(--ch-data-5); }
+.ch-line--s6 { stroke: var(--ch-data-6); }
+.ch-line--up { stroke: var(--ch-up); } .ch-line--down { stroke: var(--ch-down); }
+.ch-stroke  { fill: none; stroke: var(--ch-ink); stroke-width: var(--ch-sw-thin); }
+.ch-stroke--hair { stroke-width: var(--ch-sw-hair); }
+.ch-stroke--soft { stroke: var(--ch-soft); }
+.ch-stroke--hero { stroke: var(--ch-hero); }
+.ch-ring    { fill: none; stroke: var(--ch-data-1); stroke-width: 10px; stroke-linecap: butt; }
+.ch-ring--track { stroke: var(--ch-track); }
+.ch-ring--hero  { stroke: var(--ch-hero); }
+.ch-dot     { fill: var(--ch-data-1); }
+.ch-dot--open { fill: var(--ch-paper-raised); stroke: var(--ch-data-1); stroke-width: var(--ch-sw-thin); }
+.ch-dot--hero { fill: var(--ch-hero); }
+.ch-dot--quiet { fill: var(--ch-quiet); }
+
+/* Density */
+.ch--compact { --ch-fs-axis: 8.5px; --ch-fs-label: 9px; --ch-fs-title: 14px; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   4. MOTION — CSS only. No JavaScript is needed to draw or to animate.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.ch-pop  { transform-box: fill-box; transform-origin: center; animation: ch-pop var(--ch-dur) var(--ch-ease-pop) both; }
+.ch-rise { transform-box: fill-box; transform-origin: bottom; animation: ch-rise var(--ch-dur) var(--ch-ease) both; }
+.ch-grow { transform-box: fill-box; transform-origin: left;   animation: ch-grow var(--ch-dur) var(--ch-ease) both; }
+.ch-fade { animation: ch-fade var(--ch-dur) ease both; }
+.ch-draw { stroke-dasharray: 2000; stroke-dashoffset: 2000; animation: ch-draw var(--ch-dur-slow) var(--ch-ease) forwards; }
+
+/* Stagger: add ch-d1 … ch-d12 (each step = --ch-stagger). */
+.ch-d1 { animation-delay: calc(var(--ch-stagger) * 1); }  .ch-d2 { animation-delay: calc(var(--ch-stagger) * 2); }
+.ch-d3 { animation-delay: calc(var(--ch-stagger) * 3); }  .ch-d4 { animation-delay: calc(var(--ch-stagger) * 4); }
+.ch-d5 { animation-delay: calc(var(--ch-stagger) * 5); }  .ch-d6 { animation-delay: calc(var(--ch-stagger) * 6); }
+.ch-d7 { animation-delay: calc(var(--ch-stagger) * 7); }  .ch-d8 { animation-delay: calc(var(--ch-stagger) * 8); }
+.ch-d9 { animation-delay: calc(var(--ch-stagger) * 9); }  .ch-d10 { animation-delay: calc(var(--ch-stagger) * 10); }
+.ch-d11 { animation-delay: calc(var(--ch-stagger) * 11); } .ch-d12 { animation-delay: calc(var(--ch-stagger) * 12); }
+
+@keyframes ch-pop  { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes ch-rise { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes ch-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes ch-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ch-draw { to { stroke-dashoffset: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .ch-pop, .ch-rise, .ch-grow, .ch-fade, .ch-draw { animation: none; stroke-dashoffset: 0; opacity: 1; transform: none; }
+}
+@media print {
+  .ch-pop, .ch-rise, .ch-grow, .ch-fade, .ch-draw { animation: none; stroke-dashoffset: 0; opacity: 1; transform: none; }
+  .ch-card { break-inside: avoid; }
+}
+/* ch:css:end */</style>
+</head>
+<body>
+<main class="ch-sheet">
+  <div class="ch-sheet__main">
+  <p class="ch-sheet__eyebrow">Northwind Outfitters · Customer survey · June 2026</p>
+  <h1 class="ch-sheet__title">Customers are happier than two years ago — <b>except about shipping</b></h1>
+  <p class="ch-sheet__dek">Four hundred and twelve customers answered the June 2026 survey, five points more likely to recommend Northwind than the 2024 cohort. Every satisfaction category rose but one: shipping fell seven points and is now the lowest-rated part of the experience.</p>
+
+  <div class="ch-sheet__kpis">
+    <div class="ch-kpi">
+      <p class="ch-kpi__value">412</p>
+      <p class="ch-kpi__name">Responses</p>
+      <p class="ch-kpi__delta">of 3,150 invited · 13% response</p>
+    </div>
+    <div class="ch-kpi">
+      <p class="ch-kpi__value">66%</p>
+      <p class="ch-kpi__name">Would recommend</p>
+      <p class="ch-kpi__delta ch-kpi__delta--up">+5 pts vs 2024</p>
+    </div>
+    <div class="ch-kpi">
+      <p class="ch-kpi__value">73.4</p>
+      <p class="ch-kpi__name">Mean satisfaction</p>
+      <p class="ch-kpi__delta ch-kpi__delta--up">+4.6 vs 2024</p>
+    </div>
+    <div class="ch-kpi">
+      <p class="ch-kpi__value">62</p>
+      <p class="ch-kpi__name">Shipping score</p>
+      <p class="ch-kpi__delta ch-kpi__delta--down">−7 vs 2024</p>
+    </div>
+  </div>
+
+  <section class="ch-sheet__section">
+    <p class="ch-sheet__kicker">01</p>
+    <p class="ch-sheet__claim">Durability is the reason people buy; price is third.</p>
+    <figure class="ch-card" data-ch-type="plain.bar-ranked">
+      <h2 class="ch-card__title">Durability outranks price by fourteen points</h2>
+      <p class="ch-card__sub">Share of respondents who picked each reason · percent · top three of nine reasons, multi-select · n = 412</p>
+      <svg class="ch" viewBox="0 0 760 276" role="img" aria-labelledby="op1-t op1-d">
+        <title id="op1-t">Reasons for choosing outdoor gear, ranked</title>
+        <desc id="op1-d">Durability leads every other purchase reason: 68 percent of respondents chose it, seven points ahead of fit and sizing, and more than three times sustainability.</desc>
+        <line class="ch-axis" x1="180" y1="12" x2="180" y2="268"/>
+        <g id="op1-bars">
+          <rect class="ch-hero ch-grow ch-d1" x="180" y="20" width="340" height="24"><title>Durability · 68</title></rect>
+          <rect class="ch-mark ch-grow ch-d2" x="180" y="56" width="305" height="24"><title>Fit and sizing · 61</title></rect>
+          <rect class="ch-mark ch-grow ch-d3" x="180" y="92" width="270" height="24"><title>Price · 54</title></rect>
+          <rect class="ch-mark ch-grow ch-d4" x="180" y="128" width="235" height="24"><title>Weather protection · 47</title></rect>
+          <rect class="ch-mark ch-grow ch-d5" x="180" y="164" width="165" height="24"><title>Weight · 33</title></rect>
+          <rect class="ch-quiet ch-grow ch-d6" x="180" y="200" width="105" height="24"><title>Brand reputation · 21</title></rect>
+          <rect class="ch-quiet ch-grow ch-d7" x="180" y="236" width="95" height="24"><title>Sustainability · 19</title></rect>
+        </g>
+        <text class="ch-t-label ch-t-end" x="170" y="36">Durability</text>
+        <text class="ch-t-axis ch-fade ch-d4" x="528" y="36">68%</text>
+        <text class="ch-t-label ch-t-end" x="170" y="72">Fit and sizing</text>
+        <text class="ch-t-axis ch-fade ch-d5" x="493" y="72">61%</text>
+        <text class="ch-t-label ch-t-end" x="170" y="108">Price</text>
+        <text class="ch-t-axis ch-fade ch-d6" x="458" y="108">54%</text>
+        <text class="ch-t-label ch-t-end" x="170" y="144">Weather protection</text>
+        <text class="ch-t-axis ch-fade ch-d7" x="423" y="144">47%</text>
+        <text class="ch-t-label ch-t-end" x="170" y="180">Weight</text>
+        <text class="ch-t-axis ch-fade ch-d8" x="353" y="180">33%</text>
+        <text class="ch-t-label ch-t-end" x="170" y="216">Brand reputation</text>
+        <text class="ch-t-axis ch-fade ch-d9" x="293" y="216">21%</text>
+        <text class="ch-t-label ch-t-end" x="170" y="252">Sustainability</text>
+        <text class="ch-t-axis ch-fade ch-d10" x="283" y="252">19%</text>
+      </svg>
+      <p class="ch-card__src">Northwind Outfitters customer survey · June 2026 · n = 412</p>
+      <p class="ch-card__note">Respondents chose up to three reasons, so shares do not sum to 100.</p>
+    </figure>
+  </section>
+
+  <section class="ch-sheet__section">
+    <p class="ch-sheet__kicker">02</p>
+    <p class="ch-sheet__claim">Two in three respondents would recommend Northwind.</p>
+    <figure class="ch-card" data-ch-type="plain.ring">
+      <h2 class="ch-card__title">Two in three would recommend Northwind to a friend</h2>
+      <p class="ch-card__sub">Answer to “Would you recommend Northwind Outfitters?” · count and percent of respondents · one ring segment = the yes share</p>
+      <svg class="ch" viewBox="0 0 760 220" role="img" aria-labelledby="op2-t op2-d">
+        <title id="op2-t">Share of respondents who would recommend Northwind</title>
+        <desc id="op2-d">Two in three respondents, 272 of 412, say they would recommend Northwind to a friend; one in eight says they would not.</desc>
+        <circle class="ch-ring ch-ring--track" cx="110" cy="110" r="70"/>
+        <path class="ch-ring ch-ring--hero ch-draw" d="M110,40 A70,70 0 1 1 50.85,147.44"/>
+        <text class="ch-t-value ch-t-mid ch-fade ch-d6" x="110" y="118">66%</text>
+        <text class="ch-t-note ch-t-mid ch-fade ch-d8" x="110" y="136">would recommend</text>
+        <g class="ch-fade ch-d8">
+          <rect class="ch-hero" x="250" y="60" width="10" height="10"/>
+          <text class="ch-t-label" x="268" y="69">Would recommend</text>
+          <text class="ch-t-axis ch-t-end" x="460" y="69">272 · 66%</text>
+          <rect class="ch-track" x="250" y="90" width="10" height="10"/>
+          <text class="ch-t-label" x="268" y="99">Not sure</text>
+          <text class="ch-t-axis ch-t-end" x="460" y="99">91 · 22%</text>
+          <rect class="ch-track" x="250" y="120" width="10" height="10"/>
+          <text class="ch-t-label" x="268" y="129">Would not recommend</text>
+          <text class="ch-t-axis ch-t-end" x="460" y="129">49 · 12%</text>
+          <line class="ch-axis" x1="250" y1="146" x2="460" y2="146"/>
+          <text class="ch-t-axis" x="250" y="162">All respondents</text>
+          <text class="ch-t-axis ch-t-end" x="460" y="162">412 · 100%</text>
+        </g>
+      </svg>
+      <p class="ch-card__src">Northwind Outfitters customer survey · June 2026 · n = 412</p>
+    </figure>
+  </section>
+
+  <section class="ch-sheet__section">
+    <p class="ch-sheet__kicker">03</p>
+    <p class="ch-sheet__claim">Shipping is the only category that got worse.</p>
+    <figure class="ch-card" data-ch-type="ledger.slope-pairs">
+      <h2 class="ch-card__title">Every category improved except shipping, which lost seven points</h2>
+      <p class="ch-card__sub">Mean satisfaction score, 0–100 · one line per category · left = 2024 survey, right = 2026 survey</p>
+      <svg class="ch" viewBox="0 0 760 290" role="img" aria-labelledby="op3-t op3-d">
+        <title id="op3-t">Satisfaction score by category, 2024 versus 2026</title>
+        <desc id="op3-d">Satisfaction rose in four of five categories between 2024 and 2026, led by a thirteen-point gain for the website; shipping is the one category that fell, from 69 to 62.</desc>
+        <text class="ch-t-axis ch-t-mid" x="220" y="32">2024</text>
+        <text class="ch-t-axis ch-t-mid" x="540" y="32">2026</text>
+        <line class="ch-rule" x1="220" y1="40" x2="220" y2="270"/>
+        <line class="ch-rule" x1="540" y1="40" x2="540" y2="270"/>
+        <line class="ch-line ch-draw ch-d1" x1="220" y1="120" x2="540" y2="85"/>
+        <circle class="ch-dot ch-pop ch-d1" cx="220" cy="120" r="3"/>
+        <circle class="ch-dot ch-pop ch-d3" cx="540" cy="85" r="3"/>
+        <text class="ch-t-label ch-t-end ch-fade ch-d3" x="208" y="124">Product quality <tspan class="ch-t-axis">78</tspan></text>
+        <text class="ch-t-label ch-fade ch-d5" x="552" y="89"><tspan class="ch-t-axis">85</tspan> Product quality</text>
+        <line class="ch-line ch-draw ch-d2" x1="220" y1="140" x2="540" y2="110"/>
+        <circle class="ch-dot ch-pop ch-d2" cx="220" cy="140" r="3"/>
+        <circle class="ch-dot ch-pop ch-d4" cx="540" cy="110" r="3"/>
+        <text class="ch-t-label ch-t-end ch-fade ch-d4" x="208" y="144">Store staff <tspan class="ch-t-axis">74</tspan></text>
+        <text class="ch-t-label ch-fade ch-d6" x="552" y="114"><tspan class="ch-t-axis">80</tspan> Store staff</text>
+        <line class="ch-line ch-draw ch-d3" x1="220" y1="205" x2="540" y2="140"/>
+        <circle class="ch-dot ch-pop ch-d3" cx="220" cy="205" r="3"/>
+        <circle class="ch-dot ch-pop ch-d5" cx="540" cy="140" r="3"/>
+        <text class="ch-t-label ch-t-end ch-fade ch-d5" x="208" y="209">Website <tspan class="ch-t-axis">61</tspan></text>
+        <text class="ch-t-label ch-fade ch-d7" x="552" y="144"><tspan class="ch-t-axis">74</tspan> Website</text>
+        <line class="ch-line ch-draw ch-d4" x1="220" y1="230" x2="540" y2="180"/>
+        <circle class="ch-dot ch-pop ch-d4" cx="220" cy="230" r="3"/>
+        <circle class="ch-dot ch-pop ch-d6" cx="540" cy="180" r="3"/>
+        <text class="ch-t-label ch-t-end ch-fade ch-d6" x="208" y="234">Returns <tspan class="ch-t-axis">56</tspan></text>
+        <text class="ch-t-label ch-fade ch-d8" x="552" y="184"><tspan class="ch-t-axis">66</tspan> Returns</text>
+        <line class="ch-line ch-line--down ch-draw ch-d5" x1="220" y1="165" x2="540" y2="200"/>
+        <circle class="ch-dot ch-down ch-pop ch-d5" cx="220" cy="165" r="3"/>
+        <circle class="ch-dot ch-down ch-pop ch-d7" cx="540" cy="200" r="3"/>
+        <text class="ch-t-label ch-t-end ch-fade ch-d7 ch-t-down" x="208" y="169">Shipping <tspan class="ch-t-axis">69</tspan></text>
+        <text class="ch-t-label ch-fade ch-d9 ch-t-down" x="552" y="204"><tspan class="ch-t-axis">62</tspan> Shipping</text>
+      </svg>
+      <p class="ch-card__src">Northwind Outfitters customer surveys · June 2024 (n = 388) and June 2026 (n = 412)</p>
+    </figure>
+  </section>
+  </div>
+
+  <aside class="ch-sheet__rail">
+    <div class="ch-sheet__rail-block">
+      <h3>About</h3>
+      <p>Northwind Outfitters is a fictional outdoor-gear retailer with four stores and an online shop. This one-pager summarises its June 2026 customer survey for the leadership team.</p>
+    </div>
+    <div class="ch-sheet__rail-block">
+      <h3>Method</h3>
+      <p>Email invitation to 3,150 customers who bought in the previous twelve months; 412 completed (13%). Satisfaction is the mean of a 0–100 slider per category. The 2024 comparison uses the same questions and a 388-response sample. Reason-to-buy allowed up to three picks.</p>
+    </div>
+    <div class="ch-sheet__rail-block">
+      <h3>Source</h3>
+      <p>Survey export and cleaning notes: <a href="#">northwind-survey-2026.csv</a>. Rows with fewer than three answered questions were excluded (17 rows).</p>
+    </div>
+    <p class="ch-sheet__foot">2026-07-08 · Customer insights · v1.0</p>
+  </aside>
+</main>
+</body>
+</html>

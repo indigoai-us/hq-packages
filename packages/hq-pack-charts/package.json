@@ -1,0 +1,33 @@
+{
+  "name": "@indigoai-us/hq-pack-charts",
+  "version": "0.1.0",
+  "description": "HQ content pack: editorial data charts and report sheets as self-contained HTML \u2014 token-driven, brand-bound, and linted",
+  "files": [
+    "cover.jpg",
+    "knowledge",
+    "skills",
+    "assets",
+    "scripts",
+    "package.yaml",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/indigoai-us/hq-packages.git",
+    "directory": "packages/hq-pack-charts"
+  },
+  "keywords": [
+    "hq",
+    "hq-pack",
+    "charts",
+    "data-visualization",
+    "svg",
+    "reports",
+    "design"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
+}

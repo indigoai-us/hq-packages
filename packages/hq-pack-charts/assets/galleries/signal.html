@@ -1,0 +1,973 @@
+<!DOCTYPE html>
+<html lang="en" data-ch-theme="light" data-ch-palette="ember">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Signal — hq-pack-charts gallery</title>
+
+<!-- Webfonts are OPT-IN. Uncomment to use Instrument Serif / Geist; leave
+     commented and the system stack in chart.css renders offline with no
+     third-party request from the reader's browser.
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+-->
+
+<style>/* ch:css:start */
+/* GENERATED from assets/chart.css (ad62427d9525) — do not edit here. Run scripts/sync-assets.py. */
+/*
+ * hq-pack-charts — chart.css
+ *
+ * The single source of truth for every chart HQ produces.
+ *
+ * The contract, in one sentence: an HQ chart's SVG carries semantic CLASSES
+ * and never carries a colour. Re-skinning a chart is swapping the :root block
+ * below — nothing in the SVG body changes. The same contract hq-pack-diagrams
+ * uses, extended with data roles (series, ramp, hero, delta).
+ *
+ * Every --ch-* surface/ink/structure token falls back to its --dg-* twin, so a
+ * page that already carries a diagram skin (or a company brand pack mapped
+ * through the design-styles binding formula) re-skins charts for free.
+ *
+ * Do not add a colour literal to any SVG attribute. `scripts/lint-chart.py`
+ * fails the file if you do.
+ *
+ * Theme:    <html data-ch-theme="light|dark|auto">          (default: light)
+ * Palette:  <html data-ch-palette="mono|slate|moss|ember">  (default: mono)
+ * Density:  <svg class="ch ch--comfortable|ch--compact">
+ */
+
+/* ══════════════════════════════════════════════════════════════════════════
+   1. TOKENS
+   ══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Surface ─────────────────────────────────────────────────────────── */
+  --ch-paper:        var(--dg-paper, #f4f1ec);
+  --ch-paper-raised: var(--dg-paper-raised, #ffffff);
+  --ch-paper-sunk:   var(--dg-paper-sunk, rgba(27, 26, 24, 0.045));
+
+  /* ── Ink ─────────────────────────────────────────────────────────────── */
+  --ch-ink:          var(--dg-ink, #1b1a18);     /* titles, values, primary marks */
+  --ch-muted:        var(--dg-muted, #55524c);   /* subtitles, axis labels        */
+  --ch-soft:         var(--dg-soft, #8a857c);    /* source line, minor ticks      */
+
+  /* ── Structure ───────────────────────────────────────────────────────── */
+  --ch-rule:         var(--dg-rule, rgba(27, 26, 24, 0.14));        /* gridlines */
+  --ch-rule-strong:  var(--dg-rule-strong, rgba(27, 26, 24, 0.30)); /* baselines */
+
+  /* ── Data — MONO palette (the floor; every other palette overrides) ──────
+     data-1 is the hero slot. In mono the hero is ink and the rest is a
+     lightness ladder, so a mono chart never depends on hue to be read.      */
+  --ch-hero:         var(--ch-ink);
+  --ch-data-1:       var(--ch-ink);
+  --ch-data-2:       #5b5853;
+  --ch-data-3:       #8a857c;
+  --ch-data-4:       #b3ada3;
+  --ch-data-5:       #cfcac0;
+  --ch-data-6:       #e2ddd4;
+  --ch-data-fill:    0.16;      /* opacity for area / band fills             */
+  --ch-quiet:        #d9d4cb;   /* non-focal marks when one thing is hero    */
+  --ch-track:        rgba(27, 26, 24, 0.08); /* empty part of a bar / ring   */
+
+  /* ── Ramp — ordered / sequential (5 steps, light → dark) ─────────────── */
+  --ch-ramp-1:       #e6e2da;
+  --ch-ramp-2:       #c9c3b8;
+  --ch-ramp-3:       #a09a8f;
+  --ch-ramp-4:       #6d6860;
+  --ch-ramp-5:       #1b1a18;
+
+  /* ── Delta — semantic only, always paired with a sign or label ───────── */
+  --ch-up:           var(--dg-positive, #3f6b4a);
+  --ch-down:         var(--dg-negative, #9c3a2c);
+  --ch-flat:         var(--ch-muted);
+  --ch-up-tint:      var(--dg-positive-tint, rgba(63, 107, 74, 0.12));
+  --ch-down-tint:    var(--dg-negative-tint, rgba(156, 58, 44, 0.12));
+
+  /* ── Type ────────────────────────────────────────────────────────────────
+     Webfont names lead; a system stack follows so a chart renders correctly
+     with no network. Webfonts are opt-in — see assets/template.html.        */
+  --ch-font-display: var(--dg-font-display, "Instrument Serif", "Iowan Old Style",
+                     Palatino, Georgia, serif);
+  --ch-font-body:    var(--dg-font-body, "Geist", -apple-system, BlinkMacSystemFont,
+                     "Segoe UI", Inter, Roboto, system-ui, sans-serif);
+  --ch-font-mono:    var(--dg-font-mono, "Geist Mono", ui-monospace, SFMono-Regular,
+                     Menlo, Consolas, monospace);
+
+  /* ── Type scale (px, inside the SVG viewBox) ─────────────────────────────
+     Floors are a contract: 7px is the smallest label allowed in a half-width
+     card and 6px in a full-width one. Overflow goes to a <title> hover or a
+     footnote — never to smaller type.                                        */
+  --ch-fs-title:     16px;
+  --ch-fs-sub:       11.5px;
+  --ch-fs-value:     22px;
+  --ch-fs-big:       44px;
+  --ch-fs-axis:      9.5px;
+  --ch-fs-label:     10px;
+  --ch-fs-note:      9px;
+
+  /* ── Stroke ──────────────────────────────────────────────────────────── */
+  --ch-sw-hair:      0.6px;
+  --ch-sw-thin:      1px;
+  --ch-sw-line:      1.6px;
+  --ch-sw-bold:      2.4px;
+
+  /* ── Motion ──────────────────────────────────────────────────────────── */
+  --ch-dur:          900ms;
+  --ch-dur-slow:     1300ms;
+  --ch-ease:         cubic-bezier(0.22, 0.61, 0.36, 1);
+  --ch-ease-pop:     cubic-bezier(0.2, 0.7, 0.3, 1.25);
+  --ch-stagger:      28ms;
+}
+
+/* ── Palettes ───────────────────────────────────────────────────────────────
+   One palette per file. The agent picks from data semantics:
+     slate — ordered / sequential   (one series that has an order)
+     moss  — categorical, ≤ 4 kinds (unordered kinds that must be told apart)
+     ember — mono + one hero        (everything quiet except the point)
+   Unclear fit → stay on mono.                                               */
+
+[data-ch-palette="slate"] {
+  --ch-hero:    #2f5d8f;
+  --ch-data-1:  #2f5d8f;
+  --ch-data-2:  #5b7fa6;
+  --ch-data-3:  #86a1bd;
+  --ch-data-4:  #adc0d3;
+  --ch-data-5:  #cfdae5;
+  --ch-data-6:  #e6ecf2;
+  --ch-quiet:   #d6dde5;
+  --ch-track:   rgba(47, 93, 143, 0.10);
+  --ch-ramp-1:  #e6ecf2;
+  --ch-ramp-2:  #b9c9da;
+  --ch-ramp-3:  #86a1bd;
+  --ch-ramp-4:  #4f759d;
+  --ch-ramp-5:  #1f3f63;
+}
+
+[data-ch-palette="moss"] {
+  --ch-hero:    #3f6b4a;
+  --ch-data-1:  #3f6b4a;
+  --ch-data-2:  #9a7b4f;
+  --ch-data-3:  #4a6d7c;
+  --ch-data-4:  #a4584a;
+  --ch-data-5:  #8a857c;
+  --ch-data-6:  #b3ada3;
+  --ch-quiet:   #d8dcd2;
+  --ch-track:   rgba(63, 107, 74, 0.10);
+  --ch-ramp-1:  #e6ebe0;
+  --ch-ramp-2:  #bfcbb4;
+  --ch-ramp-3:  #8fa686;
+  --ch-ramp-4:  #5f8461;
+  --ch-ramp-5:  #2c4b34;
+}
+
+[data-ch-palette="ember"] {
+  --ch-hero:    #c2502f;
+  --ch-data-1:  #c2502f;
+  --ch-data-2:  #5b5853;
+  --ch-data-3:  #8a857c;
+  --ch-data-4:  #b3ada3;
+  --ch-data-5:  #cfcac0;
+  --ch-data-6:  #e2ddd4;
+  --ch-quiet:   #d9d4cb;
+  --ch-track:   rgba(194, 80, 47, 0.10);
+  --ch-ramp-1:  #f2e3dd;
+  --ch-ramp-2:  #e3b8a8;
+  --ch-ramp-3:  #d48a70;
+  --ch-ramp-4:  #c2502f;
+  --ch-ramp-5:  #7d2f18;
+}
+
+/* ── Dark theme ─────────────────────────────────────────────────────────── */
+
+[data-ch-theme="dark"] {
+  --ch-paper:        var(--dg-paper-dark, #171614);
+  --ch-paper-raised: #201f1c;
+  --ch-paper-sunk:   rgba(244, 241, 236, 0.06);
+  --ch-ink:          #f0ede6;
+  --ch-muted:        #b5b0a6;
+  --ch-soft:         #7d786f;
+  --ch-rule:         rgba(240, 237, 230, 0.14);
+  --ch-rule-strong:  rgba(240, 237, 230, 0.32);
+  --ch-data-2:       #b5b0a6;
+  --ch-data-3:       #8a857c;
+  --ch-data-4:       #64605a;
+  --ch-data-5:       #4a4741;
+  --ch-data-6:       #37342f;
+  --ch-quiet:        #3d3a35;
+  --ch-track:        rgba(240, 237, 230, 0.10);
+  --ch-ramp-1:       #37342f;
+  --ch-ramp-2:       #5c574f;
+  --ch-ramp-3:       #8a857c;
+  --ch-ramp-4:       #bfb9ae;
+  --ch-ramp-5:       #f0ede6;
+  --ch-up:           #7fb08a;
+  --ch-down:         #d8776a;
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-ch-theme="auto"] {
+    --ch-paper:        #171614;
+    --ch-paper-raised: #201f1c;
+    --ch-paper-sunk:   rgba(244, 241, 236, 0.06);
+    --ch-ink:          #f0ede6;
+    --ch-muted:        #b5b0a6;
+    --ch-soft:         #7d786f;
+    --ch-rule:         rgba(240, 237, 230, 0.14);
+    --ch-rule-strong:  rgba(240, 237, 230, 0.32);
+    --ch-quiet:        #3d3a35;
+    --ch-track:        rgba(240, 237, 230, 0.10);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   2. PAGE + CARD
+   ══════════════════════════════════════════════════════════════════════════ */
+
+html, body { margin: 0; }
+body {
+  background: var(--ch-paper);
+  color: var(--ch-ink);
+  font-family: var(--ch-font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+.ch-page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 48px 32px 72px;
+}
+.ch-page__eyebrow {
+  font-family: var(--ch-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ch-soft);
+  margin: 0 0 8px;
+}
+.ch-page__title {
+  font-family: var(--ch-font-display);
+  font-weight: 400;
+  font-size: 34px;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  margin: 0 0 8px;
+}
+.ch-page__dek {
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ch-muted);
+  max-width: 64ch;
+  margin: 0 0 32px;
+}
+
+/* Two-column grid; a .ch-card--wide spans both. */
+.ch-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+@media (max-width: 760px) { .ch-grid { grid-template-columns: 1fr; } }
+
+/* The card: h2 (conclusion) → .ch-card__sub (legend + range) → svg → .ch-card__src */
+.ch-card {
+  background: var(--ch-paper-raised);
+  border: 1px solid var(--ch-rule);
+  border-radius: 8px;
+  padding: 24px 24px 18px;
+  min-width: 0;
+}
+.ch-card--wide { grid-column: 1 / -1; }
+.ch-card--dark {
+  /* literal on purpose: the custom-property overrides below apply to this
+     element too, so background: var(--ch-ink) would resolve to the LIGHT ink */
+  background: #171614;
+  color: #f0ede6;
+  --ch-ink: #f0ede6; --ch-muted: #b5b0a6; --ch-soft: #7d786f;
+  --ch-rule: rgba(240,237,230,.14); --ch-rule-strong: rgba(240,237,230,.32);
+  --ch-paper: #171614; --ch-paper-raised: #201f1c;
+  --ch-track: rgba(240,237,230,.10); --ch-quiet: #3d3a35;
+}
+.ch-card__title {
+  font-size: var(--ch-fs-title);
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
+  margin: 0 0 4px;
+}
+.ch-card__sub {
+  font-size: var(--ch-fs-sub);
+  color: var(--ch-muted);
+  line-height: 1.4;
+  margin: 0 0 14px;
+}
+.ch-card__src {
+  font-family: var(--ch-font-mono);
+  font-size: var(--ch-fs-note);
+  letter-spacing: 0.04em;
+  color: var(--ch-soft);
+  margin: 12px 0 0;
+}
+.ch-card__note {
+  font-size: var(--ch-fs-label);
+  color: var(--ch-muted);
+  line-height: 1.45;
+  margin: 10px 0 0;
+}
+/* Editorial split: a prose column beside a wide chart. */
+.ch-card--split { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 24px; align-items: start; }
+.ch-card--split > .ch-card__prose { font-size: 13px; line-height: 1.5; color: var(--ch-muted); }
+.ch-card--split > .ch-card__prose > h2 { color: var(--ch-ink); }
+@media (max-width: 760px) { .ch-card--split { grid-template-columns: 1fr; } }
+
+/* ── Sheets — full-page report slots (spec/06-sheets.md) ──────────────── */
+.ch-sheet { max-width: 1080px; margin: 0 auto; padding: 56px 40px 64px; display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 40px; }
+.ch-sheet--fixed { width: 600px; height: 1000px; padding: 40px 36px; display: block; overflow: hidden; box-sizing: border-box; }
+.ch-sheet__main { min-width: 0; }
+.ch-sheet__eyebrow { font-family: var(--ch-font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ch-soft); margin: 0 0 12px; }
+.ch-sheet__title { font-family: var(--ch-font-display); font-weight: 400; font-size: 40px; line-height: 1.1; letter-spacing: -0.015em; margin: 0 0 12px; }
+.ch-sheet__title b { font-weight: 400; font-style: italic; color: var(--ch-hero); }
+.ch-sheet__dek { font-size: 15px; line-height: 1.5; color: var(--ch-muted); max-width: 60ch; margin: 0 0 28px; }
+.ch-sheet__kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 16px; padding: 20px 0; border-top: 1px solid var(--ch-rule-strong); border-bottom: 1px solid var(--ch-rule); margin: 0 0 32px; }
+.ch-kpi__value { font-size: 30px; font-weight: 700; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; line-height: 1; margin: 0 0 6px; }
+.ch-kpi__name { font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ch-muted); margin: 0; }
+.ch-kpi__delta { font-family: var(--ch-font-mono); font-size: 11px; margin: 4px 0 0; color: var(--ch-muted); }
+.ch-kpi__delta--up { color: var(--ch-up); }
+.ch-kpi__delta--down { color: var(--ch-down); }
+.ch-sheet__section { margin: 0 0 32px; }
+.ch-sheet__kicker { font-family: var(--ch-font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ch-soft); margin: 0 0 6px; }
+.ch-sheet__claim { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.3; margin: 0 0 14px; }
+.ch-sheet__rail { font-size: 12.5px; line-height: 1.55; color: var(--ch-muted); }
+.ch-sheet__rail h3 { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ch-soft); margin: 0 0 8px; font-weight: 600; }
+.ch-sheet__rail-block { padding: 16px; background: var(--ch-paper-sunk); border-radius: 6px; margin: 0 0 16px; }
+.ch-sheet__rail a { color: var(--ch-ink); }
+.ch-sheet__foot { font-family: var(--ch-font-mono); font-size: 10px; letter-spacing: 0.04em; color: var(--ch-soft); border-top: 1px solid var(--ch-rule); padding-top: 12px; margin-top: 24px; }
+@media (max-width: 900px) { .ch-sheet { grid-template-columns: 1fr; } }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   3. SVG ROLES — every class the chart body may use
+   ══════════════════════════════════════════════════════════════════════════ */
+
+svg.ch { display: block; width: 100%; height: auto; overflow: visible; font-family: var(--ch-font-body); }
+svg.ch text { fill: var(--ch-ink); }
+
+/* Ground + frame */
+.ch-bg      { fill: var(--ch-paper-raised); }
+.ch-band    { fill: var(--ch-paper-sunk); }
+.ch-grid    { stroke: var(--ch-rule); stroke-width: var(--ch-sw-hair); fill: none; }
+.ch-axis    { stroke: var(--ch-rule-strong); stroke-width: var(--ch-sw-thin); fill: none; }
+.ch-tick    { stroke: var(--ch-rule-strong); stroke-width: var(--ch-sw-hair); }
+.ch-rule    { stroke: var(--ch-rule); stroke-width: var(--ch-sw-hair); fill: none; }
+.ch-target  { stroke: var(--ch-ink); stroke-width: var(--ch-sw-thin); stroke-dasharray: 3 3; fill: none; }
+
+/* Text roles */
+.ch-t-value { font-size: var(--ch-fs-value); font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.ch-t-big   { font-size: var(--ch-fs-big);   font-weight: 700; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.ch-t-label { font-size: var(--ch-fs-label); fill: var(--ch-ink); }
+.ch-t-axis  { font-size: var(--ch-fs-axis);  fill: var(--ch-muted); font-variant-numeric: tabular-nums; }
+.ch-t-note  { font-size: var(--ch-fs-note);  fill: var(--ch-soft); }
+.ch-t-mono  { font-family: var(--ch-font-mono); }
+.ch-t-muted { fill: var(--ch-muted); }
+.ch-t-soft  { fill: var(--ch-soft); }
+.ch-t-hero  { fill: var(--ch-hero); }
+.ch-t-inv   { fill: var(--ch-paper-raised); }
+.ch-t-up    { fill: var(--ch-up); }
+.ch-t-down  { fill: var(--ch-down); }
+.ch-t-end   { text-anchor: end; }
+.ch-t-mid   { text-anchor: middle; }
+
+/* Marks — fills */
+.ch-mark    { fill: var(--ch-data-1); }
+.ch-hero    { fill: var(--ch-hero); }
+.ch-quiet   { fill: var(--ch-quiet); }
+.ch-track   { fill: var(--ch-track); }
+.ch-s1 { fill: var(--ch-data-1); }  .ch-s2 { fill: var(--ch-data-2); }
+.ch-s3 { fill: var(--ch-data-3); }  .ch-s4 { fill: var(--ch-data-4); }
+.ch-s5 { fill: var(--ch-data-5); }  .ch-s6 { fill: var(--ch-data-6); }
+.ch-r1 { fill: var(--ch-ramp-1); }  .ch-r2 { fill: var(--ch-ramp-2); }
+.ch-r3 { fill: var(--ch-ramp-3); }  .ch-r4 { fill: var(--ch-ramp-4); }
+.ch-r5 { fill: var(--ch-ramp-5); }
+.ch-up   { fill: var(--ch-up); }   .ch-down { fill: var(--ch-down); }  .ch-flat { fill: var(--ch-flat); }
+.ch-up-tint { fill: var(--ch-up-tint); } .ch-down-tint { fill: var(--ch-down-tint); }
+.ch-fill    { fill-opacity: var(--ch-data-fill); }   /* combine: class="ch-s1 ch-fill" */
+.ch-mask    { fill: var(--ch-paper-raised); }         /* label halo behind text       */
+
+/* Marks — strokes */
+.ch-line    { fill: none; stroke: var(--ch-data-1); stroke-width: var(--ch-sw-line); stroke-linecap: round; stroke-linejoin: round; }
+.ch-line--hero  { stroke: var(--ch-hero); stroke-width: var(--ch-sw-bold); }
+.ch-line--quiet { stroke: var(--ch-quiet); }
+.ch-line--s2 { stroke: var(--ch-data-2); } .ch-line--s3 { stroke: var(--ch-data-3); }
+.ch-line--s4 { stroke: var(--ch-data-4); } .ch-line--s5 { stroke: var(--ch-data-5); }
+.ch-line--s6 { stroke: var(--ch-data-6); }
+.ch-line--up { stroke: var(--ch-up); } .ch-line--down { stroke: var(--ch-down); }
+.ch-stroke  { fill: none; stroke: var(--ch-ink); stroke-width: var(--ch-sw-thin); }
+.ch-stroke--hair { stroke-width: var(--ch-sw-hair); }
+.ch-stroke--soft { stroke: var(--ch-soft); }
+.ch-stroke--hero { stroke: var(--ch-hero); }
+.ch-ring    { fill: none; stroke: var(--ch-data-1); stroke-width: 10px; stroke-linecap: butt; }
+.ch-ring--track { stroke: var(--ch-track); }
+.ch-ring--hero  { stroke: var(--ch-hero); }
+.ch-dot     { fill: var(--ch-data-1); }
+.ch-dot--open { fill: var(--ch-paper-raised); stroke: var(--ch-data-1); stroke-width: var(--ch-sw-thin); }
+.ch-dot--hero { fill: var(--ch-hero); }
+.ch-dot--quiet { fill: var(--ch-quiet); }
+
+/* Density */
+.ch--compact { --ch-fs-axis: 8.5px; --ch-fs-label: 9px; --ch-fs-title: 14px; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   4. MOTION — CSS only. No JavaScript is needed to draw or to animate.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.ch-pop  { transform-box: fill-box; transform-origin: center; animation: ch-pop var(--ch-dur) var(--ch-ease-pop) both; }
+.ch-rise { transform-box: fill-box; transform-origin: bottom; animation: ch-rise var(--ch-dur) var(--ch-ease) both; }
+.ch-grow { transform-box: fill-box; transform-origin: left;   animation: ch-grow var(--ch-dur) var(--ch-ease) both; }
+.ch-fade { animation: ch-fade var(--ch-dur) ease both; }
+.ch-draw { stroke-dasharray: 2000; stroke-dashoffset: 2000; animation: ch-draw var(--ch-dur-slow) var(--ch-ease) forwards; }
+
+/* Stagger: add ch-d1 … ch-d12 (each step = --ch-stagger). */
+.ch-d1 { animation-delay: calc(var(--ch-stagger) * 1); }  .ch-d2 { animation-delay: calc(var(--ch-stagger) * 2); }
+.ch-d3 { animation-delay: calc(var(--ch-stagger) * 3); }  .ch-d4 { animation-delay: calc(var(--ch-stagger) * 4); }
+.ch-d5 { animation-delay: calc(var(--ch-stagger) * 5); }  .ch-d6 { animation-delay: calc(var(--ch-stagger) * 6); }
+.ch-d7 { animation-delay: calc(var(--ch-stagger) * 7); }  .ch-d8 { animation-delay: calc(var(--ch-stagger) * 8); }
+.ch-d9 { animation-delay: calc(var(--ch-stagger) * 9); }  .ch-d10 { animation-delay: calc(var(--ch-stagger) * 10); }
+.ch-d11 { animation-delay: calc(var(--ch-stagger) * 11); } .ch-d12 { animation-delay: calc(var(--ch-stagger) * 12); }
+
+@keyframes ch-pop  { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes ch-rise { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes ch-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes ch-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ch-draw { to { stroke-dashoffset: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .ch-pop, .ch-rise, .ch-grow, .ch-fade, .ch-draw { animation: none; stroke-dashoffset: 0; opacity: 1; transform: none; }
+}
+@media print {
+  .ch-pop, .ch-rise, .ch-grow, .ch-fade, .ch-draw { animation: none; stroke-dashoffset: 0; opacity: 1; transform: none; }
+  .ch-card { break-inside: avoid; }
+}
+/* ch:css:end */</style>
+</head>
+<body>
+<main class="ch-page">
+  <p class="ch-page__eyebrow">hq-pack-charts · signal gallery</p>
+  <h1 class="ch-page__title">Signal — the answer in three seconds</h1>
+  <p class="ch-page__dek">Eight card types for the reader who will not stay: one number, one delta, one hero, and nothing that needs a legend to decode.</p>
+
+  <div class="ch-grid">
+    <figure class="ch-card" data-ch-type="signal.big-number">
+      <h2 class="ch-card__title">The number, the delta, the range</h2>
+      <p class="ch-card__sub">Four headline metrics · Q2 2026 vs Q1 2026 · sign glyph carries the direction</p>
+
+      <svg class="ch" viewBox="0 0 520 300" role="img" aria-labelledby="bn-t bn-d">
+        <title id="bn-t">Q2 2026 headline metrics</title>
+        <desc id="bn-d">Net revenue reached $1.84M in Q2 2026, up 12.4% on Q1, while orders rose 8.1% and the refund rate fell 0.6 points to 2.1%.</desc>
+      <line class="ch-rule" x1="16" y1="150" x2="504" y2="150"/>
+      <line class="ch-rule" x1="260" y1="16" x2="260" y2="284"/>
+      <g>
+        <text class="ch-t-label ch-t-muted ch-fade ch-d1" x="16" y="30">Net revenue</text>
+        <text class="ch-t-big ch-t-hero ch-fade ch-d3" x="16" y="80">$1.84M</text>
+        <text class="ch-t-label ch-t-mono ch-t-up ch-fade ch-d5" x="16" y="104">▲ 12.4%</text>
+        <text class="ch-t-note ch-fade ch-d5" x="16" y="122">was $1.64M in Q1</text>
+      </g>
+      <g>
+        <text class="ch-t-label ch-t-muted ch-fade ch-d2" x="272" y="30">Orders</text>
+        <text class="ch-t-big ch-fade ch-d4" x="272" y="80">24,310</text>
+        <text class="ch-t-label ch-t-mono ch-t-up ch-fade ch-d6" x="272" y="104">▲ 8.1%</text>
+        <text class="ch-t-note ch-fade ch-d6" x="272" y="122">was 22,487 in Q1</text>
+      </g>
+      <g>
+        <text class="ch-t-label ch-t-muted ch-fade ch-d3" x="16" y="180">Refund rate</text>
+        <text class="ch-t-big ch-fade ch-d5" x="16" y="230">2.1%</text>
+        <text class="ch-t-label ch-t-mono ch-t-down ch-fade ch-d7" x="16" y="254">▼ 0.6 pt</text>
+        <text class="ch-t-note ch-fade ch-d7" x="16" y="272">was 2.7% in Q1</text>
+      </g>
+      <g>
+        <text class="ch-t-label ch-t-muted ch-fade ch-d4" x="272" y="180">Avg. order</text>
+        <text class="ch-t-big ch-fade ch-d6" x="272" y="230">$75.70</text>
+        <text class="ch-t-label ch-t-mono ch-t-up ch-fade ch-d8" x="272" y="254">▲ 3.9%</text>
+        <text class="ch-t-note ch-fade ch-d8" x="272" y="272">was $72.86 in Q1</text>
+      </g>
+      </svg>
+
+      <p class="ch-card__src">Demo data · invented for the gallery · 2026-09-01</p>
+    </figure>
+
+    <figure class="ch-card" data-ch-type="signal.progress-ring">
+      <h2 class="ch-card__title">How far along, one ring each</h2>
+      <p class="ch-card__sub">Ring sweep = share of goal complete · count of goal under each ring · as of 2026-08-30</p>
+
+      <svg class="ch" viewBox="0 0 520 300" role="img" aria-labelledby="pr-t pr-d">
+        <title id="pr-t">Four programme goals, percent complete</title>
+        <desc id="pr-d">Onboarding is 78% complete and closest to done; migration sits at 76%, docs at 58% and test coverage at 71%.</desc>
+      <g>
+        <circle class="ch-ring ch-ring--track" cx="72" cy="140" r="44"/>
+        <path class="ch-ring ch-draw ch-d1" d="M72 96 A44 44 0 1 1 28 136"><title>Migration · 612 of 800</title></path>
+        <text class="ch-t-value ch-t-mid ch-fade ch-d3" x="72" y="148">76%</text>
+        <text class="ch-t-label ch-t-mid ch-fade ch-d4" x="72" y="214">Migration</text>
+        <text class="ch-t-note ch-t-mid ch-t-mono ch-fade ch-d5" x="72" y="230">612 of 800</text>
+      </g>
+      <g>
+        <circle class="ch-ring ch-ring--track" cx="197" cy="140" r="44"/>
+        <path class="ch-ring ch-ring--hero ch-draw ch-d3" d="M197 96 A44 44 0 1 1 154 131"><title>Onboarding · 47 of 60</title></path>
+        <text class="ch-t-value ch-t-mid ch-t-hero ch-fade ch-d5" x="197" y="148">78%</text>
+        <text class="ch-t-label ch-t-mid ch-fade ch-d6" x="197" y="214">Onboarding</text>
+        <text class="ch-t-note ch-t-mid ch-t-mono ch-fade ch-d7" x="197" y="230">47 of 60</text>
+      </g>
+      <g>
+        <circle class="ch-ring ch-ring--track" cx="322" cy="140" r="44"/>
+        <path class="ch-ring ch-draw ch-d5" d="M322 96 A44 44 0 1 1 302 179"><title>Docs · 138 of 240</title></path>
+        <text class="ch-t-value ch-t-mid ch-fade ch-d7" x="322" y="148">57%</text>
+        <text class="ch-t-label ch-t-mid ch-fade ch-d8" x="322" y="214">Docs</text>
+        <text class="ch-t-note ch-t-mid ch-t-mono ch-fade ch-d9" x="322" y="230">138 of 240</text>
+      </g>
+      <g>
+        <circle class="ch-ring ch-ring--track" cx="447" cy="140" r="44"/>
+        <path class="ch-ring ch-draw ch-d7" d="M447 96 A44 44 0 1 1 404.5 151"><title>Test cover · 71 of 100</title></path>
+        <text class="ch-t-value ch-t-mid ch-fade ch-d9" x="447" y="148">71%</text>
+        <text class="ch-t-label ch-t-mid ch-fade ch-d10" x="447" y="214">Test cover</text>
+        <text class="ch-t-note ch-t-mid ch-t-mono ch-fade ch-d11" x="447" y="230">71 of 100</text>
+      </g>
+      </svg>
+
+      <p class="ch-card__src">Demo data · invented for the gallery · 2026-09-01</p>
+    </figure>
+
+    <figure class="ch-card ch-card--wide" data-ch-type="signal.kpi-spark">
+      <h2 class="ch-card__title">Number, delta, and the last twelve periods</h2>
+      <p class="ch-card__sub">Five weekly KPIs with a 12-week sparkline · week ending 2026-08-30 vs prior week</p>
+
+      <svg class="ch" viewBox="0 0 1080 200" role="img" aria-labelledby="ks-t ks-d">
+        <title id="ks-t">Weekly KPIs with twelve-week trend</title>
+        <desc id="ks-d">Conversion climbed to 3.41%, its twelfth-week high, while sessions and order value rose and the refund rate kept falling; CAC ticked up 4.1%.</desc>
+      <line class="ch-rule" x1="217" y1="16" x2="217" y2="192"/>
+      <line class="ch-rule" x1="431" y1="16" x2="431" y2="192"/>
+      <line class="ch-rule" x1="645" y1="16" x2="645" y2="192"/>
+      <line class="ch-rule" x1="859" y1="16" x2="859" y2="192"/>
+      <g>
+        <text class="ch-t-label ch-t-muted ch-fade ch-d1" x="16" y="26">Sessions</text>
+        <text class="ch-t-value ch-fade ch-d2" x="16" y="58">128.4k</text>
+        <text class="ch-t-label ch-t-mono ch-t-up ch-fade ch-d3" x="16" y="78">▲ 6.2%</text>
+        <path class="ch-line ch-line--s2 ch-draw ch-d3" d="M16 176 L33 167.5 L50 169.5 L67 159 L84 150.5 L101 154.5 L118 144 L135 135.5 L152 139.5 L169 127 L186 120.5 L203 112"/>
+        <circle class="ch-dot ch-pop ch-d7" cx="203" cy="112" r="3.5"/>
+        <text class="ch-t-note ch-fade ch-d8" x="16" y="192">12 wk · low 98 · high 128</text>
+      </g>
+      <g>
+        <text class="ch-t-label ch-t-muted ch-fade ch-d2" x="230" y="26">Conversion</text>
+        <text class="ch-t-value ch-t-hero ch-fade ch-d3" x="230" y="58">3.41%</text>
+        <text class="ch-t-label ch-t-mono ch-t-up ch-fade ch-d4" x="230" y="78">▲ 0.32 pt</text>
+        <path class="ch-line ch-line--hero ch-draw ch-d6" d="M230 165.5 L247 176 L264 155 L281 144.5 L298 155 L315 134 L332 144.5 L349 123.5 L366 134 L383 123.5 L400 113 L417 112"/>
+        <circle class="ch-dot ch-dot--hero ch-pop ch-d8" cx="417" cy="112" r="3.5"/>
+        <text class="ch-t-note ch-fade ch-d9" x="230" y="192">12 wk · low 2.8 · high 3.41</text>
+      </g>
+      <g>
+        <text class="ch-t-label ch-t-muted ch-fade ch-d3" x="444" y="26">Avg. order</text>
+        <text class="ch-t-value ch-fade ch-d4" x="444" y="58">$75.70</text>
+        <text class="ch-t-label ch-t-mono ch-t-up ch-fade ch-d5" x="444" y="78">▲ 3.9%</text>
+        <path class="ch-line ch-line--s2 ch-draw ch-d3" d="M444 165.5 L461 154.5 L478 176 L495 144 L512 154.5 L529 133.5 L546 144 L563 122.5 L580 133.5 L597 112 L614 122.5 L631 115"/>
+        <circle class="ch-dot ch-pop ch-d9" cx="631" cy="115" r="3.5"/>
+        <text class="ch-t-note ch-fade ch-d10" x="444" y="192">12 wk · low 70 · high 76</text>
+      </g>
+      <g>
+        <text class="ch-t-label ch-t-muted ch-fade ch-d4" x="658" y="26">Refund rate</text>
+        <text class="ch-t-value ch-fade ch-d5" x="658" y="58">2.1%</text>
+        <text class="ch-t-label ch-t-mono ch-t-down ch-fade ch-d6" x="658" y="78">▼ 0.6 pt</text>
+        <path class="ch-line ch-line--s2 ch-draw ch-d3" d="M658 121 L675 112 L692 130.5 L709 121 L726 139.5 L743 148.5 L760 139.5 L777 157.5 L794 167 L811 157.5 L828 167 L845 176"/>
+        <circle class="ch-dot ch-pop ch-d10" cx="845" cy="176" r="3.5"/>
+        <text class="ch-t-note ch-fade ch-d11" x="658" y="192">12 wk · low 2.1 · high 2.8</text>
+      </g>
+      <g>
+        <text class="ch-t-label ch-t-muted ch-fade ch-d5" x="872" y="26">CAC</text>
+        <text class="ch-t-value ch-fade ch-d6" x="872" y="58">$38.20</text>
+        <text class="ch-t-label ch-t-mono ch-t-up ch-fade ch-d7" x="872" y="78">▲ 4.1%</text>
+        <path class="ch-line ch-line--s2 ch-draw ch-d3" d="M872 163 L889 150.5 L906 176 L923 150.5 L940 137.5 L957 150.5 L974 125 L991 137.5 L1008 112 L1025 125 L1042 112 L1059 122"/>
+        <circle class="ch-dot ch-pop ch-d11" cx="1059" cy="122" r="3.5"/>
+        <text class="ch-t-note ch-fade ch-d12" x="872" y="192">12 wk · low 34 · high 39</text>
+      </g>
+      </svg>
+
+      <p class="ch-card__src">Demo data · invented for the gallery · 2026-09-01</p>
+    </figure>
+
+    <figure class="ch-card ch-card--wide" data-ch-type="signal.bullet">
+      <h2 class="ch-card__title">Actual against target, on a range</h2>
+      <p class="ch-card__sub">Bar = actual revenue, dashed tick = plan, shaded bands = under 60% · plan · 130% of plan · USD thousands · Q2 2026</p>
+
+      <svg class="ch" viewBox="0 0 1080 320" role="img" aria-labelledby="bu-t bu-d">
+        <title id="bu-t">Q2 revenue against plan by channel</title>
+        <desc id="bu-d">Wholesale beat plan by 32k and marketplace by 26k, while DTC, subscriptions and licensing finished short of plan.</desc>
+      <line class="ch-grid" x1="160" y1="14" x2="160" y2="292"/>
+      <text class="ch-t-axis ch-t-mid" x="160" y="306">0</text>
+      <line class="ch-grid" x1="460" y1="14" x2="460" y2="292"/>
+      <text class="ch-t-axis ch-t-mid" x="460" y="306">200</text>
+      <line class="ch-grid" x1="760" y1="14" x2="760" y2="292"/>
+      <text class="ch-t-axis ch-t-mid" x="760" y="306">400</text>
+      <text class="ch-t-note" x="1012" y="306">USD k</text>
+      <g>
+        <rect class="ch-r1" x="160" y="20" width="342" height="22"/>
+        <rect class="ch-r2" x="502" y="20" width="228" height="22"/>
+        <rect class="ch-r3" x="730" y="20" width="171" height="22"/>
+        <rect class="ch-r1" x="160" y="66" width="288" height="22"/>
+        <rect class="ch-r2" x="448" y="66" width="192" height="22"/>
+        <rect class="ch-r3" x="640" y="66" width="144" height="22"/>
+        <rect class="ch-r1" x="160" y="112" width="135" height="22"/>
+        <rect class="ch-r2" x="295" y="112" width="90" height="22"/>
+        <rect class="ch-r3" x="385" y="112" width="67.5" height="22"/>
+        <rect class="ch-r1" x="160" y="158" width="108" height="22"/>
+        <rect class="ch-r2" x="268" y="158" width="72" height="22"/>
+        <rect class="ch-r3" x="340" y="158" width="54" height="22"/>
+        <rect class="ch-r1" x="160" y="204" width="54" height="22"/>
+        <rect class="ch-r2" x="214" y="204" width="36" height="22"/>
+        <rect class="ch-r3" x="250" y="204" width="27" height="22"/>
+        <rect class="ch-r1" x="160" y="250" width="40.5" height="22"/>
+        <rect class="ch-r2" x="200.5" y="250" width="27" height="22"/>
+        <rect class="ch-r3" x="227.5" y="250" width="20.5" height="22"/>
+      </g>
+      <g>
+        <rect class="ch-hero ch-grow ch-d1" x="160" y="27" width="618" height="8"><title>Wholesale · 412</title></rect>
+        <rect class="ch-s2 ch-grow ch-d2" x="160" y="73" width="432" height="8"><title>DTC site · 288</title></rect>
+        <rect class="ch-s2 ch-grow ch-d3" x="160" y="119" width="264" height="8"><title>Marketplace · 176</title></rect>
+        <rect class="ch-s2 ch-grow ch-d4" x="160" y="165" width="141" height="8"><title>Subscriptions · 94</title></rect>
+        <rect class="ch-s2 ch-grow ch-d5" x="160" y="211" width="91.5" height="8"><title>Events · 61</title></rect>
+        <rect class="ch-s2 ch-grow ch-d6" x="160" y="257" width="57" height="8"><title>Licensing · 38</title></rect>
+      </g>
+      <g>
+        <line class="ch-target" x1="730" y1="17" x2="730" y2="45"/>
+        <text class="ch-t-label ch-t-end ch-fade ch-d2" x="150" y="35">Wholesale</text>
+        <text class="ch-t-value ch-t-hero ch-fade ch-d3" x="1012" y="38">412</text>
+        <text class="ch-t-note ch-t-mono ch-t-up ch-fade ch-d4" x="1012" y="51">+32 vs plan</text>
+        <line class="ch-target" x1="640" y1="63" x2="640" y2="91"/>
+        <text class="ch-t-label ch-t-end ch-fade ch-d3" x="150" y="81">DTC site</text>
+        <text class="ch-t-value ch-fade ch-d4" x="1012" y="84">288</text>
+        <text class="ch-t-note ch-t-mono ch-t-down ch-fade ch-d5" x="1012" y="97">−32 vs plan</text>
+        <line class="ch-target" x1="385" y1="109" x2="385" y2="137"/>
+        <text class="ch-t-label ch-t-end ch-fade ch-d4" x="150" y="127">Marketplace</text>
+        <text class="ch-t-value ch-fade ch-d5" x="1012" y="130">176</text>
+        <text class="ch-t-note ch-t-mono ch-t-up ch-fade ch-d6" x="1012" y="143">+26 vs plan</text>
+        <line class="ch-target" x1="340" y1="155" x2="340" y2="183"/>
+        <text class="ch-t-label ch-t-end ch-fade ch-d5" x="150" y="173">Subscriptions</text>
+        <text class="ch-t-value ch-fade ch-d6" x="1012" y="176">94</text>
+        <text class="ch-t-note ch-t-mono ch-t-down ch-fade ch-d7" x="1012" y="189">−26 vs plan</text>
+        <line class="ch-target" x1="250" y1="201" x2="250" y2="229"/>
+        <text class="ch-t-label ch-t-end ch-fade ch-d6" x="150" y="219">Events</text>
+        <text class="ch-t-value ch-fade ch-d7" x="1012" y="222">61</text>
+        <text class="ch-t-note ch-t-mono ch-t-up ch-fade ch-d8" x="1012" y="235">+1 vs plan</text>
+        <line class="ch-target" x1="227.5" y1="247" x2="227.5" y2="275"/>
+        <text class="ch-t-label ch-t-end ch-fade ch-d7" x="150" y="265">Licensing</text>
+        <text class="ch-t-value ch-fade ch-d8" x="1012" y="268">38</text>
+        <text class="ch-t-note ch-t-mono ch-t-down ch-fade ch-d9" x="1012" y="281">−7 vs plan</text>
+      </g>
+      </svg>
+
+      <p class="ch-card__src">Demo data · invented for the gallery · 2026-09-01</p>
+    </figure>
+
+    <figure class="ch-card ch-card--wide" data-ch-type="signal.bar-delta">
+      <h2 class="ch-card__title">Ranked now, and how each moved</h2>
+      <p class="ch-card__sub">Bars = sessions in August, thousands · right column = change vs July · ▲ up, ▼ down</p>
+
+      <svg class="ch" viewBox="0 0 1080 320" role="img" aria-labelledby="bd-t bd-d">
+        <title id="bd-t">Traffic sources ranked with month-on-month change</title>
+        <desc id="bd-d">Instagram still leads at 842k sessions, but TikTok is the mover: up 41% month on month to third place, while paid search and affiliate fell.</desc>
+      <text class="ch-t-note" x="160" y="12">Sessions, thousands · Aug 2026</text>
+      <text class="ch-t-note ch-t-end" x="1000" y="12">vs Jul 2026</text>
+      <line class="ch-axis" x1="160" y1="16" x2="160" y2="306"/>
+      <line class="ch-rule" x1="880" y1="16" x2="880" y2="306"/>
+      <g>
+        <rect class="ch-quiet ch-grow ch-d1" x="160" y="22" width="600" height="20"><title>Instagram · 842</title></rect>
+        <rect class="ch-quiet ch-grow ch-d2" x="160" y="50" width="521" height="20"><title>Google organic · 731</title></rect>
+        <rect class="ch-hero ch-grow ch-d3" x="160" y="78" width="440.5" height="20"><title>TikTok · 618</title></rect>
+        <rect class="ch-quiet ch-grow ch-d4" x="160" y="106" width="324" height="20"><title>Email · 455</title></rect>
+        <rect class="ch-quiet ch-grow ch-d5" x="160" y="134" width="286.5" height="20"><title>Direct · 402</title></rect>
+        <rect class="ch-quiet ch-grow ch-d6" x="160" y="162" width="240" height="20"><title>Paid search · 337</title></rect>
+        <rect class="ch-quiet ch-grow ch-d7" x="160" y="190" width="205" height="20"><title>YouTube · 288</title></rect>
+        <rect class="ch-quiet ch-grow ch-d8" x="160" y="218" width="125.5" height="20"><title>Referral · 176</title></rect>
+        <rect class="ch-quiet ch-grow ch-d9" x="160" y="246" width="100.5" height="20"><title>Pinterest · 141</title></rect>
+        <rect class="ch-quiet ch-grow ch-d10" x="160" y="274" width="69" height="20"><title>Affiliate · 97</title></rect>
+      </g>
+      <g>
+        <text class="ch-t-label ch-t-end ch-fade ch-d1" x="150" y="36">Instagram</text>
+        <text class="ch-t-axis ch-fade ch-d2" x="768" y="36">842</text>
+        <text class="ch-t-label ch-t-mono ch-t-end ch-t-up ch-fade ch-d3" x="1000" y="36">▲ 8.3%</text>
+        <text class="ch-t-label ch-t-end ch-fade ch-d2" x="150" y="64">Google organic</text>
+        <text class="ch-t-axis ch-fade ch-d3" x="689" y="64">731</text>
+        <text class="ch-t-label ch-t-mono ch-t-end ch-t-up ch-fade ch-d4" x="1000" y="64">▲ 2.1%</text>
+        <text class="ch-t-label ch-t-end ch-fade ch-d3" x="150" y="92">TikTok</text>
+        <text class="ch-t-axis ch-t-hero ch-fade ch-d4" x="608.5" y="92">618</text>
+        <text class="ch-t-label ch-t-mono ch-t-end ch-t-up ch-fade ch-d5" x="1000" y="92">▲ 41.0%</text>
+        <text class="ch-t-label ch-t-end ch-fade ch-d4" x="150" y="120">Email</text>
+        <text class="ch-t-axis ch-fade ch-d5" x="492" y="120">455</text>
+        <text class="ch-t-label ch-t-mono ch-t-end ch-t-up ch-fade ch-d6" x="1000" y="120">▲ 5.6%</text>
+        <text class="ch-t-label ch-t-end ch-fade ch-d5" x="150" y="148">Direct</text>
+        <text class="ch-t-axis ch-fade ch-d6" x="454.5" y="148">402</text>
+        <text class="ch-t-label ch-t-mono ch-t-end ch-t-down ch-fade ch-d7" x="1000" y="148">▼ 1.4%</text>
+        <text class="ch-t-label ch-t-end ch-fade ch-d6" x="150" y="176">Paid search</text>
+        <text class="ch-t-axis ch-fade ch-d7" x="408" y="176">337</text>
+        <text class="ch-t-label ch-t-mono ch-t-end ch-t-down ch-fade ch-d8" x="1000" y="176">▼ 6.2%</text>
+        <text class="ch-t-label ch-t-end ch-fade ch-d7" x="150" y="204">YouTube</text>
+        <text class="ch-t-axis ch-fade ch-d8" x="373" y="204">288</text>
+        <text class="ch-t-label ch-t-mono ch-t-end ch-t-up ch-fade ch-d9" x="1000" y="204">▲ 12.5%</text>
+        <text class="ch-t-label ch-t-end ch-fade ch-d8" x="150" y="232">Referral</text>
+        <text class="ch-t-axis ch-fade ch-d9" x="293.5" y="232">176</text>
+        <text class="ch-t-label ch-t-mono ch-t-end ch-t-down ch-fade ch-d10" x="1000" y="232">▼ 0.8%</text>
+        <text class="ch-t-label ch-t-end ch-fade ch-d9" x="150" y="260">Pinterest</text>
+        <text class="ch-t-axis ch-fade ch-d10" x="268.5" y="260">141</text>
+        <text class="ch-t-label ch-t-mono ch-t-end ch-t-up ch-fade ch-d11" x="1000" y="260">▲ 3.3%</text>
+        <text class="ch-t-label ch-t-end ch-fade ch-d10" x="150" y="288">Affiliate</text>
+        <text class="ch-t-axis ch-fade ch-d11" x="237" y="288">97</text>
+        <text class="ch-t-label ch-t-mono ch-t-end ch-t-down ch-fade ch-d12" x="1000" y="288">▼ 9.1%</text>
+      </g>
+      </svg>
+
+      <p class="ch-card__src">Demo data · invented for the gallery · 2026-09-01</p>
+    </figure>
+
+    <figure class="ch-card" data-ch-type="signal.dumbbell">
+      <h2 class="ch-card__title">Then and now, one bar per row</h2>
+      <p class="ch-card__sub">Open dot = 2024, filled dot = 2025 · repeat-purchase rate, percent of customers · change in points at right</p>
+
+      <svg class="ch" viewBox="0 0 520 300" role="img" aria-labelledby="db-t db-d">
+        <title id="db-t">Repeat-purchase rate by category, 2024 to 2025</title>
+        <desc id="db-d">Skincare made the biggest move, from 31% to 46% repeat purchase; only men's and gift sets slipped.</desc>
+      <line class="ch-grid" x1="130" y1="10" x2="130" y2="276"/>
+      <text class="ch-t-axis ch-t-mid" x="130" y="292">0%</text>
+      <line class="ch-grid" x1="230" y1="10" x2="230" y2="276"/>
+      <text class="ch-t-axis ch-t-mid" x="230" y="292">20%</text>
+      <line class="ch-grid" x1="330" y1="10" x2="330" y2="276"/>
+      <text class="ch-t-axis ch-t-mid" x="330" y="292">40%</text>
+      <line class="ch-grid" x1="430" y1="10" x2="430" y2="276"/>
+      <text class="ch-t-axis ch-t-mid" x="430" y="292">60%</text>
+      <g>
+        <line class="ch-line ch-line--hero ch-draw ch-d1" x1="285" y1="22" x2="360" y2="22"/>
+        <line class="ch-line ch-line--quiet ch-draw ch-d2" x1="270" y1="44" x2="315" y2="44"/>
+        <line class="ch-line ch-line--quiet ch-draw ch-d3" x1="240" y1="66" x2="275" y2="66"/>
+        <line class="ch-line ch-line--quiet ch-draw ch-d4" x1="300" y1="88" x2="320" y2="88"/>
+        <line class="ch-line ch-line--quiet ch-draw ch-d5" x1="225" y1="110" x2="265" y2="110"/>
+        <line class="ch-line ch-line--quiet ch-draw ch-d6" x1="205" y1="132" x2="250" y2="132"/>
+        <line class="ch-line ch-line--quiet ch-draw ch-d7" x1="335" y1="154" x2="350" y2="154"/>
+        <line class="ch-line ch-line--quiet ch-draw ch-d8" x1="190" y1="176" x2="195" y2="176"/>
+        <line class="ch-line ch-line--quiet ch-draw ch-d9" x1="215" y1="198" x2="210" y2="198"/>
+        <line class="ch-line ch-line--quiet ch-draw ch-d10" x1="260" y1="220" x2="250" y2="220"/>
+        <line class="ch-line ch-line--quiet ch-draw ch-d11" x1="175" y1="242" x2="200" y2="242"/>
+        <line class="ch-line ch-line--quiet ch-draw ch-d12" x1="230" y1="264" x2="240" y2="264"/>
+      </g>
+      <g>
+        <circle class="ch-dot ch-dot--open ch-pop ch-d1" cx="285" cy="22" r="4"><title>Skincare · 2024 · 31%</title></circle>
+        <circle class="ch-dot ch-dot--hero ch-pop ch-d2" cx="360" cy="22" r="4"><title>Skincare · 2025 · 46%</title></circle>
+        <circle class="ch-dot ch-dot--open ch-pop ch-d2" cx="270" cy="44" r="4"><title>Haircare · 2024 · 28%</title></circle>
+        <circle class="ch-dot ch-pop ch-d3" cx="315" cy="44" r="4"><title>Haircare · 2025 · 37%</title></circle>
+        <circle class="ch-dot ch-dot--open ch-pop ch-d3" cx="240" cy="66" r="4"><title>Fragrance · 2024 · 22%</title></circle>
+        <circle class="ch-dot ch-pop ch-d4" cx="275" cy="66" r="4"><title>Fragrance · 2025 · 29%</title></circle>
+        <circle class="ch-dot ch-dot--open ch-pop ch-d4" cx="300" cy="88" r="4"><title>Makeup · 2024 · 34%</title></circle>
+        <circle class="ch-dot ch-pop ch-d5" cx="320" cy="88" r="4"><title>Makeup · 2025 · 38%</title></circle>
+        <circle class="ch-dot ch-dot--open ch-pop ch-d5" cx="225" cy="110" r="4"><title>Bath · 2024 · 19%</title></circle>
+        <circle class="ch-dot ch-pop ch-d6" cx="265" cy="110" r="4"><title>Bath · 2025 · 27%</title></circle>
+        <circle class="ch-dot ch-dot--open ch-pop ch-d6" cx="205" cy="132" r="4"><title>Candles · 2024 · 15%</title></circle>
+        <circle class="ch-dot ch-pop ch-d7" cx="250" cy="132" r="4"><title>Candles · 2025 · 24%</title></circle>
+        <circle class="ch-dot ch-dot--open ch-pop ch-d7" cx="335" cy="154" r="4"><title>Supplements · 2024 · 41%</title></circle>
+        <circle class="ch-dot ch-pop ch-d8" cx="350" cy="154" r="4"><title>Supplements · 2025 · 44%</title></circle>
+        <circle class="ch-dot ch-dot--open ch-pop ch-d8" cx="190" cy="176" r="4"><title>Tools · 2024 · 12%</title></circle>
+        <circle class="ch-dot ch-pop ch-d9" cx="195" cy="176" r="4"><title>Tools · 2025 · 13%</title></circle>
+        <circle class="ch-dot ch-dot--open ch-pop ch-d9" cx="215" cy="198" r="4"><title>Men's · 2024 · 17%</title></circle>
+        <circle class="ch-dot ch-pop ch-d10" cx="210" cy="198" r="4"><title>Men's · 2025 · 16%</title></circle>
+        <circle class="ch-dot ch-dot--open ch-pop ch-d10" cx="260" cy="220" r="4"><title>Gift sets · 2024 · 26%</title></circle>
+        <circle class="ch-dot ch-pop ch-d11" cx="250" cy="220" r="4"><title>Gift sets · 2025 · 24%</title></circle>
+        <circle class="ch-dot ch-dot--open ch-pop ch-d11" cx="175" cy="242" r="4"><title>Travel · 2024 · 9%</title></circle>
+        <circle class="ch-dot ch-pop ch-d12" cx="200" cy="242" r="4"><title>Travel · 2025 · 14%</title></circle>
+        <circle class="ch-dot ch-dot--open ch-pop ch-d12" cx="230" cy="264" r="4"><title>Kids · 2024 · 20%</title></circle>
+        <circle class="ch-dot ch-pop ch-d12" cx="240" cy="264" r="4"><title>Kids · 2025 · 22%</title></circle>
+      </g>
+      <g>
+        <text class="ch-t-label ch-t-end ch-t-hero ch-fade ch-d1" x="118" y="25.5">Skincare</text>
+        <text class="ch-t-axis ch-t-mono ch-t-up ch-fade ch-d3" x="452" y="25.5">+15 pt</text>
+        <text class="ch-t-label ch-t-end ch-fade ch-d2" x="118" y="47.5">Haircare</text>
+        <text class="ch-t-axis ch-t-mono ch-t-up ch-fade ch-d4" x="452" y="47.5">+9 pt</text>
+        <text class="ch-t-label ch-t-end ch-fade ch-d3" x="118" y="69.5">Fragrance</text>
+        <text class="ch-t-axis ch-t-mono ch-t-up ch-fade ch-d5" x="452" y="69.5">+7 pt</text>
+        <text class="ch-t-label ch-t-end ch-fade ch-d4" x="118" y="91.5">Makeup</text>
+        <text class="ch-t-axis ch-t-mono ch-t-up ch-fade ch-d6" x="452" y="91.5">+4 pt</text>
+        <text class="ch-t-label ch-t-end ch-fade ch-d5" x="118" y="113.5">Bath</text>
+        <text class="ch-t-axis ch-t-mono ch-t-up ch-fade ch-d7" x="452" y="113.5">+8 pt</text>
+        <text class="ch-t-label ch-t-end ch-fade ch-d6" x="118" y="135.5">Candles</text>
+        <text class="ch-t-axis ch-t-mono ch-t-up ch-fade ch-d8" x="452" y="135.5">+9 pt</text>
+        <text class="ch-t-label ch-t-end ch-fade ch-d7" x="118" y="157.5">Supplements</text>
+        <text class="ch-t-axis ch-t-mono ch-t-up ch-fade ch-d9" x="452" y="157.5">+3 pt</text>
+        <text class="ch-t-label ch-t-end ch-fade ch-d8" x="118" y="179.5">Tools</text>
+        <text class="ch-t-axis ch-t-mono ch-t-up ch-fade ch-d10" x="452" y="179.5">+1 pt</text>
+        <text class="ch-t-label ch-t-end ch-fade ch-d9" x="118" y="201.5">Men's</text>
+        <text class="ch-t-axis ch-t-mono ch-t-down ch-fade ch-d11" x="452" y="201.5">−1 pt</text>
+        <text class="ch-t-label ch-t-end ch-fade ch-d10" x="118" y="223.5">Gift sets</text>
+        <text class="ch-t-axis ch-t-mono ch-t-down ch-fade ch-d12" x="452" y="223.5">−2 pt</text>
+        <text class="ch-t-label ch-t-end ch-fade ch-d11" x="118" y="245.5">Travel</text>
+        <text class="ch-t-axis ch-t-mono ch-t-up ch-fade ch-d12" x="452" y="245.5">+5 pt</text>
+        <text class="ch-t-label ch-t-end ch-fade ch-d12" x="118" y="267.5">Kids</text>
+        <text class="ch-t-axis ch-t-mono ch-t-up ch-fade ch-d12" x="452" y="267.5">+2 pt</text>
+      </g>
+      </svg>
+
+      <p class="ch-card__src">Demo data · invented for the gallery · 2026-09-01</p>
+    </figure>
+
+    <figure class="ch-card" data-ch-type="signal.share-bar">
+      <h2 class="ch-card__title">One bar, split by part</h2>
+      <p class="ch-card__sub">Each bar = one year of revenue, split by channel · percent of year · left to right: direct, wholesale, marketplace, other</p>
+
+      <svg class="ch" viewBox="0 0 520 300" role="img" aria-labelledby="sb-t sb-d">
+        <title id="sb-t">Revenue mix by channel, 2023 to 2025</title>
+        <desc id="sb-d">Direct grew from 38% to 52% of revenue in two years, taking share mainly from wholesale.</desc>
+      <g>
+        <rect class="ch-s1 ch-grow ch-d1" x="8" y="36" width="191.5" height="30"><title>2023 · Direct · 38</title></rect>
+        <rect class="ch-s2 ch-grow ch-d2" x="199.5" y="36" width="156" height="30"><title>2023 · Wholesale · 31</title></rect>
+        <rect class="ch-s3 ch-grow ch-d3" x="355.5" y="36" width="96" height="30"><title>2023 · Marketplace · 19</title></rect>
+        <rect class="ch-s4 ch-grow ch-d4" x="451.5" y="36" width="60.5" height="30"><title>2023 · Other · 12</title></rect>
+        <rect class="ch-s1 ch-grow ch-d3" x="8" y="128" width="222" height="30"><title>2024 · Direct · 44</title></rect>
+        <rect class="ch-s2 ch-grow ch-d4" x="230" y="128" width="136" height="30"><title>2024 · Wholesale · 27</title></rect>
+        <rect class="ch-s3 ch-grow ch-d5" x="366" y="128" width="96" height="30"><title>2024 · Marketplace · 19</title></rect>
+        <rect class="ch-s4 ch-grow ch-d6" x="462" y="128" width="50.5" height="30"><title>2024 · Other · 10</title></rect>
+        <rect class="ch-s1 ch-grow ch-d5" x="8" y="220" width="262" height="30"><title>2025 · Direct · 52</title></rect>
+        <rect class="ch-s2 ch-grow ch-d6" x="270" y="220" width="111" height="30"><title>2025 · Wholesale · 22</title></rect>
+        <rect class="ch-s3 ch-grow ch-d7" x="381" y="220" width="85.5" height="30"><title>2025 · Marketplace · 17</title></rect>
+        <rect class="ch-s4 ch-grow ch-d8" x="466.5" y="220" width="45.5" height="30"><title>2025 · Other · 9</title></rect>
+      </g>
+      <g>
+        <text class="ch-t-label ch-fade ch-d1" x="8" y="26">2023</text>
+        <text class="ch-t-label ch-t-inv ch-t-mono ch-fade ch-d3" x="14" y="55">38%</text>
+        <text class="ch-t-note ch-fade ch-d5" x="8" y="80">Direct</text>
+        <text class="ch-t-label ch-t-inv ch-t-mono ch-fade ch-d4" x="205.5" y="55">31%</text>
+        <text class="ch-t-note ch-fade ch-d6" x="199.5" y="80">Wholesale</text>
+        <text class="ch-t-label ch-t-inv ch-t-mono ch-fade ch-d5" x="361.5" y="55">19%</text>
+        <text class="ch-t-note ch-fade ch-d7" x="355.5" y="80">Marketplace</text>
+        <text class="ch-t-label ch-t-mono ch-fade ch-d6" x="457.5" y="55">12%</text>
+        <text class="ch-t-note ch-fade ch-d8" x="451.5" y="80">Other</text>
+        <text class="ch-t-label ch-fade ch-d2" x="8" y="118">2024</text>
+        <text class="ch-t-label ch-t-inv ch-t-mono ch-fade ch-d5" x="14" y="147">44%</text>
+        <text class="ch-t-label ch-t-inv ch-t-mono ch-fade ch-d6" x="236" y="147">27%</text>
+        <text class="ch-t-label ch-t-inv ch-t-mono ch-fade ch-d7" x="372" y="147">19%</text>
+        <text class="ch-t-label ch-t-mono ch-fade ch-d8" x="468" y="147">10%</text>
+        <text class="ch-t-label ch-fade ch-d3" x="8" y="210">2025</text>
+        <text class="ch-t-label ch-t-inv ch-t-mono ch-fade ch-d7" x="14" y="239">52%</text>
+        <text class="ch-t-label ch-t-inv ch-t-mono ch-fade ch-d8" x="276" y="239">22%</text>
+        <text class="ch-t-label ch-t-inv ch-t-mono ch-fade ch-d9" x="387" y="239">17%</text>
+        <text class="ch-t-label ch-t-mono ch-fade ch-d10" x="472.5" y="239">9%</text>
+      </g>
+      </svg>
+
+      <p class="ch-card__src">Demo data · invented for the gallery · 2026-09-01</p>
+    </figure>
+
+    <figure class="ch-card ch-card--wide" data-ch-type="signal.status-grid">
+      <h2 class="ch-card__title">Rows by columns, each cell a state</h2>
+      <p class="ch-card__sub">Regions by rollout check · lightest = not started, then planned, in progress, verified, darkest = complete · as of 2026-08-30</p>
+
+      <svg class="ch" viewBox="0 0 1080 320" role="img" aria-labelledby="sg-t sg-d">
+        <title id="sg-t">Observability rollout by region and check</title>
+        <desc id="sg-d">The US and EU regions are nearly complete, while the South American and Canadian regions have barely started on quota, cost and error checks.</desc>
+      <text class="ch-t-axis ch-t-mid" x="201" y="24">Uptime</text>
+      <text class="ch-t-axis ch-t-mid" x="289" y="24">Latency</text>
+      <text class="ch-t-axis ch-t-mid" x="377" y="24">Errors</text>
+      <text class="ch-t-axis ch-t-mid" x="465" y="24">Deploys</text>
+      <text class="ch-t-axis ch-t-mid" x="553" y="24">Backups</text>
+      <text class="ch-t-axis ch-t-mid" x="641" y="24">Alerts</text>
+      <text class="ch-t-axis ch-t-mid" x="729" y="24">Certs</text>
+      <text class="ch-t-axis ch-t-mid" x="817" y="24">Quota</text>
+      <text class="ch-t-axis ch-t-mid" x="905" y="24">Cost</text>
+      <text class="ch-t-axis ch-t-mid" x="993" y="24">Tests</text>
+      <text class="ch-t-label ch-t-end" x="150" y="53">us-east</text>
+      <text class="ch-t-label ch-t-end" x="150" y="86">us-west</text>
+      <text class="ch-t-label ch-t-end" x="150" y="119">eu-central</text>
+      <text class="ch-t-label ch-t-end" x="150" y="152">eu-west</text>
+      <text class="ch-t-label ch-t-end" x="150" y="185">ap-south</text>
+      <text class="ch-t-label ch-t-end" x="150" y="218">ap-northeast</text>
+      <text class="ch-t-label ch-t-end" x="150" y="251">sa-east</text>
+      <text class="ch-t-label ch-t-end" x="150" y="284">ca-central</text>
+      <g>
+        <rect class="ch-r5 ch-pop ch-d1" x="160" y="36" width="82" height="27" rx="2"><title>us-east · Uptime — complete</title></rect>
+        <rect class="ch-r5 ch-pop ch-d1" x="248" y="36" width="82" height="27" rx="2"><title>us-east · Latency — complete</title></rect>
+        <rect class="ch-r4 ch-pop ch-d1" x="336" y="36" width="82" height="27" rx="2"><title>us-east · Errors — verified</title></rect>
+        <rect class="ch-r5 ch-pop ch-d1" x="424" y="36" width="82" height="27" rx="2"><title>us-east · Deploys — complete</title></rect>
+        <rect class="ch-r5 ch-pop ch-d1" x="512" y="36" width="82" height="27" rx="2"><title>us-east · Backups — complete</title></rect>
+        <rect class="ch-r4 ch-pop ch-d1" x="600" y="36" width="82" height="27" rx="2"><title>us-east · Alerts — verified</title></rect>
+        <rect class="ch-r5 ch-pop ch-d1" x="688" y="36" width="82" height="27" rx="2"><title>us-east · Certs — complete</title></rect>
+        <rect class="ch-r3 ch-pop ch-d1" x="776" y="36" width="82" height="27" rx="2"><title>us-east · Quota — in progress</title></rect>
+        <rect class="ch-r4 ch-pop ch-d1" x="864" y="36" width="82" height="27" rx="2"><title>us-east · Cost — verified</title></rect>
+        <rect class="ch-r5 ch-pop ch-d1" x="952" y="36" width="82" height="27" rx="2"><title>us-east · Tests — complete</title></rect>
+        <rect class="ch-r5 ch-pop ch-d2" x="160" y="69" width="82" height="27" rx="2"><title>us-west · Uptime — complete</title></rect>
+        <rect class="ch-r4 ch-pop ch-d2" x="248" y="69" width="82" height="27" rx="2"><title>us-west · Latency — verified</title></rect>
+        <rect class="ch-r4 ch-pop ch-d2" x="336" y="69" width="82" height="27" rx="2"><title>us-west · Errors — verified</title></rect>
+        <rect class="ch-r5 ch-pop ch-d2" x="424" y="69" width="82" height="27" rx="2"><title>us-west · Deploys — complete</title></rect>
+        <rect class="ch-r5 ch-pop ch-d2" x="512" y="69" width="82" height="27" rx="2"><title>us-west · Backups — complete</title></rect>
+        <rect class="ch-r4 ch-pop ch-d2" x="600" y="69" width="82" height="27" rx="2"><title>us-west · Alerts — verified</title></rect>
+        <rect class="ch-r5 ch-pop ch-d2" x="688" y="69" width="82" height="27" rx="2"><title>us-west · Certs — complete</title></rect>
+        <rect class="ch-r3 ch-pop ch-d2" x="776" y="69" width="82" height="27" rx="2"><title>us-west · Quota — in progress</title></rect>
+        <rect class="ch-r3 ch-pop ch-d2" x="864" y="69" width="82" height="27" rx="2"><title>us-west · Cost — in progress</title></rect>
+        <rect class="ch-r5 ch-pop ch-d2" x="952" y="69" width="82" height="27" rx="2"><title>us-west · Tests — complete</title></rect>
+        <rect class="ch-r5 ch-pop ch-d3" x="160" y="102" width="82" height="27" rx="2"><title>eu-central · Uptime — complete</title></rect>
+        <rect class="ch-r5 ch-pop ch-d3" x="248" y="102" width="82" height="27" rx="2"><title>eu-central · Latency — complete</title></rect>
+        <rect class="ch-r3 ch-pop ch-d3" x="336" y="102" width="82" height="27" rx="2"><title>eu-central · Errors — in progress</title></rect>
+        <rect class="ch-r4 ch-pop ch-d3" x="424" y="102" width="82" height="27" rx="2"><title>eu-central · Deploys — verified</title></rect>
+        <rect class="ch-r5 ch-pop ch-d3" x="512" y="102" width="82" height="27" rx="2"><title>eu-central · Backups — complete</title></rect>
+        <rect class="ch-r3 ch-pop ch-d3" x="600" y="102" width="82" height="27" rx="2"><title>eu-central · Alerts — in progress</title></rect>
+        <rect class="ch-r5 ch-pop ch-d3" x="688" y="102" width="82" height="27" rx="2"><title>eu-central · Certs — complete</title></rect>
+        <rect class="ch-r2 ch-pop ch-d3" x="776" y="102" width="82" height="27" rx="2"><title>eu-central · Quota — planned</title></rect>
+        <rect class="ch-r3 ch-pop ch-d3" x="864" y="102" width="82" height="27" rx="2"><title>eu-central · Cost — in progress</title></rect>
+        <rect class="ch-r4 ch-pop ch-d3" x="952" y="102" width="82" height="27" rx="2"><title>eu-central · Tests — verified</title></rect>
+        <rect class="ch-r4 ch-pop ch-d4" x="160" y="135" width="82" height="27" rx="2"><title>eu-west · Uptime — verified</title></rect>
+        <rect class="ch-r4 ch-pop ch-d4" x="248" y="135" width="82" height="27" rx="2"><title>eu-west · Latency — verified</title></rect>
+        <rect class="ch-r3 ch-pop ch-d4" x="336" y="135" width="82" height="27" rx="2"><title>eu-west · Errors — in progress</title></rect>
+        <rect class="ch-r4 ch-pop ch-d4" x="424" y="135" width="82" height="27" rx="2"><title>eu-west · Deploys — verified</title></rect>
+        <rect class="ch-r4 ch-pop ch-d4" x="512" y="135" width="82" height="27" rx="2"><title>eu-west · Backups — verified</title></rect>
+        <rect class="ch-r3 ch-pop ch-d4" x="600" y="135" width="82" height="27" rx="2"><title>eu-west · Alerts — in progress</title></rect>
+        <rect class="ch-r5 ch-pop ch-d4" x="688" y="135" width="82" height="27" rx="2"><title>eu-west · Certs — complete</title></rect>
+        <rect class="ch-r2 ch-pop ch-d4" x="776" y="135" width="82" height="27" rx="2"><title>eu-west · Quota — planned</title></rect>
+        <rect class="ch-r2 ch-pop ch-d4" x="864" y="135" width="82" height="27" rx="2"><title>eu-west · Cost — planned</title></rect>
+        <rect class="ch-r4 ch-pop ch-d4" x="952" y="135" width="82" height="27" rx="2"><title>eu-west · Tests — verified</title></rect>
+        <rect class="ch-r4 ch-pop ch-d5" x="160" y="168" width="82" height="27" rx="2"><title>ap-south · Uptime — verified</title></rect>
+        <rect class="ch-r3 ch-pop ch-d5" x="248" y="168" width="82" height="27" rx="2"><title>ap-south · Latency — in progress</title></rect>
+        <rect class="ch-r2 ch-pop ch-d5" x="336" y="168" width="82" height="27" rx="2"><title>ap-south · Errors — planned</title></rect>
+        <rect class="ch-r3 ch-pop ch-d5" x="424" y="168" width="82" height="27" rx="2"><title>ap-south · Deploys — in progress</title></rect>
+        <rect class="ch-r4 ch-pop ch-d5" x="512" y="168" width="82" height="27" rx="2"><title>ap-south · Backups — verified</title></rect>
+        <rect class="ch-r2 ch-pop ch-d5" x="600" y="168" width="82" height="27" rx="2"><title>ap-south · Alerts — planned</title></rect>
+        <rect class="ch-r4 ch-pop ch-d5" x="688" y="168" width="82" height="27" rx="2"><title>ap-south · Certs — verified</title></rect>
+        <rect class="ch-r2 ch-pop ch-d5" x="776" y="168" width="82" height="27" rx="2"><title>ap-south · Quota — planned</title></rect>
+        <rect class="ch-r2 ch-pop ch-d5" x="864" y="168" width="82" height="27" rx="2"><title>ap-south · Cost — planned</title></rect>
+        <rect class="ch-r3 ch-pop ch-d5" x="952" y="168" width="82" height="27" rx="2"><title>ap-south · Tests — in progress</title></rect>
+        <rect class="ch-r3 ch-pop ch-d6" x="160" y="201" width="82" height="27" rx="2"><title>ap-northeast · Uptime — in progress</title></rect>
+        <rect class="ch-r3 ch-pop ch-d6" x="248" y="201" width="82" height="27" rx="2"><title>ap-northeast · Latency — in progress</title></rect>
+        <rect class="ch-r2 ch-pop ch-d6" x="336" y="201" width="82" height="27" rx="2"><title>ap-northeast · Errors — planned</title></rect>
+        <rect class="ch-r3 ch-pop ch-d6" x="424" y="201" width="82" height="27" rx="2"><title>ap-northeast · Deploys — in progress</title></rect>
+        <rect class="ch-r3 ch-pop ch-d6" x="512" y="201" width="82" height="27" rx="2"><title>ap-northeast · Backups — in progress</title></rect>
+        <rect class="ch-r2 ch-pop ch-d6" x="600" y="201" width="82" height="27" rx="2"><title>ap-northeast · Alerts — planned</title></rect>
+        <rect class="ch-r4 ch-pop ch-d6" x="688" y="201" width="82" height="27" rx="2"><title>ap-northeast · Certs — verified</title></rect>
+        <rect class="ch-r1 ch-pop ch-d6" x="776" y="201" width="82" height="27" rx="2"><title>ap-northeast · Quota — not started</title></rect>
+        <rect class="ch-r2 ch-pop ch-d6" x="864" y="201" width="82" height="27" rx="2"><title>ap-northeast · Cost — planned</title></rect>
+        <rect class="ch-r3 ch-pop ch-d6" x="952" y="201" width="82" height="27" rx="2"><title>ap-northeast · Tests — in progress</title></rect>
+        <rect class="ch-r2 ch-pop ch-d7" x="160" y="234" width="82" height="27" rx="2"><title>sa-east · Uptime — planned</title></rect>
+        <rect class="ch-r2 ch-pop ch-d7" x="248" y="234" width="82" height="27" rx="2"><title>sa-east · Latency — planned</title></rect>
+        <rect class="ch-r1 ch-pop ch-d7" x="336" y="234" width="82" height="27" rx="2"><title>sa-east · Errors — not started</title></rect>
+        <rect class="ch-r2 ch-pop ch-d7" x="424" y="234" width="82" height="27" rx="2"><title>sa-east · Deploys — planned</title></rect>
+        <rect class="ch-r3 ch-pop ch-d7" x="512" y="234" width="82" height="27" rx="2"><title>sa-east · Backups — in progress</title></rect>
+        <rect class="ch-r1 ch-pop ch-d7" x="600" y="234" width="82" height="27" rx="2"><title>sa-east · Alerts — not started</title></rect>
+        <rect class="ch-r3 ch-pop ch-d7" x="688" y="234" width="82" height="27" rx="2"><title>sa-east · Certs — in progress</title></rect>
+        <rect class="ch-r1 ch-pop ch-d7" x="776" y="234" width="82" height="27" rx="2"><title>sa-east · Quota — not started</title></rect>
+        <rect class="ch-r1 ch-pop ch-d7" x="864" y="234" width="82" height="27" rx="2"><title>sa-east · Cost — not started</title></rect>
+        <rect class="ch-r2 ch-pop ch-d7" x="952" y="234" width="82" height="27" rx="2"><title>sa-east · Tests — planned</title></rect>
+        <rect class="ch-r2 ch-pop ch-d8" x="160" y="267" width="82" height="27" rx="2"><title>ca-central · Uptime — planned</title></rect>
+        <rect class="ch-r1 ch-pop ch-d8" x="248" y="267" width="82" height="27" rx="2"><title>ca-central · Latency — not started</title></rect>
+        <rect class="ch-r1 ch-pop ch-d8" x="336" y="267" width="82" height="27" rx="2"><title>ca-central · Errors — not started</title></rect>
+        <rect class="ch-r2 ch-pop ch-d8" x="424" y="267" width="82" height="27" rx="2"><title>ca-central · Deploys — planned</title></rect>
+        <rect class="ch-r2 ch-pop ch-d8" x="512" y="267" width="82" height="27" rx="2"><title>ca-central · Backups — planned</title></rect>
+        <rect class="ch-r1 ch-pop ch-d8" x="600" y="267" width="82" height="27" rx="2"><title>ca-central · Alerts — not started</title></rect>
+        <rect class="ch-r3 ch-pop ch-d8" x="688" y="267" width="82" height="27" rx="2"><title>ca-central · Certs — in progress</title></rect>
+        <rect class="ch-r1 ch-pop ch-d8" x="776" y="267" width="82" height="27" rx="2"><title>ca-central · Quota — not started</title></rect>
+        <rect class="ch-r1 ch-pop ch-d8" x="864" y="267" width="82" height="27" rx="2"><title>ca-central · Cost — not started</title></rect>
+        <rect class="ch-r2 ch-pop ch-d8" x="952" y="267" width="82" height="27" rx="2"><title>ca-central · Tests — planned</title></rect>
+      </g>
+      </svg>
+
+      <p class="ch-card__src">Demo data · invented for the gallery · 2026-09-01</p>
+    </figure>
+
+  </div>
+</main>
+</body>
+</html>

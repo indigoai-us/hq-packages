@@ -1,0 +1,1886 @@
+<!DOCTYPE html>
+<!-- hq-pack-charts — ledger gallery. Generated stylesheet block below; run scripts/sync-assets.py. --><html lang="en" data-ch-theme="light" data-ch-palette="mono">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ledger — one mark per record</title>
+
+<!-- Webfonts are OPT-IN. Uncomment to use Instrument Serif / Geist; leave
+     commented and the system stack in chart.css renders offline with no
+     third-party request from the reader's browser.
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+-->
+
+<style>/* ch:css:start */
+/* GENERATED from assets/chart.css (ad62427d9525) — do not edit here. Run scripts/sync-assets.py. */
+/*
+ * hq-pack-charts — chart.css
+ *
+ * The single source of truth for every chart HQ produces.
+ *
+ * The contract, in one sentence: an HQ chart's SVG carries semantic CLASSES
+ * and never carries a colour. Re-skinning a chart is swapping the :root block
+ * below — nothing in the SVG body changes. The same contract hq-pack-diagrams
+ * uses, extended with data roles (series, ramp, hero, delta).
+ *
+ * Every --ch-* surface/ink/structure token falls back to its --dg-* twin, so a
+ * page that already carries a diagram skin (or a company brand pack mapped
+ * through the design-styles binding formula) re-skins charts for free.
+ *
+ * Do not add a colour literal to any SVG attribute. `scripts/lint-chart.py`
+ * fails the file if you do.
+ *
+ * Theme:    <html data-ch-theme="light|dark|auto">          (default: light)
+ * Palette:  <html data-ch-palette="mono|slate|moss|ember">  (default: mono)
+ * Density:  <svg class="ch ch--comfortable|ch--compact">
+ */
+
+/* ══════════════════════════════════════════════════════════════════════════
+   1. TOKENS
+   ══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Surface ─────────────────────────────────────────────────────────── */
+  --ch-paper:        var(--dg-paper, #f4f1ec);
+  --ch-paper-raised: var(--dg-paper-raised, #ffffff);
+  --ch-paper-sunk:   var(--dg-paper-sunk, rgba(27, 26, 24, 0.045));
+
+  /* ── Ink ─────────────────────────────────────────────────────────────── */
+  --ch-ink:          var(--dg-ink, #1b1a18);     /* titles, values, primary marks */
+  --ch-muted:        var(--dg-muted, #55524c);   /* subtitles, axis labels        */
+  --ch-soft:         var(--dg-soft, #8a857c);    /* source line, minor ticks      */
+
+  /* ── Structure ───────────────────────────────────────────────────────── */
+  --ch-rule:         var(--dg-rule, rgba(27, 26, 24, 0.14));        /* gridlines */
+  --ch-rule-strong:  var(--dg-rule-strong, rgba(27, 26, 24, 0.30)); /* baselines */
+
+  /* ── Data — MONO palette (the floor; every other palette overrides) ──────
+     data-1 is the hero slot. In mono the hero is ink and the rest is a
+     lightness ladder, so a mono chart never depends on hue to be read.      */
+  --ch-hero:         var(--ch-ink);
+  --ch-data-1:       var(--ch-ink);
+  --ch-data-2:       #5b5853;
+  --ch-data-3:       #8a857c;
+  --ch-data-4:       #b3ada3;
+  --ch-data-5:       #cfcac0;
+  --ch-data-6:       #e2ddd4;
+  --ch-data-fill:    0.16;      /* opacity for area / band fills             */
+  --ch-quiet:        #d9d4cb;   /* non-focal marks when one thing is hero    */
+  --ch-track:        rgba(27, 26, 24, 0.08); /* empty part of a bar / ring   */
+
+  /* ── Ramp — ordered / sequential (5 steps, light → dark) ─────────────── */
+  --ch-ramp-1:       #e6e2da;
+  --ch-ramp-2:       #c9c3b8;
+  --ch-ramp-3:       #a09a8f;
+  --ch-ramp-4:       #6d6860;
+  --ch-ramp-5:       #1b1a18;
+
+  /* ── Delta — semantic only, always paired with a sign or label ───────── */
+  --ch-up:           var(--dg-positive, #3f6b4a);
+  --ch-down:         var(--dg-negative, #9c3a2c);
+  --ch-flat:         var(--ch-muted);
+  --ch-up-tint:      var(--dg-positive-tint, rgba(63, 107, 74, 0.12));
+  --ch-down-tint:    var(--dg-negative-tint, rgba(156, 58, 44, 0.12));
+
+  /* ── Type ────────────────────────────────────────────────────────────────
+     Webfont names lead; a system stack follows so a chart renders correctly
+     with no network. Webfonts are opt-in — see assets/template.html.        */
+  --ch-font-display: var(--dg-font-display, "Instrument Serif", "Iowan Old Style",
+                     Palatino, Georgia, serif);
+  --ch-font-body:    var(--dg-font-body, "Geist", -apple-system, BlinkMacSystemFont,
+                     "Segoe UI", Inter, Roboto, system-ui, sans-serif);
+  --ch-font-mono:    var(--dg-font-mono, "Geist Mono", ui-monospace, SFMono-Regular,
+                     Menlo, Consolas, monospace);
+
+  /* ── Type scale (px, inside the SVG viewBox) ─────────────────────────────
+     Floors are a contract: 7px is the smallest label allowed in a half-width
+     card and 6px in a full-width one. Overflow goes to a <title> hover or a
+     footnote — never to smaller type.                                        */
+  --ch-fs-title:     16px;
+  --ch-fs-sub:       11.5px;
+  --ch-fs-value:     22px;
+  --ch-fs-big:       44px;
+  --ch-fs-axis:      9.5px;
+  --ch-fs-label:     10px;
+  --ch-fs-note:      9px;
+
+  /* ── Stroke ──────────────────────────────────────────────────────────── */
+  --ch-sw-hair:      0.6px;
+  --ch-sw-thin:      1px;
+  --ch-sw-line:      1.6px;
+  --ch-sw-bold:      2.4px;
+
+  /* ── Motion ──────────────────────────────────────────────────────────── */
+  --ch-dur:          900ms;
+  --ch-dur-slow:     1300ms;
+  --ch-ease:         cubic-bezier(0.22, 0.61, 0.36, 1);
+  --ch-ease-pop:     cubic-bezier(0.2, 0.7, 0.3, 1.25);
+  --ch-stagger:      28ms;
+}
+
+/* ── Palettes ───────────────────────────────────────────────────────────────
+   One palette per file. The agent picks from data semantics:
+     slate — ordered / sequential   (one series that has an order)
+     moss  — categorical, ≤ 4 kinds (unordered kinds that must be told apart)
+     ember — mono + one hero        (everything quiet except the point)
+   Unclear fit → stay on mono.                                               */
+
+[data-ch-palette="slate"] {
+  --ch-hero:    #2f5d8f;
+  --ch-data-1:  #2f5d8f;
+  --ch-data-2:  #5b7fa6;
+  --ch-data-3:  #86a1bd;
+  --ch-data-4:  #adc0d3;
+  --ch-data-5:  #cfdae5;
+  --ch-data-6:  #e6ecf2;
+  --ch-quiet:   #d6dde5;
+  --ch-track:   rgba(47, 93, 143, 0.10);
+  --ch-ramp-1:  #e6ecf2;
+  --ch-ramp-2:  #b9c9da;
+  --ch-ramp-3:  #86a1bd;
+  --ch-ramp-4:  #4f759d;
+  --ch-ramp-5:  #1f3f63;
+}
+
+[data-ch-palette="moss"] {
+  --ch-hero:    #3f6b4a;
+  --ch-data-1:  #3f6b4a;
+  --ch-data-2:  #9a7b4f;
+  --ch-data-3:  #4a6d7c;
+  --ch-data-4:  #a4584a;
+  --ch-data-5:  #8a857c;
+  --ch-data-6:  #b3ada3;
+  --ch-quiet:   #d8dcd2;
+  --ch-track:   rgba(63, 107, 74, 0.10);
+  --ch-ramp-1:  #e6ebe0;
+  --ch-ramp-2:  #bfcbb4;
+  --ch-ramp-3:  #8fa686;
+  --ch-ramp-4:  #5f8461;
+  --ch-ramp-5:  #2c4b34;
+}
+
+[data-ch-palette="ember"] {
+  --ch-hero:    #c2502f;
+  --ch-data-1:  #c2502f;
+  --ch-data-2:  #5b5853;
+  --ch-data-3:  #8a857c;
+  --ch-data-4:  #b3ada3;
+  --ch-data-5:  #cfcac0;
+  --ch-data-6:  #e2ddd4;
+  --ch-quiet:   #d9d4cb;
+  --ch-track:   rgba(194, 80, 47, 0.10);
+  --ch-ramp-1:  #f2e3dd;
+  --ch-ramp-2:  #e3b8a8;
+  --ch-ramp-3:  #d48a70;
+  --ch-ramp-4:  #c2502f;
+  --ch-ramp-5:  #7d2f18;
+}
+
+/* ── Dark theme ─────────────────────────────────────────────────────────── */
+
+[data-ch-theme="dark"] {
+  --ch-paper:        var(--dg-paper-dark, #171614);
+  --ch-paper-raised: #201f1c;
+  --ch-paper-sunk:   rgba(244, 241, 236, 0.06);
+  --ch-ink:          #f0ede6;
+  --ch-muted:        #b5b0a6;
+  --ch-soft:         #7d786f;
+  --ch-rule:         rgba(240, 237, 230, 0.14);
+  --ch-rule-strong:  rgba(240, 237, 230, 0.32);
+  --ch-data-2:       #b5b0a6;
+  --ch-data-3:       #8a857c;
+  --ch-data-4:       #64605a;
+  --ch-data-5:       #4a4741;
+  --ch-data-6:       #37342f;
+  --ch-quiet:        #3d3a35;
+  --ch-track:        rgba(240, 237, 230, 0.10);
+  --ch-ramp-1:       #37342f;
+  --ch-ramp-2:       #5c574f;
+  --ch-ramp-3:       #8a857c;
+  --ch-ramp-4:       #bfb9ae;
+  --ch-ramp-5:       #f0ede6;
+  --ch-up:           #7fb08a;
+  --ch-down:         #d8776a;
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-ch-theme="auto"] {
+    --ch-paper:        #171614;
+    --ch-paper-raised: #201f1c;
+    --ch-paper-sunk:   rgba(244, 241, 236, 0.06);
+    --ch-ink:          #f0ede6;
+    --ch-muted:        #b5b0a6;
+    --ch-soft:         #7d786f;
+    --ch-rule:         rgba(240, 237, 230, 0.14);
+    --ch-rule-strong:  rgba(240, 237, 230, 0.32);
+    --ch-quiet:        #3d3a35;
+    --ch-track:        rgba(240, 237, 230, 0.10);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   2. PAGE + CARD
+   ══════════════════════════════════════════════════════════════════════════ */
+
+html, body { margin: 0; }
+body {
+  background: var(--ch-paper);
+  color: var(--ch-ink);
+  font-family: var(--ch-font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+.ch-page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 48px 32px 72px;
+}
+.ch-page__eyebrow {
+  font-family: var(--ch-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ch-soft);
+  margin: 0 0 8px;
+}
+.ch-page__title {
+  font-family: var(--ch-font-display);
+  font-weight: 400;
+  font-size: 34px;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  margin: 0 0 8px;
+}
+.ch-page__dek {
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ch-muted);
+  max-width: 64ch;
+  margin: 0 0 32px;
+}
+
+/* Two-column grid; a .ch-card--wide spans both. */
+.ch-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+@media (max-width: 760px) { .ch-grid { grid-template-columns: 1fr; } }
+
+/* The card: h2 (conclusion) → .ch-card__sub (legend + range) → svg → .ch-card__src */
+.ch-card {
+  background: var(--ch-paper-raised);
+  border: 1px solid var(--ch-rule);
+  border-radius: 8px;
+  padding: 24px 24px 18px;
+  min-width: 0;
+}
+.ch-card--wide { grid-column: 1 / -1; }
+.ch-card--dark {
+  /* literal on purpose: the custom-property overrides below apply to this
+     element too, so background: var(--ch-ink) would resolve to the LIGHT ink */
+  background: #171614;
+  color: #f0ede6;
+  --ch-ink: #f0ede6; --ch-muted: #b5b0a6; --ch-soft: #7d786f;
+  --ch-rule: rgba(240,237,230,.14); --ch-rule-strong: rgba(240,237,230,.32);
+  --ch-paper: #171614; --ch-paper-raised: #201f1c;
+  --ch-track: rgba(240,237,230,.10); --ch-quiet: #3d3a35;
+}
+.ch-card__title {
+  font-size: var(--ch-fs-title);
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
+  margin: 0 0 4px;
+}
+.ch-card__sub {
+  font-size: var(--ch-fs-sub);
+  color: var(--ch-muted);
+  line-height: 1.4;
+  margin: 0 0 14px;
+}
+.ch-card__src {
+  font-family: var(--ch-font-mono);
+  font-size: var(--ch-fs-note);
+  letter-spacing: 0.04em;
+  color: var(--ch-soft);
+  margin: 12px 0 0;
+}
+.ch-card__note {
+  font-size: var(--ch-fs-label);
+  color: var(--ch-muted);
+  line-height: 1.45;
+  margin: 10px 0 0;
+}
+/* Editorial split: a prose column beside a wide chart. */
+.ch-card--split { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 24px; align-items: start; }
+.ch-card--split > .ch-card__prose { font-size: 13px; line-height: 1.5; color: var(--ch-muted); }
+.ch-card--split > .ch-card__prose > h2 { color: var(--ch-ink); }
+@media (max-width: 760px) { .ch-card--split { grid-template-columns: 1fr; } }
+
+/* ── Sheets — full-page report slots (spec/06-sheets.md) ──────────────── */
+.ch-sheet { max-width: 1080px; margin: 0 auto; padding: 56px 40px 64px; display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 40px; }
+.ch-sheet--fixed { width: 600px; height: 1000px; padding: 40px 36px; display: block; overflow: hidden; box-sizing: border-box; }
+.ch-sheet__main { min-width: 0; }
+.ch-sheet__eyebrow { font-family: var(--ch-font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ch-soft); margin: 0 0 12px; }
+.ch-sheet__title { font-family: var(--ch-font-display); font-weight: 400; font-size: 40px; line-height: 1.1; letter-spacing: -0.015em; margin: 0 0 12px; }
+.ch-sheet__title b { font-weight: 400; font-style: italic; color: var(--ch-hero); }
+.ch-sheet__dek { font-size: 15px; line-height: 1.5; color: var(--ch-muted); max-width: 60ch; margin: 0 0 28px; }
+.ch-sheet__kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 16px; padding: 20px 0; border-top: 1px solid var(--ch-rule-strong); border-bottom: 1px solid var(--ch-rule); margin: 0 0 32px; }
+.ch-kpi__value { font-size: 30px; font-weight: 700; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; line-height: 1; margin: 0 0 6px; }
+.ch-kpi__name { font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ch-muted); margin: 0; }
+.ch-kpi__delta { font-family: var(--ch-font-mono); font-size: 11px; margin: 4px 0 0; color: var(--ch-muted); }
+.ch-kpi__delta--up { color: var(--ch-up); }
+.ch-kpi__delta--down { color: var(--ch-down); }
+.ch-sheet__section { margin: 0 0 32px; }
+.ch-sheet__kicker { font-family: var(--ch-font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ch-soft); margin: 0 0 6px; }
+.ch-sheet__claim { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.3; margin: 0 0 14px; }
+.ch-sheet__rail { font-size: 12.5px; line-height: 1.55; color: var(--ch-muted); }
+.ch-sheet__rail h3 { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ch-soft); margin: 0 0 8px; font-weight: 600; }
+.ch-sheet__rail-block { padding: 16px; background: var(--ch-paper-sunk); border-radius: 6px; margin: 0 0 16px; }
+.ch-sheet__rail a { color: var(--ch-ink); }
+.ch-sheet__foot { font-family: var(--ch-font-mono); font-size: 10px; letter-spacing: 0.04em; color: var(--ch-soft); border-top: 1px solid var(--ch-rule); padding-top: 12px; margin-top: 24px; }
+@media (max-width: 900px) { .ch-sheet { grid-template-columns: 1fr; } }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   3. SVG ROLES — every class the chart body may use
+   ══════════════════════════════════════════════════════════════════════════ */
+
+svg.ch { display: block; width: 100%; height: auto; overflow: visible; font-family: var(--ch-font-body); }
+svg.ch text { fill: var(--ch-ink); }
+
+/* Ground + frame */
+.ch-bg      { fill: var(--ch-paper-raised); }
+.ch-band    { fill: var(--ch-paper-sunk); }
+.ch-grid    { stroke: var(--ch-rule); stroke-width: var(--ch-sw-hair); fill: none; }
+.ch-axis    { stroke: var(--ch-rule-strong); stroke-width: var(--ch-sw-thin); fill: none; }
+.ch-tick    { stroke: var(--ch-rule-strong); stroke-width: var(--ch-sw-hair); }
+.ch-rule    { stroke: var(--ch-rule); stroke-width: var(--ch-sw-hair); fill: none; }
+.ch-target  { stroke: var(--ch-ink); stroke-width: var(--ch-sw-thin); stroke-dasharray: 3 3; fill: none; }
+
+/* Text roles */
+.ch-t-value { font-size: var(--ch-fs-value); font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.ch-t-big   { font-size: var(--ch-fs-big);   font-weight: 700; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.ch-t-label { font-size: var(--ch-fs-label); fill: var(--ch-ink); }
+.ch-t-axis  { font-size: var(--ch-fs-axis);  fill: var(--ch-muted); font-variant-numeric: tabular-nums; }
+.ch-t-note  { font-size: var(--ch-fs-note);  fill: var(--ch-soft); }
+.ch-t-mono  { font-family: var(--ch-font-mono); }
+.ch-t-muted { fill: var(--ch-muted); }
+.ch-t-soft  { fill: var(--ch-soft); }
+.ch-t-hero  { fill: var(--ch-hero); }
+.ch-t-inv   { fill: var(--ch-paper-raised); }
+.ch-t-up    { fill: var(--ch-up); }
+.ch-t-down  { fill: var(--ch-down); }
+.ch-t-end   { text-anchor: end; }
+.ch-t-mid   { text-anchor: middle; }
+
+/* Marks — fills */
+.ch-mark    { fill: var(--ch-data-1); }
+.ch-hero    { fill: var(--ch-hero); }
+.ch-quiet   { fill: var(--ch-quiet); }
+.ch-track   { fill: var(--ch-track); }
+.ch-s1 { fill: var(--ch-data-1); }  .ch-s2 { fill: var(--ch-data-2); }
+.ch-s3 { fill: var(--ch-data-3); }  .ch-s4 { fill: var(--ch-data-4); }
+.ch-s5 { fill: var(--ch-data-5); }  .ch-s6 { fill: var(--ch-data-6); }
+.ch-r1 { fill: var(--ch-ramp-1); }  .ch-r2 { fill: var(--ch-ramp-2); }
+.ch-r3 { fill: var(--ch-ramp-3); }  .ch-r4 { fill: var(--ch-ramp-4); }
+.ch-r5 { fill: var(--ch-ramp-5); }
+.ch-up   { fill: var(--ch-up); }   .ch-down { fill: var(--ch-down); }  .ch-flat { fill: var(--ch-flat); }
+.ch-up-tint { fill: var(--ch-up-tint); } .ch-down-tint { fill: var(--ch-down-tint); }
+.ch-fill    { fill-opacity: var(--ch-data-fill); }   /* combine: class="ch-s1 ch-fill" */
+.ch-mask    { fill: var(--ch-paper-raised); }         /* label halo behind text       */
+
+/* Marks — strokes */
+.ch-line    { fill: none; stroke: var(--ch-data-1); stroke-width: var(--ch-sw-line); stroke-linecap: round; stroke-linejoin: round; }
+.ch-line--hero  { stroke: var(--ch-hero); stroke-width: var(--ch-sw-bold); }
+.ch-line--quiet { stroke: var(--ch-quiet); }
+.ch-line--s2 { stroke: var(--ch-data-2); } .ch-line--s3 { stroke: var(--ch-data-3); }
+.ch-line--s4 { stroke: var(--ch-data-4); } .ch-line--s5 { stroke: var(--ch-data-5); }
+.ch-line--s6 { stroke: var(--ch-data-6); }
+.ch-line--up { stroke: var(--ch-up); } .ch-line--down { stroke: var(--ch-down); }
+.ch-stroke  { fill: none; stroke: var(--ch-ink); stroke-width: var(--ch-sw-thin); }
+.ch-stroke--hair { stroke-width: var(--ch-sw-hair); }
+.ch-stroke--soft { stroke: var(--ch-soft); }
+.ch-stroke--hero { stroke: var(--ch-hero); }
+.ch-ring    { fill: none; stroke: var(--ch-data-1); stroke-width: 10px; stroke-linecap: butt; }
+.ch-ring--track { stroke: var(--ch-track); }
+.ch-ring--hero  { stroke: var(--ch-hero); }
+.ch-dot     { fill: var(--ch-data-1); }
+.ch-dot--open { fill: var(--ch-paper-raised); stroke: var(--ch-data-1); stroke-width: var(--ch-sw-thin); }
+.ch-dot--hero { fill: var(--ch-hero); }
+.ch-dot--quiet { fill: var(--ch-quiet); }
+
+/* Density */
+.ch--compact { --ch-fs-axis: 8.5px; --ch-fs-label: 9px; --ch-fs-title: 14px; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   4. MOTION — CSS only. No JavaScript is needed to draw or to animate.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.ch-pop  { transform-box: fill-box; transform-origin: center; animation: ch-pop var(--ch-dur) var(--ch-ease-pop) both; }
+.ch-rise { transform-box: fill-box; transform-origin: bottom; animation: ch-rise var(--ch-dur) var(--ch-ease) both; }
+.ch-grow { transform-box: fill-box; transform-origin: left;   animation: ch-grow var(--ch-dur) var(--ch-ease) both; }
+.ch-fade { animation: ch-fade var(--ch-dur) ease both; }
+.ch-draw { stroke-dasharray: 2000; stroke-dashoffset: 2000; animation: ch-draw var(--ch-dur-slow) var(--ch-ease) forwards; }
+
+/* Stagger: add ch-d1 … ch-d12 (each step = --ch-stagger). */
+.ch-d1 { animation-delay: calc(var(--ch-stagger) * 1); }  .ch-d2 { animation-delay: calc(var(--ch-stagger) * 2); }
+.ch-d3 { animation-delay: calc(var(--ch-stagger) * 3); }  .ch-d4 { animation-delay: calc(var(--ch-stagger) * 4); }
+.ch-d5 { animation-delay: calc(var(--ch-stagger) * 5); }  .ch-d6 { animation-delay: calc(var(--ch-stagger) * 6); }
+.ch-d7 { animation-delay: calc(var(--ch-stagger) * 7); }  .ch-d8 { animation-delay: calc(var(--ch-stagger) * 8); }
+.ch-d9 { animation-delay: calc(var(--ch-stagger) * 9); }  .ch-d10 { animation-delay: calc(var(--ch-stagger) * 10); }
+.ch-d11 { animation-delay: calc(var(--ch-stagger) * 11); } .ch-d12 { animation-delay: calc(var(--ch-stagger) * 12); }
+
+@keyframes ch-pop  { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes ch-rise { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes ch-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes ch-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ch-draw { to { stroke-dashoffset: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .ch-pop, .ch-rise, .ch-grow, .ch-fade, .ch-draw { animation: none; stroke-dashoffset: 0; opacity: 1; transform: none; }
+}
+@media print {
+  .ch-pop, .ch-rise, .ch-grow, .ch-fade, .ch-draw { animation: none; stroke-dashoffset: 0; opacity: 1; transform: none; }
+  .ch-card { break-inside: avoid; }
+}
+/* ch:css:end */</style>
+</head>
+<body>
+<main class="ch-page">
+  <p class="ch-page__eyebrow">hq-pack-charts · ledger gallery</p>
+  <h1 class="ch-page__title">Ledger — one mark per record</h1>
+  <p class="ch-page__dek">Ten figures where nothing is summarised away: every ticket, vendor, repo, store, shipment, event, region, service, SKU and day is drawn as its own mark, so the reader can audit the claim in the title against the records beneath it.</p>
+
+  <div class="ch-grid">
+    <figure class="ch-card" data-ch-type="ledger.dot-strip">
+      <h2 class="ch-card__title">One dot per record, by category</h2>
+      <p class="ch-card__sub">One dot per ticket · hours from open to resolved · 91 tickets closed in August 2025</p>
+
+      <svg class="ch" viewBox="0 0 520 300" role="img" aria-labelledby="l01-t l01-d">
+        <title id="l01-t">Ticket resolution time, one dot per ticket</title>
+        <desc id="l01-d">Billing tickets take the longest to resolve and spread the widest; every other category closes most of its tickets inside one day.</desc>
+        <g id="l01-fig">
+          <line class="ch-grid" x1="104" y1="30" x2="104" y2="228"/>
+          <text class="ch-t-axis ch-t-mid" x="104" y="240">0h</text>
+          <line class="ch-grid" x1="236" y1="30" x2="236" y2="228"/>
+          <text class="ch-t-axis ch-t-mid" x="236" y="240">24h</text>
+          <line class="ch-grid" x1="368" y1="30" x2="368" y2="228"/>
+          <text class="ch-t-axis ch-t-mid" x="368" y="240">48h</text>
+          <line class="ch-grid" x1="500" y1="30" x2="500" y2="228"/>
+          <text class="ch-t-axis ch-t-mid" x="500" y="240">72h</text>
+          <line class="ch-rule" x1="104" y1="44" x2="500" y2="44"/>
+          <text class="ch-t-label ch-t-end" x="94" y="47.5">Billing</text>
+          <text class="ch-t-note ch-t-end" x="94" y="60">16 tickets</text>
+          <circle class="ch-dot ch-pop ch-d1" cx="245.5" cy="42" r="2.5"><title>Billing · 25.7 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d1" cx="425.5" cy="39" r="2.5"><title>Billing · 58.5 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d1" cx="486" cy="41" r="2.5"><title>Billing · 69.4 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d1" cx="194.5" cy="47.5" r="2.5"><title>Billing · 16.5 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d1" cx="428" cy="38.5" r="2.5"><title>Billing · 58.9 h</title></circle>
+          <circle class="ch-dot ch-dot--hero ch-pop ch-d12" cx="486" cy="46.5" r="3.5"><title>Billing · 69.5 h</title></circle>
+          <text class="ch-t-note ch-t-end" x="479" y="32">slowest · 69.5 h, escalated twice</text>
+          <circle class="ch-dot ch-pop ch-d1" cx="226" cy="38" r="2.5"><title>Billing · 22.2 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d1" cx="204.5" cy="49" r="2.5"><title>Billing · 18.3 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d1" cx="268.5" cy="49.5" r="2.5"><title>Billing · 29.9 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d1" cx="352.5" cy="43.5" r="2.5"><title>Billing · 45.2 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d1" cx="228" cy="48" r="2.5"><title>Billing · 22.5 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d1" cx="262.5" cy="47" r="2.5"><title>Billing · 28.8 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d1" cx="209" cy="41.5" r="2.5"><title>Billing · 19.1 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d1" cx="389" cy="43" r="2.5"><title>Billing · 51.8 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d1" cx="247" cy="40" r="2.5"><title>Billing · 26.0 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d1" cx="243.5" cy="40.5" r="2.5"><title>Billing · 25.4 h</title></circle>
+          <line class="ch-rule" x1="104" y1="78" x2="500" y2="78"/>
+          <text class="ch-t-label ch-t-end" x="94" y="81.5">Shipping</text>
+          <text class="ch-t-note ch-t-end" x="94" y="94">22 tickets</text>
+          <circle class="ch-dot ch-pop ch-d2" cx="107" cy="75.5" r="2.5"><title>Shipping · 0.5 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d2" cx="186.5" cy="79" r="2.5"><title>Shipping · 15.0 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d2" cx="232" cy="80" r="2.5"><title>Shipping · 23.2 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d2" cx="111.5" cy="78" r="2.5"><title>Shipping · 1.4 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d2" cx="206.5" cy="78" r="2.5"><title>Shipping · 18.7 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d2" cx="207" cy="77.5" r="2.5"><title>Shipping · 18.8 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d2" cx="174.5" cy="81" r="2.5"><title>Shipping · 12.8 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d2" cx="116" cy="80.5" r="2.5"><title>Shipping · 2.1 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d2" cx="157" cy="78.5" r="2.5"><title>Shipping · 9.6 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d2" cx="158" cy="81" r="2.5"><title>Shipping · 9.8 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d2" cx="262" cy="76" r="2.5"><title>Shipping · 28.7 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d2" cx="107" cy="79.5" r="2.5"><title>Shipping · 0.6 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d2" cx="279" cy="83" r="2.5"><title>Shipping · 31.8 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d2" cx="147.5" cy="82" r="2.5"><title>Shipping · 7.9 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d2" cx="163.5" cy="76" r="2.5"><title>Shipping · 10.8 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d2" cx="107" cy="82" r="2.5"><title>Shipping · 0.5 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d2" cx="221.5" cy="78.5" r="2.5"><title>Shipping · 21.4 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d2" cx="160.5" cy="75.5" r="2.5"><title>Shipping · 10.3 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d2" cx="201.5" cy="78" r="2.5"><title>Shipping · 17.7 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d2" cx="217.5" cy="76.5" r="2.5"><title>Shipping · 20.7 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d2" cx="107" cy="80" r="2.5"><title>Shipping · 0.5 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d2" cx="122" cy="82.5" r="2.5"><title>Shipping · 3.3 h</title></circle>
+          <line class="ch-rule" x1="104" y1="112" x2="500" y2="112"/>
+          <text class="ch-t-label ch-t-end" x="94" y="115.5">Returns</text>
+          <text class="ch-t-note ch-t-end" x="94" y="128">18 tickets</text>
+          <circle class="ch-dot ch-pop ch-d3" cx="159.5" cy="118" r="2.5"><title>Returns · 10.1 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d3" cx="182.5" cy="117" r="2.5"><title>Returns · 14.3 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d3" cx="164.5" cy="112.5" r="2.5"><title>Returns · 11.0 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d3" cx="152.5" cy="113" r="2.5"><title>Returns · 8.8 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d3" cx="182.5" cy="111" r="2.5"><title>Returns · 14.3 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d3" cx="126.5" cy="115" r="2.5"><title>Returns · 4.1 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d3" cx="180.5" cy="117.5" r="2.5"><title>Returns · 13.9 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d3" cx="171" cy="112" r="2.5"><title>Returns · 12.2 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d3" cx="129" cy="113" r="2.5"><title>Returns · 4.5 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d3" cx="194" cy="115" r="2.5"><title>Returns · 16.3 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d3" cx="132.5" cy="115" r="2.5"><title>Returns · 5.2 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d3" cx="199.5" cy="106" r="2.5"><title>Returns · 17.4 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d3" cx="107" cy="116" r="2.5"><title>Returns · 0.6 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d3" cx="178" cy="109.5" r="2.5"><title>Returns · 13.5 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d3" cx="166" cy="115" r="2.5"><title>Returns · 11.3 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d3" cx="199" cy="114.5" r="2.5"><title>Returns · 17.3 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d3" cx="123" cy="109.5" r="2.5"><title>Returns · 3.4 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d3" cx="169.5" cy="113" r="2.5"><title>Returns · 11.9 h</title></circle>
+          <line class="ch-rule" x1="104" y1="146" x2="500" y2="146"/>
+          <text class="ch-t-label ch-t-end" x="94" y="149.5">Account</text>
+          <text class="ch-t-note ch-t-end" x="94" y="162">14 tickets</text>
+          <circle class="ch-dot ch-pop ch-d4" cx="168.5" cy="142" r="2.5"><title>Account · 11.7 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d4" cx="125" cy="149" r="2.5"><title>Account · 3.8 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d4" cx="108.5" cy="144" r="2.5"><title>Account · 0.8 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d4" cx="133.5" cy="144.5" r="2.5"><title>Account · 5.4 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d4" cx="140" cy="147.5" r="2.5"><title>Account · 6.6 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d4" cx="129.5" cy="146.5" r="2.5"><title>Account · 4.6 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d4" cx="142" cy="147" r="2.5"><title>Account · 6.9 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d4" cx="154.5" cy="142" r="2.5"><title>Account · 9.2 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d4" cx="161" cy="150" r="2.5"><title>Account · 10.4 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d4" cx="159.5" cy="143" r="2.5"><title>Account · 10.1 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d4" cx="179" cy="150.5" r="2.5"><title>Account · 13.7 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d4" cx="129" cy="141" r="2.5"><title>Account · 4.5 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d4" cx="154.5" cy="143" r="2.5"><title>Account · 9.2 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d4" cx="179.5" cy="146.5" r="2.5"><title>Account · 13.7 h</title></circle>
+          <line class="ch-rule" x1="104" y1="180" x2="500" y2="180"/>
+          <text class="ch-t-label ch-t-end" x="94" y="183.5">Product</text>
+          <text class="ch-t-note ch-t-end" x="94" y="196">12 tickets</text>
+          <circle class="ch-dot ch-pop ch-d5" cx="159" cy="182.5" r="2.5"><title>Product · 10.0 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d5" cx="107" cy="183.5" r="2.5"><title>Product · 0.5 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d5" cx="150.5" cy="177" r="2.5"><title>Product · 8.5 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d5" cx="138" cy="186" r="2.5"><title>Product · 6.2 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d5" cx="217.5" cy="186" r="2.5"><title>Product · 20.7 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d5" cx="163.5" cy="177.5" r="2.5"><title>Product · 10.8 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d5" cx="155" cy="176" r="2.5"><title>Product · 9.2 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d5" cx="119" cy="178" r="2.5"><title>Product · 2.7 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d5" cx="170" cy="176.5" r="2.5"><title>Product · 12.0 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d5" cx="194" cy="174" r="2.5"><title>Product · 16.4 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d5" cx="125.5" cy="179" r="2.5"><title>Product · 3.9 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d5" cx="152" cy="182" r="2.5"><title>Product · 8.7 h</title></circle>
+          <line class="ch-rule" x1="104" y1="214" x2="500" y2="214"/>
+          <text class="ch-t-label ch-t-end" x="94" y="217.5">Other</text>
+          <text class="ch-t-note ch-t-end" x="94" y="230">9 tickets</text>
+          <circle class="ch-dot ch-pop ch-d6" cx="152" cy="208.5" r="2.5"><title>Other · 8.8 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d6" cx="157" cy="209" r="2.5"><title>Other · 9.7 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d6" cx="125" cy="218.5" r="2.5"><title>Other · 3.9 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d6" cx="139" cy="217.5" r="2.5"><title>Other · 6.4 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d6" cx="113.5" cy="210" r="2.5"><title>Other · 1.7 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d6" cx="113" cy="212" r="2.5"><title>Other · 1.7 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d6" cx="144" cy="209.5" r="2.5"><title>Other · 7.3 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d6" cx="114" cy="215" r="2.5"><title>Other · 1.8 h</title></circle>
+          <circle class="ch-dot ch-pop ch-d6" cx="107" cy="209" r="2.5"><title>Other · 0.5 h</title></circle>
+          <line class="ch-axis" x1="104" y1="228" x2="500" y2="228"/>
+          <text class="ch-t-note" x="104" y="258">Dots are jittered vertically so no two records hide each other.</text>
+        </g>
+      </svg>
+
+      <p class="ch-card__src">Helpdesk export · closed tickets only · 2025-09-01</p>
+    </figure>
+    <figure class="ch-card" data-ch-type="ledger.record-rows">
+      <h2 class="ch-card__title">Every row printed, one tick per row</h2>
+      <p class="ch-card__sub">One tick per vendor · days from invoice to payment · sorted slowest first · Q2 2025</p>
+
+      <svg class="ch" viewBox="0 0 520 420" role="img" aria-labelledby="l02-t l02-d">
+        <title id="l02-t">Days to pay, every vendor listed</title>
+        <desc id="l02-d">Three of twenty-four vendors were paid after the 45-day policy line, and every one of them runs through manual approval rather than the automated queue.</desc>
+        <g id="l02-fig">
+          <line class="ch-grid" x1="156" y1="28" x2="156" y2="372"/>
+          <text class="ch-t-axis ch-t-mid" x="156" y="24">0</text>
+          <line class="ch-grid" x1="227" y1="28" x2="227" y2="372"/>
+          <text class="ch-t-axis ch-t-mid" x="227" y="24">15</text>
+          <line class="ch-grid" x1="298" y1="28" x2="298" y2="372"/>
+          <text class="ch-t-axis ch-t-mid" x="298" y="24">30</text>
+          <line class="ch-grid" x1="369" y1="28" x2="369" y2="372"/>
+          <text class="ch-t-axis ch-t-mid" x="369" y="24">45</text>
+          <line class="ch-grid" x1="440" y1="28" x2="440" y2="372"/>
+          <text class="ch-t-axis ch-t-mid" x="440" y="24">60</text>
+          <text class="ch-t-note" x="450" y="24">days</text>
+          <line class="ch-target" x1="369" y1="28" x2="369" y2="372"/>
+          <text class="ch-t-label ch-t-end" x="146" y="43.5">Northwind Freight</text>
+          <line class="ch-rule" x1="156" y1="40" x2="440" y2="40"/>
+          <rect class="ch-hero ch-pop ch-d1" x="429.5" y="35" width="2" height="10"/>
+          <text class="ch-t-axis ch-t-end ch-t-hero" x="476" y="43.5">58</text>
+          <text class="ch-t-label ch-t-end" x="146" y="57.5">Halvorsen Print</text>
+          <line class="ch-rule" x1="156" y1="54" x2="440" y2="54"/>
+          <rect class="ch-hero ch-pop ch-d1" x="396.5" y="49" width="2" height="10"/>
+          <text class="ch-t-axis ch-t-end ch-t-hero" x="476" y="57.5">51</text>
+          <text class="ch-t-label ch-t-end" x="146" y="71.5">Carrow Legal LLP</text>
+          <line class="ch-rule" x1="156" y1="68" x2="440" y2="68"/>
+          <rect class="ch-hero ch-pop ch-d2" x="377.5" y="63" width="2" height="10"/>
+          <text class="ch-t-axis ch-t-end ch-t-hero" x="476" y="71.5">47</text>
+          <text class="ch-t-label ch-t-end" x="146" y="85.5">Bright Peak Media</text>
+          <line class="ch-rule" x1="156" y1="82" x2="440" y2="82"/>
+          <rect class="ch-mark ch-pop ch-d2" x="363.5" y="77" width="2" height="10"/>
+          <text class="ch-t-axis ch-t-end" x="476" y="85.5">44</text>
+          <text class="ch-t-label ch-t-end" x="146" y="99.5">Ostrander Packaging</text>
+          <line class="ch-rule" x1="156" y1="96" x2="440" y2="96"/>
+          <rect class="ch-mark ch-pop ch-d3" x="349" y="91" width="2" height="10"/>
+          <text class="ch-t-axis ch-t-end" x="476" y="99.5">41</text>
+          <text class="ch-t-label ch-t-end" x="146" y="113.5">Lumen Cloud</text>
+          <line class="ch-rule" x1="156" y1="110" x2="440" y2="110"/>
+          <rect class="ch-mark ch-pop ch-d3" x="335" y="105" width="2" height="10"/>
+          <text class="ch-t-axis ch-t-end" x="476" y="113.5">38</text>
+          <text class="ch-t-label ch-t-end" x="146" y="127.5">Tessaro Design</text>
+          <line class="ch-rule" x1="156" y1="124" x2="440" y2="124"/>
+          <rect class="ch-mark ch-pop ch-d4" x="325.5" y="119" width="2" height="10"/>
+          <text class="ch-t-axis ch-t-end" x="476" y="127.5">36</text>
+          <text class="ch-t-label ch-t-end" x="146" y="141.5">Oakline Staffing</text>
+          <line class="ch-rule" x1="156" y1="138" x2="440" y2="138"/>
+          <rect class="ch-mark ch-pop ch-d4" x="316" y="133" width="2" height="10"/>
+          <text class="ch-t-axis ch-t-end" x="476" y="141.5">34</text>
+          <text class="ch-t-label ch-t-end" x="146" y="155.5">Redfern Analytics</text>
+          <line class="ch-rule" x1="156" y1="152" x2="440" y2="152"/>
+          <rect class="ch-mark ch-pop ch-d5" x="311" y="147" width="2" height="10"/>
+          <text class="ch-t-axis ch-t-end" x="476" y="155.5">33</text>
+          <text class="ch-t-label ch-t-end" x="146" y="169.5">Marlow & Sons</text>
+          <line class="ch-rule" x1="156" y1="166" x2="440" y2="166"/>
+          <rect class="ch-mark ch-pop ch-d5" x="301.5" y="161" width="2" height="10"/>
+          <text class="ch-t-axis ch-t-end" x="476" y="169.5">31</text>
+          <text class="ch-t-label ch-t-end" x="146" y="183.5">Cinder Labs</text>
+          <line class="ch-rule" x1="156" y1="180" x2="440" y2="180"/>
+          <rect class="ch-mark ch-pop ch-d6" x="297" y="175" width="2" height="10"/>
+          <text class="ch-t-axis ch-t-end" x="476" y="183.5">30</text>
+          <text class="ch-t-label ch-t-end" x="146" y="197.5">Pacific Cold Chain</text>
+          <line class="ch-rule" x1="156" y1="194" x2="440" y2="194"/>
+          <rect class="ch-mark ch-pop ch-d6" x="292.5" y="189" width="2" height="10"/>
+          <text class="ch-t-axis ch-t-end" x="476" y="197.5">29</text>
+          <text class="ch-t-label ch-t-end" x="146" y="211.5">Verity Audit</text>
+          <line class="ch-rule" x1="156" y1="208" x2="440" y2="208"/>
+          <rect class="ch-mark ch-pop ch-d7" x="287.5" y="203" width="2" height="10"/>
+          <text class="ch-t-axis ch-t-end" x="476" y="211.5">28</text>
+          <text class="ch-t-label ch-t-end" x="146" y="225.5">Kestrel Security</text>
+          <line class="ch-rule" x1="156" y1="222" x2="440" y2="222"/>
+          <rect class="ch-mark ch-pop ch-d7" x="283" y="217" width="2" height="10"/>
+          <text class="ch-t-axis ch-t-end" x="476" y="225.5">27</text>
+          <text class="ch-t-label ch-t-end" x="146" y="239.5">Amberline Studio</text>
+          <line class="ch-rule" x1="156" y1="236" x2="440" y2="236"/>
+          <rect class="ch-mark ch-pop ch-d8" x="278" y="231" width="2" height="10"/>
+          <text class="ch-t-axis ch-t-end" x="476" y="239.5">26</text>
+          <text class="ch-t-label ch-t-end" x="146" y="253.5">Quill Translations</text>
+          <line class="ch-rule" x1="156" y1="250" x2="440" y2="250"/>
+          <rect class="ch-mark ch-pop ch-d8" x="268.5" y="245" width="2" height="10"/>
+          <text class="ch-t-axis ch-t-end" x="476" y="253.5">24</text>
+          <text class="ch-t-label ch-t-end" x="146" y="267.5">Brightwater Utilities</text>
+          <line class="ch-rule" x1="156" y1="264" x2="440" y2="264"/>
+          <rect class="ch-mark ch-pop ch-d9" x="259" y="259" width="2" height="10"/>
+          <text class="ch-t-axis ch-t-end" x="476" y="267.5">22</text>
+          <text class="ch-t-label ch-t-end" x="146" y="281.5">Sable Courier</text>
+          <line class="ch-rule" x1="156" y1="278" x2="440" y2="278"/>
+          <rect class="ch-mark ch-pop ch-d9" x="254.5" y="273" width="2" height="10"/>
+          <text class="ch-t-axis ch-t-end" x="476" y="281.5">21</text>
+          <text class="ch-t-label ch-t-end" x="146" y="295.5">Fenwick Insurance</text>
+          <line class="ch-rule" x1="156" y1="292" x2="440" y2="292"/>
+          <rect class="ch-mark ch-pop ch-d10" x="245" y="287" width="2" height="10"/>
+          <text class="ch-t-axis ch-t-end" x="476" y="295.5">19</text>
+          <text class="ch-t-label ch-t-end" x="146" y="309.5">Harbor Telecom</text>
+          <line class="ch-rule" x1="156" y1="306" x2="440" y2="306"/>
+          <rect class="ch-mark ch-pop ch-d10" x="235.5" y="301" width="2" height="10"/>
+          <text class="ch-t-axis ch-t-end" x="476" y="309.5">17</text>
+          <text class="ch-t-label ch-t-end" x="146" y="323.5">Juniper Office Supply</text>
+          <line class="ch-rule" x1="156" y1="320" x2="440" y2="320"/>
+          <rect class="ch-mark ch-pop ch-d11" x="226" y="315" width="2" height="10"/>
+          <text class="ch-t-axis ch-t-end" x="476" y="323.5">15</text>
+          <text class="ch-t-label ch-t-end" x="146" y="337.5">Rosewood Catering</text>
+          <line class="ch-rule" x1="156" y1="334" x2="440" y2="334"/>
+          <rect class="ch-mark ch-pop ch-d11" x="212" y="329" width="2" height="10"/>
+          <text class="ch-t-axis ch-t-end" x="476" y="337.5">12</text>
+          <text class="ch-t-label ch-t-end" x="146" y="351.5">Ironvale Tooling</text>
+          <line class="ch-rule" x1="156" y1="348" x2="440" y2="348"/>
+          <rect class="ch-mark ch-pop ch-d12" x="197.5" y="343" width="2" height="10"/>
+          <text class="ch-t-axis ch-t-end" x="476" y="351.5">9</text>
+          <text class="ch-t-label ch-t-end" x="146" y="365.5">Nimbus Payroll</text>
+          <line class="ch-rule" x1="156" y1="362" x2="440" y2="362"/>
+          <rect class="ch-mark ch-pop ch-d12" x="183.5" y="357" width="2" height="10"/>
+          <text class="ch-t-axis ch-t-end" x="476" y="365.5">6</text>
+          <text class="ch-t-note ch-t-end" x="365" y="386">policy: 45 days</text>
+          <text class="ch-t-note" x="156" y="400">Three vendors sit past the 45-day policy line; all three are on manual approval.</text>
+        </g>
+      </svg>
+
+      <p class="ch-card__src">AP ledger · median of invoices per vendor · 2025-07-03</p>
+    </figure>
+    <figure class="ch-card" data-ch-type="ledger.unit-grid">
+      <h2 class="ch-card__title">One square per unit, grouped by owner</h2>
+      <p class="ch-card__sub">One square = one repository · grouped by owning team · 99 repos in the org · September 2025</p>
+
+      <svg class="ch" viewBox="0 0 520 300" role="img" aria-labelledby="l03-t l03-d">
+        <title id="l03-t">Repositories by owning team, one square each</title>
+        <desc id="l03-d">Platform owns a third of all repositories, and nine repositories have no owning team at all even though most of them are still actively shipping.</desc>
+        <g id="l03-fig">
+          <text class="ch-t-label ch-t-end" x="118" y="43">Platform</text>
+          <text class="ch-t-note ch-t-end" x="118" y="55">34 repos</text>
+          <g><title>Platform · 34 repos</title>
+            <rect class="ch-mark ch-pop ch-d1" x="130" y="34" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d1" x="145" y="34" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d1" x="160" y="34" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d1" x="175" y="34" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d1" x="190" y="34" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d1" x="205" y="34" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d1" x="220" y="34" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d1" x="235" y="34" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d1" x="250" y="34" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d1" x="265" y="34" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d1" x="280" y="34" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d1" x="295" y="34" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d1" x="310" y="34" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d1" x="325" y="34" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d1" x="340" y="34" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d1" x="355" y="34" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d1" x="370" y="34" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d1" x="130" y="49" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d1" x="145" y="49" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d1" x="160" y="49" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d1" x="175" y="49" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d1" x="190" y="49" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d1" x="205" y="49" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d1" x="220" y="49" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d1" x="235" y="49" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d1" x="250" y="49" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d1" x="265" y="49" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d1" x="280" y="49" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d1" x="295" y="49" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d1" x="310" y="49" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d1" x="325" y="49" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d1" x="340" y="49" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d1" x="355" y="49" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d1" x="370" y="49" width="12" height="12"/>
+          </g>
+          <text class="ch-t-label ch-t-end" x="118" y="89">Growth</text>
+          <text class="ch-t-note ch-t-end" x="118" y="101">21 repos</text>
+          <g><title>Growth · 21 repos</title>
+            <rect class="ch-mark ch-pop ch-d2" x="130" y="80" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d2" x="145" y="80" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d2" x="160" y="80" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d2" x="175" y="80" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d2" x="190" y="80" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d2" x="205" y="80" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d2" x="220" y="80" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d2" x="235" y="80" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d2" x="250" y="80" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d2" x="265" y="80" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d2" x="280" y="80" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d2" x="295" y="80" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d2" x="310" y="80" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d2" x="325" y="80" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d2" x="340" y="80" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d2" x="355" y="80" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d2" x="370" y="80" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d2" x="130" y="95" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d2" x="145" y="95" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d2" x="160" y="95" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d2" x="175" y="95" width="12" height="12"/>
+          </g>
+          <text class="ch-t-label ch-t-end" x="118" y="135">Data</text>
+          <text class="ch-t-note ch-t-end" x="118" y="147">17 repos</text>
+          <g><title>Data · 17 repos</title>
+            <rect class="ch-mark ch-pop ch-d3" x="130" y="126" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d3" x="145" y="126" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d3" x="160" y="126" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d3" x="175" y="126" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d3" x="190" y="126" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d3" x="205" y="126" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d3" x="220" y="126" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d3" x="235" y="126" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d3" x="250" y="126" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d3" x="265" y="126" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d3" x="280" y="126" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d3" x="295" y="126" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d3" x="310" y="126" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d3" x="325" y="126" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d3" x="340" y="126" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d3" x="355" y="126" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d3" x="370" y="126" width="12" height="12"/>
+          </g>
+          <text class="ch-t-label ch-t-end" x="118" y="166">Mobile</text>
+          <text class="ch-t-note ch-t-end" x="118" y="178">12 repos</text>
+          <g><title>Mobile · 12 repos</title>
+            <rect class="ch-mark ch-pop ch-d4" x="130" y="157" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d4" x="145" y="157" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d4" x="160" y="157" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d4" x="175" y="157" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d4" x="190" y="157" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d4" x="205" y="157" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d4" x="220" y="157" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d4" x="235" y="157" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d4" x="250" y="157" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d4" x="265" y="157" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d4" x="280" y="157" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d4" x="295" y="157" width="12" height="12"/>
+          </g>
+          <text class="ch-t-label ch-t-end" x="118" y="197">Design</text>
+          <text class="ch-t-note ch-t-end" x="118" y="209">6 repos</text>
+          <g><title>Design · 6 repos</title>
+            <rect class="ch-mark ch-pop ch-d5" x="130" y="188" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d5" x="145" y="188" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d5" x="160" y="188" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d5" x="175" y="188" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d5" x="190" y="188" width="12" height="12"/>
+            <rect class="ch-mark ch-pop ch-d5" x="205" y="188" width="12" height="12"/>
+          </g>
+          <text class="ch-t-label ch-t-end ch-t-hero" x="118" y="228">Unowned</text>
+          <text class="ch-t-note ch-t-end" x="118" y="240">9 repos</text>
+          <g><title>Unowned · 9 repos</title>
+            <rect class="ch-hero ch-pop ch-d6" x="130" y="219" width="12" height="12"/>
+            <rect class="ch-hero ch-pop ch-d6" x="145" y="219" width="12" height="12"/>
+            <rect class="ch-hero ch-pop ch-d6" x="160" y="219" width="12" height="12"/>
+            <rect class="ch-hero ch-pop ch-d6" x="175" y="219" width="12" height="12"/>
+            <rect class="ch-hero ch-pop ch-d6" x="190" y="219" width="12" height="12"/>
+            <rect class="ch-hero ch-pop ch-d6" x="205" y="219" width="12" height="12"/>
+            <rect class="ch-hero ch-pop ch-d6" x="220" y="219" width="12" height="12"/>
+            <rect class="ch-hero ch-pop ch-d6" x="235" y="219" width="12" height="12"/>
+            <rect class="ch-hero ch-pop ch-d6" x="250" y="219" width="12" height="12"/>
+          </g>
+          <text class="ch-t-note" x="130" y="254">Nine repos have no owning team; six of them shipped a release in the last 30 days.</text>
+        </g>
+      </svg>
+
+      <p class="ch-card__src">GitHub org export · CODEOWNERS parsed · 2025-09-01</p>
+    </figure>
+    <figure class="ch-card" data-ch-type="ledger.slope-pairs">
+      <h2 class="ch-card__title">Before and after, one line per entity</h2>
+      <p class="ch-card__sub">One line per store · net promoter score · annual survey, 2024 to 2025</p>
+
+      <svg class="ch" viewBox="0 0 520 300" role="img" aria-labelledby="l04-t l04-d">
+        <title id="l04-t">Store NPS, 2024 to 2025, one line per store</title>
+        <desc id="l04-d">Austin's score doubled after its remodel while every other store held within four points of where it started.</desc>
+        <g id="l04-fig">
+          <line class="ch-axis" x1="160" y1="36" x2="160" y2="270"/>
+          <line class="ch-axis" x1="360" y1="36" x2="360" y2="270"/>
+          <text class="ch-t-axis ch-t-mid" x="160" y="28">2024</text>
+          <text class="ch-t-axis ch-t-mid" x="360" y="28">2025</text>
+          <line class="ch-line ch-line--hero ch-draw ch-d12" x1="160" y1="222" x2="360" y2="109.5"><title>Austin · 31 → 62</title></line>
+          <line class="ch-line ch-line--quiet ch-draw ch-d2" x1="160" y1="196.5" x2="360" y2="189.5"><title>Denver · 38 → 40</title></line>
+          <line class="ch-line ch-line--quiet ch-draw ch-d3" x1="160" y1="175" x2="360" y2="167.5"><title>Reno · 44 → 46</title></line>
+          <line class="ch-line ch-line--quiet ch-draw ch-d4" x1="160" y1="156.5" x2="360" y2="138.5"><title>Omaha · 49 → 54</title></line>
+          <line class="ch-line ch-line--quiet ch-draw ch-d5" x1="160" y1="138.5" x2="360" y2="153"><title>Tucson · 54 → 50</title></line>
+          <line class="ch-line ch-line--quiet ch-draw ch-d6" x1="160" y1="120.5" x2="360" y2="124"><title>Fresno · 59 → 58</title></line>
+          <line class="ch-line ch-line--quiet ch-draw ch-d7" x1="160" y1="102" x2="360" y2="95"><title>Tulsa · 64 → 66</title></line>
+          <line class="ch-line ch-line--quiet ch-draw ch-d8" x1="160" y1="84" x2="360" y2="80.5"><title>Salem · 69 → 70</title></line>
+          <line class="ch-line ch-line--quiet ch-draw ch-d9" x1="160" y1="66" x2="360" y2="66"><title>Provo · 74 → 74</title></line>
+          <line class="ch-line ch-line--quiet ch-draw ch-d10" x1="160" y1="51.5" x2="360" y2="51.5"><title>Eugene · 78 → 78</title></line>
+          <circle class="ch-dot ch-dot--hero" cx="160" cy="222" r="2.5"/>
+          <circle class="ch-dot ch-dot--hero" cx="360" cy="109.5" r="2.5"/>
+          <text class="ch-t-label ch-t-end ch-t-hero ch-fade" x="150" y="225.5">Austin <tspan class="ch-t-axis">31</tspan></text>
+          <text class="ch-t-label ch-t-hero ch-fade" x="370" y="113"><tspan class="ch-t-axis">62</tspan> Austin</text>
+          <circle class="ch-dot ch-dot--quiet" cx="160" cy="196.5" r="2.5"/>
+          <circle class="ch-dot ch-dot--quiet" cx="360" cy="189.5" r="2.5"/>
+          <text class="ch-t-label ch-t-end ch-fade" x="150" y="200">Denver <tspan class="ch-t-axis">38</tspan></text>
+          <text class="ch-t-label ch-fade" x="370" y="193"><tspan class="ch-t-axis">40</tspan> Denver</text>
+          <circle class="ch-dot ch-dot--quiet" cx="160" cy="175" r="2.5"/>
+          <circle class="ch-dot ch-dot--quiet" cx="360" cy="167.5" r="2.5"/>
+          <text class="ch-t-label ch-t-end ch-fade" x="150" y="178.5">Reno <tspan class="ch-t-axis">44</tspan></text>
+          <text class="ch-t-label ch-fade" x="370" y="171"><tspan class="ch-t-axis">46</tspan> Reno</text>
+          <circle class="ch-dot ch-dot--quiet" cx="160" cy="156.5" r="2.5"/>
+          <circle class="ch-dot ch-dot--quiet" cx="360" cy="138.5" r="2.5"/>
+          <text class="ch-t-label ch-t-end ch-fade" x="150" y="160">Omaha <tspan class="ch-t-axis">49</tspan></text>
+          <text class="ch-t-label ch-fade" x="370" y="142"><tspan class="ch-t-axis">54</tspan> Omaha</text>
+          <circle class="ch-dot ch-dot--quiet" cx="160" cy="138.5" r="2.5"/>
+          <circle class="ch-dot ch-dot--quiet" cx="360" cy="153" r="2.5"/>
+          <text class="ch-t-label ch-t-end ch-fade" x="150" y="142">Tucson <tspan class="ch-t-axis">54</tspan></text>
+          <text class="ch-t-label ch-fade" x="370" y="156.5"><tspan class="ch-t-axis">50</tspan> Tucson</text>
+          <circle class="ch-dot ch-dot--quiet" cx="160" cy="120.5" r="2.5"/>
+          <circle class="ch-dot ch-dot--quiet" cx="360" cy="124" r="2.5"/>
+          <text class="ch-t-label ch-t-end ch-fade" x="150" y="124">Fresno <tspan class="ch-t-axis">59</tspan></text>
+          <text class="ch-t-label ch-fade" x="370" y="127.5"><tspan class="ch-t-axis">58</tspan> Fresno</text>
+          <circle class="ch-dot ch-dot--quiet" cx="160" cy="102" r="2.5"/>
+          <circle class="ch-dot ch-dot--quiet" cx="360" cy="95" r="2.5"/>
+          <text class="ch-t-label ch-t-end ch-fade" x="150" y="105.5">Tulsa <tspan class="ch-t-axis">64</tspan></text>
+          <text class="ch-t-label ch-fade" x="370" y="98.5"><tspan class="ch-t-axis">66</tspan> Tulsa</text>
+          <circle class="ch-dot ch-dot--quiet" cx="160" cy="84" r="2.5"/>
+          <circle class="ch-dot ch-dot--quiet" cx="360" cy="80.5" r="2.5"/>
+          <text class="ch-t-label ch-t-end ch-fade" x="150" y="87.5">Salem <tspan class="ch-t-axis">69</tspan></text>
+          <text class="ch-t-label ch-fade" x="370" y="84"><tspan class="ch-t-axis">70</tspan> Salem</text>
+          <circle class="ch-dot ch-dot--quiet" cx="160" cy="66" r="2.5"/>
+          <circle class="ch-dot ch-dot--quiet" cx="360" cy="66" r="2.5"/>
+          <text class="ch-t-label ch-t-end ch-fade" x="150" y="69.5">Provo <tspan class="ch-t-axis">74</tspan></text>
+          <text class="ch-t-label ch-fade" x="370" y="69.5"><tspan class="ch-t-axis">74</tspan> Provo</text>
+          <circle class="ch-dot ch-dot--quiet" cx="160" cy="51.5" r="2.5"/>
+          <circle class="ch-dot ch-dot--quiet" cx="360" cy="51.5" r="2.5"/>
+          <text class="ch-t-label ch-t-end ch-fade" x="150" y="55">Eugene <tspan class="ch-t-axis">78</tspan></text>
+          <text class="ch-t-label ch-fade" x="370" y="55"><tspan class="ch-t-axis">78</tspan> Eugene</text>
+          <text class="ch-t-note ch-t-end" x="150" y="238">+31 after the remodel</text>
+          <text class="ch-t-note" x="20" y="288">Nine stores moved four points or fewer; Austin moved thirty-one.</text>
+        </g>
+      </svg>
+
+      <p class="ch-card__src">Customer survey · n ≈ 400 per store per year · 2025-08-15</p>
+    </figure>
+    <figure class="ch-card" data-ch-type="ledger.tick-distribution">
+      <h2 class="ch-card__title">Every observation as a tick on the line</h2>
+      <p class="ch-card__sub">One tick per shipment · days from dispatch to delivery · 174 shipments · August 2025</p>
+
+      <svg class="ch" viewBox="0 0 520 300" role="img" aria-labelledby="l05-t l05-d">
+        <title id="l05-t">Delivery days by carrier, one tick per shipment</title>
+        <desc id="l05-d">Courier and Parcel A cluster tightly around two days, while Freight spreads from three days to nearly two weeks with one customs hold at the far end.</desc>
+        <g id="l05-fig">
+          <line class="ch-grid" x1="100" y1="24" x2="100" y2="218"/>
+          <text class="ch-t-axis ch-t-mid" x="100" y="238">0d</text>
+          <line class="ch-grid" x1="157" y1="24" x2="157" y2="218"/>
+          <text class="ch-t-axis ch-t-mid" x="157" y="238">2d</text>
+          <line class="ch-grid" x1="214.5" y1="24" x2="214.5" y2="218"/>
+          <text class="ch-t-axis ch-t-mid" x="214.5" y="238">4d</text>
+          <line class="ch-grid" x1="271.5" y1="24" x2="271.5" y2="218"/>
+          <text class="ch-t-axis ch-t-mid" x="271.5" y="238">6d</text>
+          <line class="ch-grid" x1="328.5" y1="24" x2="328.5" y2="218"/>
+          <text class="ch-t-axis ch-t-mid" x="328.5" y="238">8d</text>
+          <line class="ch-grid" x1="385.5" y1="24" x2="385.5" y2="218"/>
+          <text class="ch-t-axis ch-t-mid" x="385.5" y="238">10d</text>
+          <line class="ch-grid" x1="443" y1="24" x2="443" y2="218"/>
+          <text class="ch-t-axis ch-t-mid" x="443" y="238">12d</text>
+          <line class="ch-grid" x1="500" y1="24" x2="500" y2="218"/>
+          <text class="ch-t-axis ch-t-mid" x="500" y="238">14d</text>
+          <line class="ch-rule" x1="100" y1="46" x2="500" y2="46"/>
+          <text class="ch-t-label ch-t-end" x="90" y="49.5">Parcel A</text>
+          <text class="ch-t-note ch-t-end" x="90" y="62">n = 40</text>
+          <rect class="ch-mark ch-fade ch-d1" x="134" y="40" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d1" x="138.5" y="40" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d1" x="142" y="40" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d1" x="146.5" y="40" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d1" x="147.5" y="40" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d1" x="147.5" y="40" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d1" x="149" y="40" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d1" x="149.5" y="40" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d1" x="150.5" y="40" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d1" x="150.5" y="40" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d1" x="152" y="40" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d1" x="153" y="40" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d1" x="155" y="40" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d1" x="156.5" y="40" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d1" x="157" y="40" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d1" x="157" y="40" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d1" x="158" y="40" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d1" x="160" y="40" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d1" x="166" y="40" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d1" x="166.5" y="40" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d1" x="167" y="40" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d1" x="170.5" y="40" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d1" x="171" y="40" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d1" x="171" y="40" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d1" x="173" y="40" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d1" x="175.5" y="40" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d1" x="176" y="40" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d1" x="176" y="40" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d1" x="176.5" y="40" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d1" x="176.5" y="40" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d1" x="180.5" y="40" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d1" x="184" y="40" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d1" x="184.5" y="40" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d1" x="189" y="40" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d1" x="189.5" y="40" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d1" x="192" y="40" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d1" x="194" y="40" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d1" x="198.5" y="40" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d1" x="199.5" y="40" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d1" x="206.5" y="40" width="1" height="12"/>
+          <line class="ch-axis" x1="167.5" y1="36" x2="167.5" y2="56"/>
+          <text class="ch-t-note" x="171.5" y="65">median 2.4 d</text>
+          <line class="ch-rule" x1="100" y1="86" x2="500" y2="86"/>
+          <text class="ch-t-label ch-t-end" x="90" y="89.5">Parcel B</text>
+          <text class="ch-t-note ch-t-end" x="90" y="102">n = 40</text>
+          <rect class="ch-mark ch-fade ch-d2" x="126.5" y="80" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d2" x="150.5" y="80" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d2" x="154" y="80" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d2" x="156.5" y="80" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d2" x="159" y="80" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d2" x="163.5" y="80" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d2" x="165" y="80" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d2" x="166.5" y="80" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d2" x="167" y="80" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d2" x="168" y="80" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d2" x="168.5" y="80" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d2" x="168.5" y="80" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d2" x="169" y="80" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d2" x="172.5" y="80" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d2" x="173" y="80" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d2" x="177" y="80" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d2" x="177.5" y="80" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d2" x="177.5" y="80" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d2" x="178.5" y="80" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d2" x="182" y="80" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d2" x="182" y="80" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d2" x="183" y="80" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d2" x="184.5" y="80" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d2" x="187" y="80" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d2" x="187.5" y="80" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d2" x="190" y="80" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d2" x="194.5" y="80" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d2" x="195.5" y="80" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d2" x="197.5" y="80" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d2" x="198.5" y="80" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d2" x="202" y="80" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d2" x="204" y="80" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d2" x="205.5" y="80" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d2" x="206" y="80" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d2" x="209" y="80" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d2" x="209" y="80" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d2" x="218" y="80" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d2" x="221.5" y="80" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d2" x="226.5" y="80" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d2" x="231.5" y="80" width="1" height="12"/>
+          <line class="ch-axis" x1="182.5" y1="76" x2="182.5" y2="96"/>
+          <text class="ch-t-note" x="186.5" y="105">median 2.9 d</text>
+          <line class="ch-rule" x1="100" y1="126" x2="500" y2="126"/>
+          <text class="ch-t-label ch-t-end" x="90" y="129.5">Regional</text>
+          <text class="ch-t-note ch-t-end" x="90" y="142">n = 36</text>
+          <rect class="ch-mark ch-fade ch-d3" x="133" y="120" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d3" x="138.5" y="120" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d3" x="147" y="120" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d3" x="150.5" y="120" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d3" x="155.5" y="120" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d3" x="160.5" y="120" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d3" x="161" y="120" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d3" x="166.5" y="120" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d3" x="171.5" y="120" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d3" x="177.5" y="120" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d3" x="181" y="120" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d3" x="181" y="120" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d3" x="182" y="120" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d3" x="186" y="120" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d3" x="193.5" y="120" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d3" x="196" y="120" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d3" x="199" y="120" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d3" x="199" y="120" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d3" x="201.5" y="120" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d3" x="203" y="120" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d3" x="208.5" y="120" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d3" x="213.5" y="120" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d3" x="214" y="120" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d3" x="219" y="120" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d3" x="221" y="120" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d3" x="225" y="120" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d3" x="225" y="120" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d3" x="225.5" y="120" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d3" x="230" y="120" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d3" x="231" y="120" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d3" x="232.5" y="120" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d3" x="233" y="120" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d3" x="236" y="120" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d3" x="240" y="120" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d3" x="246" y="120" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d3" x="270.5" y="120" width="1" height="12"/>
+          <line class="ch-axis" x1="201" y1="116" x2="201" y2="136"/>
+          <text class="ch-t-note" x="205" y="145">median 3.5 d</text>
+          <line class="ch-rule" x1="100" y1="166" x2="500" y2="166"/>
+          <text class="ch-t-label ch-t-end" x="90" y="169.5">Freight</text>
+          <text class="ch-t-note ch-t-end" x="90" y="182">n = 30</text>
+          <rect class="ch-mark ch-fade ch-d4" x="175.5" y="160" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d4" x="192.5" y="160" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d4" x="207.5" y="160" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d4" x="211" y="160" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d4" x="217" y="160" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d4" x="217.5" y="160" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d4" x="222" y="160" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d4" x="237.5" y="160" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d4" x="243" y="160" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d4" x="247" y="160" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d4" x="250" y="160" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d4" x="255" y="160" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d4" x="258.5" y="160" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d4" x="262.5" y="160" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d4" x="269" y="160" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d4" x="271.5" y="160" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d4" x="280.5" y="160" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d4" x="283" y="160" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d4" x="287" y="160" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d4" x="288.5" y="160" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d4" x="292.5" y="160" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d4" x="300" y="160" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d4" x="301" y="160" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d4" x="306" y="160" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d4" x="308" y="160" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d4" x="323" y="160" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d4" x="324.5" y="160" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d4" x="334.5" y="160" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d4" x="359" y="160" width="1" height="12"/>
+          <rect class="ch-hero ch-fade ch-d12" x="488" y="157" width="1" height="18"><title>Freight · 13.6 d</title></rect>
+          <text class="ch-t-note ch-t-end" x="484.5" y="154">13.6 d, customs hold</text>
+          <line class="ch-axis" x1="271" y1="156" x2="271" y2="176"/>
+          <text class="ch-t-note" x="275" y="185">median 6.0 d</text>
+          <line class="ch-rule" x1="100" y1="206" x2="500" y2="206"/>
+          <text class="ch-t-label ch-t-end" x="90" y="209.5">Courier</text>
+          <text class="ch-t-note ch-t-end" x="90" y="222">n = 28</text>
+          <rect class="ch-mark ch-fade ch-d5" x="113.5" y="200" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d5" x="117" y="200" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d5" x="119.5" y="200" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d5" x="120" y="200" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d5" x="123" y="200" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d5" x="124.5" y="200" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d5" x="125" y="200" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d5" x="127.5" y="200" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d5" x="130" y="200" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d5" x="131.5" y="200" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d5" x="132" y="200" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d5" x="135.5" y="200" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d5" x="135.5" y="200" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d5" x="136.5" y="200" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d5" x="138" y="200" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d5" x="139.5" y="200" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d5" x="141" y="200" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d5" x="143.5" y="200" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d5" x="143.5" y="200" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d5" x="144.5" y="200" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d5" x="144.5" y="200" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d5" x="146.5" y="200" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d5" x="146.5" y="200" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d5" x="147.5" y="200" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d5" x="148" y="200" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d5" x="149.5" y="200" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d5" x="151.5" y="200" width="1" height="12"/>
+          <rect class="ch-mark ch-fade ch-d5" x="153.5" y="200" width="1" height="12"/>
+          <line class="ch-axis" x1="138" y1="196" x2="138" y2="216"/>
+          <text class="ch-t-note" x="142" y="225">median 1.3 d</text>
+          <line class="ch-axis" x1="100" y1="218" x2="500" y2="218"/>
+          <text class="ch-t-note" x="100" y="256">Tall tick = median of the group. Each thin tick is one shipment.</text>
+        </g>
+      </svg>
+
+      <p class="ch-card__src">Carrier tracking API · delivered shipments · 2025-09-01</p>
+    </figure>
+    <figure class="ch-card ch-card--wide" data-ch-type="ledger.event-line">
+      <h2 class="ch-card__title">Dated events on one hairline</h2>
+      <p class="ch-card__sub">One dot per event · filled = release, open = incident · 26 events · Jan–Dec 2025</p>
+
+      <svg class="ch" viewBox="0 0 1080 320" role="img" aria-labelledby="l06-t l06-d">
+        <title id="l06-t">Releases and incidents through 2025 on one timeline</title>
+        <desc id="l06-d">Ten releases and sixteen incidents share one year; incidents follow half of the releases within ten days, but both SEV1s arrived in quiet weeks.</desc>
+        <g id="l06-fig">
+          <line class="ch-axis" x1="60" y1="160" x2="1010" y2="160"/>
+          <line class="ch-tick" x1="60" y1="157" x2="60" y2="163"/>
+          <line class="ch-tick" x1="140.5" y1="157" x2="140.5" y2="163"/>
+          <line class="ch-tick" x1="213.5" y1="157" x2="213.5" y2="163"/>
+          <line class="ch-tick" x1="294" y1="157" x2="294" y2="163"/>
+          <line class="ch-tick" x1="372.5" y1="157" x2="372.5" y2="163"/>
+          <line class="ch-tick" x1="453" y1="157" x2="453" y2="163"/>
+          <line class="ch-tick" x1="531" y1="157" x2="531" y2="163"/>
+          <line class="ch-tick" x1="612" y1="157" x2="612" y2="163"/>
+          <line class="ch-tick" x1="692.5" y1="157" x2="692.5" y2="163"/>
+          <line class="ch-tick" x1="770.5" y1="157" x2="770.5" y2="163"/>
+          <line class="ch-tick" x1="851" y1="157" x2="851" y2="163"/>
+          <line class="ch-tick" x1="929.5" y1="157" x2="929.5" y2="163"/>
+          <line class="ch-rule" x1="83.5" y1="156" x2="83.5" y2="126"/>
+          <circle class="ch-dot ch-pop ch-d1" cx="83.5" cy="152" r="3"><title>v4.0 GA · day 9</title></circle>
+          <text class="ch-t-note ch-fade" x="79.5" y="120">v4.0 GA</text>
+          <line class="ch-rule" x1="104" y1="192" x2="104" y2="212"/>
+          <circle class="ch-dot ch-dot--open ch-pop ch-d1" cx="104" cy="168" r="3"><title>SEV2 · auth outage · day 17</title></circle>
+          <text class="ch-t-note ch-fade" x="100" y="226">SEV2 · auth outage</text>
+          <line class="ch-rule" x1="140.5" y1="156" x2="140.5" y2="86"/>
+          <circle class="ch-dot ch-pop ch-d1" cx="140.5" cy="152" r="3"><title>Pricing page · day 31</title></circle>
+          <text class="ch-t-note ch-fade" x="136.5" y="80">Pricing page</text>
+          <line class="ch-rule" x1="179.5" y1="192" x2="179.5" y2="252"/>
+          <circle class="ch-dot ch-dot--open ch-pop ch-d2" cx="179.5" cy="168" r="3"><title>SEV3 · slow search · day 46</title></circle>
+          <text class="ch-t-note ch-fade" x="175.5" y="266">SEV3 · slow search</text>
+          <line class="ch-rule" x1="203" y1="156" x2="203" y2="126"/>
+          <circle class="ch-dot ch-pop ch-d2" cx="203" cy="152" r="3"><title>Mobile 2.1 · day 55</title></circle>
+          <text class="ch-t-note ch-fade" x="199" y="120">Mobile 2.1</text>
+          <line class="ch-rule" x1="250" y1="156" x2="250" y2="86"/>
+          <circle class="ch-dot ch-pop ch-d2" cx="250" cy="152" r="3"><title>SSO beta · day 73</title></circle>
+          <text class="ch-t-note ch-fade" x="246" y="80">SSO beta</text>
+          <line class="ch-rule" x1="268" y1="192" x2="268" y2="212"/>
+          <circle class="ch-dot ch-dot--open ch-pop ch-d3" cx="268" cy="168" r="3"><title>SEV1 · data lag · day 80</title></circle>
+          <text class="ch-t-note ch-fade" x="264" y="226">SEV1 · data lag</text>
+          <line class="ch-rule" x1="315" y1="156" x2="315" y2="126"/>
+          <circle class="ch-dot ch-pop ch-d3" cx="315" cy="152" r="3"><title>v4.1 · day 98</title></circle>
+          <text class="ch-t-note ch-fade" x="311" y="120">v4.1</text>
+          <line class="ch-rule" x1="351.5" y1="192" x2="351.5" y2="252"/>
+          <circle class="ch-dot ch-dot--open ch-pop ch-d3" cx="351.5" cy="168" r="3"><title>SEV3 · email queue · day 112</title></circle>
+          <text class="ch-t-note ch-fade" x="347.5" y="266">SEV3 · email queue</text>
+          <line class="ch-rule" x1="385.5" y1="156" x2="385.5" y2="86"/>
+          <circle class="ch-dot ch-pop ch-d4" cx="385.5" cy="152" r="3"><title>Audit log · day 125</title></circle>
+          <text class="ch-t-note ch-fade" x="381.5" y="80">Audit log</text>
+          <line class="ch-rule" x1="401" y1="192" x2="401" y2="212"/>
+          <circle class="ch-dot ch-dot--open ch-pop ch-d4" cx="401" cy="168" r="3"><title>SEV2 · billing retry · day 131</title></circle>
+          <text class="ch-t-note ch-fade" x="397" y="226">SEV2 · billing retry</text>
+          <line class="ch-rule" x1="450.5" y1="156" x2="450.5" y2="126"/>
+          <circle class="ch-dot ch-pop ch-d4" cx="450.5" cy="152" r="3"><title>Mobile 2.2 · day 150</title></circle>
+          <text class="ch-t-note ch-fade" x="446.5" y="120">Mobile 2.2</text>
+          <line class="ch-rule" x1="492" y1="156" x2="492" y2="86"/>
+          <circle class="ch-dot ch-pop ch-d5" cx="492" cy="152" r="3"><title>v4.2 · day 166</title></circle>
+          <text class="ch-t-note ch-fade" x="488" y="80">v4.2</text>
+          <line class="ch-rule" x1="502.5" y1="192" x2="502.5" y2="252"/>
+          <circle class="ch-dot ch-dot--open ch-pop ch-d5" cx="502.5" cy="168" r="3"><title>SEV3 · import · day 170</title></circle>
+          <text class="ch-t-note ch-fade" x="498.5" y="266">SEV3 · import</text>
+          <line class="ch-rule" x1="549.5" y1="156" x2="549.5" y2="126"/>
+          <circle class="ch-dot ch-pop ch-d5" cx="549.5" cy="152" r="3"><title>Webhooks v2 · day 188</title></circle>
+          <text class="ch-t-note ch-fade" x="545.5" y="120">Webhooks v2</text>
+          <line class="ch-rule" x1="599" y1="192" x2="599" y2="212"/>
+          <circle class="ch-dot ch-dot--open ch-pop ch-d6" cx="599" cy="168" r="3"><title>SEV2 · CDN · day 207</title></circle>
+          <text class="ch-t-note ch-fade" x="595" y="226">SEV2 · CDN</text>
+          <line class="ch-rule" x1="622" y1="156" x2="622" y2="86"/>
+          <circle class="ch-dot ch-pop ch-d6" cx="622" cy="152" r="3"><title>Reports beta · day 216</title></circle>
+          <text class="ch-t-note ch-fade" x="618" y="80">Reports beta</text>
+          <line class="ch-rule" x1="674" y1="192" x2="674" y2="252"/>
+          <circle class="ch-dot ch-dot--open ch-pop ch-d6" cx="674" cy="168" r="3"><title>SEV3 · export · day 236</title></circle>
+          <text class="ch-t-note ch-fade" x="670" y="266">SEV3 · export</text>
+          <line class="ch-rule" x1="695" y1="156" x2="695" y2="126"/>
+          <circle class="ch-dot ch-pop ch-d7" cx="695" cy="152" r="3"><title>v4.3 · day 244</title></circle>
+          <text class="ch-t-note ch-fade" x="691" y="120">v4.3</text>
+          <line class="ch-rule" x1="734" y1="192" x2="734" y2="212"/>
+          <circle class="ch-dot ch-dot--hero ch-pop ch-d12" cx="734" cy="168" r="3"><title>SEV1 · region failover · day 259</title></circle>
+          <text class="ch-t-note ch-t-hero ch-fade" x="730" y="226">SEV1 · region failover</text>
+          <line class="ch-rule" x1="744.5" y1="192" x2="744.5" y2="252"/>
+          <circle class="ch-dot ch-dot--open ch-pop ch-d7" cx="744.5" cy="168" r="3"><title>SEV2 · failover · day 263</title></circle>
+          <text class="ch-t-note ch-fade" x="740.5" y="266">SEV2 · failover</text>
+          <line class="ch-rule" x1="776" y1="156" x2="776" y2="86"/>
+          <circle class="ch-dot ch-pop ch-d8" cx="776" cy="152" r="3"><title>Mobile 3.0 · day 275</title></circle>
+          <text class="ch-t-note ch-fade" x="772" y="80">Mobile 3.0</text>
+          <line class="ch-rule" x1="833" y1="156" x2="833" y2="126"/>
+          <circle class="ch-dot ch-pop ch-d8" cx="833" cy="152" r="3"><title>SSO GA · day 297</title></circle>
+          <text class="ch-t-note ch-fade" x="829" y="120">SSO GA</text>
+          <line class="ch-rule" x1="867" y1="192" x2="867" y2="212"/>
+          <circle class="ch-dot ch-dot--open ch-pop ch-d8" cx="867" cy="168" r="3"><title>SEV3 · search · day 310</title></circle>
+          <text class="ch-t-note ch-fade" x="863" y="226">SEV3 · search</text>
+          <line class="ch-rule" x1="908.5" y1="156" x2="908.5" y2="86"/>
+          <circle class="ch-dot ch-pop ch-d9" cx="908.5" cy="152" r="3"><title>v4.4 · day 326</title></circle>
+          <text class="ch-t-note ch-fade" x="904.5" y="80">v4.4</text>
+          <line class="ch-rule" x1="973.5" y1="156" x2="973.5" y2="126"/>
+          <circle class="ch-dot ch-pop ch-d9" cx="973.5" cy="152" r="3"><title>Freeze · day 351</title></circle>
+          <text class="ch-t-note ch-fade" x="969.5" y="120">Freeze</text>
+          <text class="ch-t-axis" x="64" y="186">Jan</text>
+          <text class="ch-t-axis" x="144.5" y="186">Feb</text>
+          <text class="ch-t-axis" x="217.5" y="186">Mar</text>
+          <text class="ch-t-axis" x="298" y="186">Apr</text>
+          <text class="ch-t-axis" x="376.5" y="186">May</text>
+          <text class="ch-t-axis" x="457" y="186">Jun</text>
+          <text class="ch-t-axis" x="535" y="186">Jul</text>
+          <text class="ch-t-axis" x="616" y="186">Aug</text>
+          <text class="ch-t-axis" x="696.5" y="186">Sep</text>
+          <text class="ch-t-axis" x="774.5" y="186">Oct</text>
+          <text class="ch-t-axis" x="855" y="186">Nov</text>
+          <text class="ch-t-axis" x="933.5" y="186">Dec</text>
+          <text class="ch-t-note" x="60" y="310">Incidents cluster within ten days of a release five times out of ten; the two SEV1s did not.</text>
+        </g>
+      </svg>
+
+      <p class="ch-card__src">Release log + incident tracker · 2025-12-31</p>
+    </figure>
+    <figure class="ch-card ch-card--wide" data-ch-type="ledger.small-multiples">
+      <h2 class="ch-card__title">The same tiny chart, once per entity</h2>
+      <p class="ch-card__sub">One panel per region · weekly active users as % of seats · 12 weeks to 2025-08-31 · same scale in every panel</p>
+
+      <svg class="ch" viewBox="0 0 1080 340" role="img" aria-labelledby="l07-t l07-d">
+        <title id="l07-t">Weekly active rate by region, twelve weeks, eight small panels</title>
+        <desc id="l07-d">Seven regions are flat or climbing; West alone has fallen every single week for twelve weeks and is the only one below 40 percent.</desc>
+        <g id="l07-fig">
+          <text class="ch-t-label" x="52" y="42">North</text>
+          <line class="ch-axis" x1="52" y1="134" x2="232" y2="134"/>
+          <line class="ch-grid" x1="52" y1="94" x2="232" y2="94"/>
+          <line class="ch-grid" x1="52" y1="54" x2="232" y2="54"/>
+          <text class="ch-t-axis ch-t-end" x="46" y="137">0</text>
+          <text class="ch-t-axis ch-t-end" x="46" y="97">50</text>
+          <text class="ch-t-axis ch-t-end" x="46" y="57">100</text>
+          <polyline class="ch-line ch-draw ch-d1" points="52,84.5 68.5,83.5 84.5,82 101,83 117.5,81 134,79.5 150,80.5 166.5,79 183,77 199.5,76.5 215.5,75 232,74"><title>North · 62 → 75</title></polyline>
+          <circle class="ch-dot" cx="232" cy="74" r="2.5"/>
+          <text class="ch-t-axis ch-fade" x="240" y="77">75%</text>
+          <text class="ch-t-label" x="302" y="42">South</text>
+          <line class="ch-axis" x1="302" y1="134" x2="482" y2="134"/>
+          <line class="ch-grid" x1="302" y1="94" x2="482" y2="94"/>
+          <line class="ch-grid" x1="302" y1="54" x2="482" y2="54"/>
+          <polyline class="ch-line ch-draw ch-d2" points="302,87.5 318.5,88.5 334.5,87 351,87.5 367.5,86 384,87 400,85 416.5,86 433,84.5 449.5,85 465.5,83.5 482,84.5"><title>South · 58 → 62</title></polyline>
+          <circle class="ch-dot" cx="482" cy="84.5" r="2.5"/>
+          <text class="ch-t-axis ch-fade" x="490" y="87.5">62%</text>
+          <text class="ch-t-label" x="552" y="42">East</text>
+          <line class="ch-axis" x1="552" y1="134" x2="732" y2="134"/>
+          <line class="ch-grid" x1="552" y1="94" x2="732" y2="94"/>
+          <line class="ch-grid" x1="552" y1="54" x2="732" y2="54"/>
+          <polyline class="ch-line ch-draw ch-d3" points="552,78 568.5,77 584.5,79 601,76.5 617.5,78 634,75.5 650,77 666.5,75 683,76.5 699.5,74 715.5,75.5 732,73"><title>East · 70 → 76</title></polyline>
+          <circle class="ch-dot" cx="732" cy="73" r="2.5"/>
+          <text class="ch-t-axis ch-fade" x="740" y="76">76%</text>
+          <text class="ch-t-label ch-t-hero" x="802" y="42">West</text>
+          <line class="ch-axis" x1="802" y1="134" x2="982" y2="134"/>
+          <line class="ch-grid" x1="802" y1="94" x2="982" y2="94"/>
+          <line class="ch-grid" x1="802" y1="54" x2="982" y2="54"/>
+          <polyline class="ch-line ch-line--hero ch-draw ch-d12" points="802,90 818.5,91 834.5,92.5 851,93 867.5,95 884,95.5 900,97 916.5,98 933,99.5 949.5,100.5 965.5,102 982,103"><title>West · 55 → 39</title></polyline>
+          <circle class="ch-dot ch-dot--hero" cx="982" cy="103" r="2.5"/>
+          <text class="ch-t-axis ch-fade" x="990" y="106">39%</text>
+          <text class="ch-t-note ch-t-hero" x="990" y="118">−16 pts</text>
+          <text class="ch-t-label" x="52" y="177">Central</text>
+          <line class="ch-axis" x1="52" y1="269" x2="232" y2="269"/>
+          <line class="ch-grid" x1="52" y1="229" x2="232" y2="229"/>
+          <line class="ch-grid" x1="52" y1="189" x2="232" y2="189"/>
+          <text class="ch-t-axis ch-t-end" x="46" y="272">0</text>
+          <text class="ch-t-axis ch-t-end" x="46" y="232">50</text>
+          <text class="ch-t-axis ch-t-end" x="46" y="192">100</text>
+          <polyline class="ch-line ch-draw ch-d5" points="52,230.5 68.5,229 84.5,226.5 101,223.5 117.5,219.5 134,216 150,213 166.5,210.5 183,209 199.5,207.5 215.5,206.5 232,206"><title>Central · 48 → 79</title></polyline>
+          <circle class="ch-dot" cx="232" cy="206" r="2.5"/>
+          <text class="ch-t-axis ch-fade" x="240" y="209">79%</text>
+          <text class="ch-t-label" x="302" y="177">Coastal</text>
+          <line class="ch-axis" x1="302" y1="269" x2="482" y2="269"/>
+          <line class="ch-grid" x1="302" y1="229" x2="482" y2="229"/>
+          <line class="ch-grid" x1="302" y1="189" x2="482" y2="189"/>
+          <polyline class="ch-line ch-draw ch-d6" points="302,216 318.5,216 334.5,217 351,216 367.5,216 384,215.5 400,216 416.5,216 433,215.5 449.5,216 465.5,215.5 482,216"><title>Coastal · 66 → 66</title></polyline>
+          <circle class="ch-dot" cx="482" cy="216" r="2.5"/>
+          <text class="ch-t-axis ch-fade" x="490" y="219">66%</text>
+          <text class="ch-t-label" x="552" y="177">Mountain</text>
+          <line class="ch-axis" x1="552" y1="269" x2="732" y2="269"/>
+          <line class="ch-grid" x1="552" y1="229" x2="732" y2="229"/>
+          <line class="ch-grid" x1="552" y1="189" x2="732" y2="189"/>
+          <polyline class="ch-line ch-draw ch-d7" points="552,237 568.5,235.5 584.5,236 601,234 617.5,234.5 634,232 650,233 666.5,230.5 683,231.5 699.5,229 715.5,230 732,227.5"><title>Mountain · 40 → 52</title></polyline>
+          <circle class="ch-dot" cx="732" cy="227.5" r="2.5"/>
+          <text class="ch-t-axis ch-fade" x="740" y="230.5">52%</text>
+          <text class="ch-t-label" x="802" y="177">Islands</text>
+          <line class="ch-axis" x1="802" y1="269" x2="982" y2="269"/>
+          <line class="ch-grid" x1="802" y1="229" x2="982" y2="229"/>
+          <line class="ch-grid" x1="802" y1="189" x2="982" y2="189"/>
+          <polyline class="ch-line ch-draw ch-d8" points="802,211.5 818.5,213 834.5,214.5 851,214 867.5,212 884,210.5 900,213 916.5,214.5 933,216 949.5,214 965.5,212 982,213"><title>Islands · 72 → 70</title></polyline>
+          <circle class="ch-dot" cx="982" cy="213" r="2.5"/>
+          <text class="ch-t-axis ch-fade" x="990" y="216">70%</text>
+          <text class="ch-t-note" x="52" y="312">Shared y-scale 0–100 in every panel. Weeks run left to right, w1 to w12.</text>
+        </g>
+      </svg>
+
+      <p class="ch-card__src">Product analytics · seats with ≥1 session in the week · 2025-09-01</p>
+    </figure>
+    <figure class="ch-card ch-card--wide" data-ch-type="ledger.column-roster">
+      <h2 class="ch-card__title">Names stacked under their owner</h2>
+      <p class="ch-card__sub">One name per service · grouped under the owning team · 42 services · September 2025</p>
+
+      <svg class="ch" viewBox="0 0 1080 220" role="img" aria-labelledby="l08-t l08-d">
+        <title id="l08-t">Services by owning team, every name printed</title>
+        <desc id="l08-d">Platform and Data own a third of all services between them, and three production services have no owner listed at all.</desc>
+        <g id="l08-fig">
+          <text class="ch-t-label" x="40" y="30">Payments</text>
+          <text class="ch-t-note" x="122" y="30">7</text>
+          <line class="ch-axis" x1="40" y1="38" x2="165" y2="38"/>
+          <text class="ch-t-axis ch-t-mono ch-fade ch-d1" x="40" y="56">checkout-api</text>
+          <text class="ch-t-axis ch-t-mono ch-fade ch-d2" x="40" y="71">ledger</text>
+          <text class="ch-t-axis ch-t-mono ch-fade ch-d3" x="40" y="86">refunds</text>
+          <text class="ch-t-axis ch-t-mono ch-fade ch-d4" x="40" y="101">invoice-gen</text>
+          <text class="ch-t-axis ch-t-mono ch-fade ch-d5" x="40" y="116">tax-svc</text>
+          <text class="ch-t-axis ch-t-mono ch-fade ch-d6" x="40" y="131">payout-cron</text>
+          <text class="ch-t-axis ch-t-mono ch-fade ch-d7" x="40" y="146">fraud-score</text>
+          <text class="ch-t-label" x="185" y="30">Identity</text>
+          <text class="ch-t-note" x="267" y="30">5</text>
+          <line class="ch-axis" x1="185" y1="38" x2="310" y2="38"/>
+          <text class="ch-t-axis ch-t-mono ch-fade ch-d1" x="185" y="56">auth</text>
+          <text class="ch-t-axis ch-t-mono ch-fade ch-d2" x="185" y="71">sso-bridge</text>
+          <text class="ch-t-axis ch-t-mono ch-fade ch-d3" x="185" y="86">sessions</text>
+          <text class="ch-t-axis ch-t-mono ch-fade ch-d4" x="185" y="101">mfa</text>
+          <text class="ch-t-axis ch-t-mono ch-fade ch-d5" x="185" y="116">user-dir</text>
+          <text class="ch-t-label" x="330" y="30">Catalog</text>
+          <text class="ch-t-note" x="412" y="30">6</text>
+          <line class="ch-axis" x1="330" y1="38" x2="455" y2="38"/>
+          <text class="ch-t-axis ch-t-mono ch-fade ch-d1" x="330" y="56">products</text>
+          <text class="ch-t-axis ch-t-mono ch-fade ch-d2" x="330" y="71">pricing</text>
+          <text class="ch-t-axis ch-t-mono ch-fade ch-d3" x="330" y="86">search-index</text>
+          <text class="ch-t-axis ch-t-mono ch-fade ch-d4" x="330" y="101">media-cdn</text>
+          <text class="ch-t-axis ch-t-mono ch-fade ch-d5" x="330" y="116">reviews</text>
+          <text class="ch-t-axis ch-t-mono ch-fade ch-d6" x="330" y="131">inventory</text>
+          <text class="ch-t-label" x="475" y="30">Messaging</text>
+          <text class="ch-t-note" x="557" y="30">4</text>
+          <line class="ch-axis" x1="475" y1="38" x2="600" y2="38"/>
+          <text class="ch-t-axis ch-t-mono ch-fade ch-d1" x="475" y="56">email-svc</text>
+          <text class="ch-t-axis ch-t-mono ch-fade ch-d2" x="475" y="71">sms-gw</text>
+          <text class="ch-t-axis ch-t-mono ch-fade ch-d3" x="475" y="86">push</text>
+          <text class="ch-t-axis ch-t-mono ch-fade ch-d4" x="475" y="101">templates</text>
+          <text class="ch-t-label" x="620" y="30">Data</text>
+          <text class="ch-t-note" x="702" y="30">8</text>
+          <line class="ch-axis" x1="620" y1="38" x2="745" y2="38"/>
+          <text class="ch-t-axis ch-t-mono ch-fade ch-d1" x="620" y="56">warehouse</text>
+          <text class="ch-t-axis ch-t-mono ch-fade ch-d2" x="620" y="71">etl-runner</text>
+          <text class="ch-t-axis ch-t-mono ch-fade ch-d3" x="620" y="86">metrics-api</text>
+          <text class="ch-t-axis ch-t-mono ch-fade ch-d4" x="620" y="101">event-bus</text>
+          <text class="ch-t-axis ch-t-mono ch-fade ch-d5" x="620" y="116">feature-store</text>
+          <text class="ch-t-axis ch-t-mono ch-fade ch-d6" x="620" y="131">reporting</text>
+          <text class="ch-t-axis ch-t-mono ch-fade ch-d7" x="620" y="146">backfill</text>
+          <text class="ch-t-axis ch-t-mono ch-fade ch-d8" x="620" y="161">schema-reg</text>
+          <text class="ch-t-label" x="765" y="30">Platform</text>
+          <text class="ch-t-note" x="847" y="30">9</text>
+          <line class="ch-axis" x1="765" y1="38" x2="890" y2="38"/>
+          <text class="ch-t-axis ch-t-mono ch-fade ch-d1" x="765" y="56">gateway</text>
+          <text class="ch-t-axis ch-t-mono ch-fade ch-d2" x="765" y="71">config</text>
+          <text class="ch-t-axis ch-t-mono ch-fade ch-d3" x="765" y="86">secrets</text>
+          <text class="ch-t-axis ch-t-mono ch-fade ch-d4" x="765" y="101">ci-runner</text>
+          <text class="ch-t-axis ch-t-mono ch-fade ch-d5" x="765" y="116">k8s-ops</text>
+          <text class="ch-t-axis ch-t-mono ch-fade ch-d6" x="765" y="131">logging</text>
+          <text class="ch-t-axis ch-t-mono ch-fade ch-d7" x="765" y="146">tracing</text>
+          <text class="ch-t-axis ch-t-mono ch-fade ch-d8" x="765" y="161">alerts</text>
+          <text class="ch-t-axis ch-t-mono ch-fade ch-d9" x="765" y="176">dns</text>
+          <text class="ch-t-label ch-t-hero" x="910" y="30">No owner</text>
+          <text class="ch-t-note" x="992" y="30">3</text>
+          <line class="ch-axis" x1="910" y1="38" x2="1035" y2="38"/>
+          <text class="ch-t-axis ch-t-mono ch-t-hero ch-fade ch-d1" x="910" y="56">legacy-cart</text>
+          <text class="ch-t-axis ch-t-mono ch-t-hero ch-fade ch-d2" x="910" y="71">geo-ip</text>
+          <text class="ch-t-axis ch-t-mono ch-t-hero ch-fade ch-d3" x="910" y="86">pdf-render</text>
+          <text class="ch-t-note" x="40" y="203">Count printed beside each owner. Three services have no owner and all three still take production traffic.</text>
+        </g>
+      </svg>
+
+      <p class="ch-card__src">Service catalog · owner field · 2025-09-01</p>
+    </figure>
+    <figure class="ch-card ch-card--wide" data-ch-type="ledger.parallel-lines">
+      <h2 class="ch-card__title">One entity across several measures</h2>
+      <p class="ch-card__sub">One line per SKU · five measures on five axes, each scaled to its own range · trailing 8 weeks to 2025-08-31</p>
+
+      <svg class="ch" viewBox="0 0 1080 320" role="img" aria-labelledby="l09-t l09-d">
+        <title id="l09-t">Seven SKUs profiled across price, margin, returns, rating and velocity</title>
+        <desc id="l09-d">The Down Vest is worst on every one of the five measures at once, while the cheap basics sit at the top of every axis except price.</desc>
+        <g id="l09-fig">
+          <line class="ch-axis" x1="150" y1="60" x2="150" y2="270"/>
+          <text class="ch-t-label ch-t-mid" x="150" y="36">Price</text>
+          <text class="ch-t-axis ch-t-mid" x="150" y="52">$100</text>
+          <text class="ch-t-axis ch-t-mid" x="150" y="284">$10</text>
+          <line class="ch-axis" x1="340" y1="60" x2="340" y2="270"/>
+          <text class="ch-t-label ch-t-mid" x="340" y="36">Margin</text>
+          <text class="ch-t-axis ch-t-mid" x="340" y="52">60%</text>
+          <text class="ch-t-axis ch-t-mid" x="340" y="284">10%</text>
+          <line class="ch-axis" x1="530" y1="60" x2="530" y2="270"/>
+          <text class="ch-t-label ch-t-mid" x="530" y="36">Return rate</text>
+          <text class="ch-t-axis ch-t-mid" x="530" y="52">12%</text>
+          <text class="ch-t-axis ch-t-mid" x="530" y="284">0%</text>
+          <line class="ch-axis" x1="720" y1="60" x2="720" y2="270"/>
+          <text class="ch-t-label ch-t-mid" x="720" y="36">Rating</text>
+          <text class="ch-t-axis ch-t-mid" x="720" y="52">5/5</text>
+          <text class="ch-t-axis ch-t-mid" x="720" y="284">3/5</text>
+          <line class="ch-axis" x1="910" y1="60" x2="910" y2="270"/>
+          <text class="ch-t-label ch-t-mid" x="910" y="36">Units / wk</text>
+          <text class="ch-t-axis ch-t-mid" x="910" y="52">800</text>
+          <text class="ch-t-axis ch-t-mid" x="910" y="284">0</text>
+          <polyline class="ch-line ch-line--quiet ch-draw ch-d1" points="150,102 340,110.5 530,104 720,154.5 910,238.5"><title>Trail Jacket · 82 / 48 / 9.5 / 4.1 / 120</title></polyline>
+          <polyline class="ch-line ch-line--quiet ch-draw ch-d2" points="150,204.5 340,81 530,214 720,102 910,110"><title>Merino Tee · 38 / 55 / 3.2 / 4.6 / 610</title></polyline>
+          <polyline class="ch-line ch-line--quiet ch-draw ch-d3" points="150,120.5 340,135.5 530,133.5 720,175.5 910,220"><title>Rain Shell · 74 / 42 / 7.8 / 3.9 / 190</title></polyline>
+          <polyline class="ch-line ch-line--quiet ch-draw ch-d4" points="150,242 340,68.5 530,238.5 720,123 910,81"><title>Cap · 22 / 58 / 1.8 / 4.4 / 720</title></polyline>
+          <polyline class="ch-line ch-line--quiet ch-draw ch-d5" points="150,162.5 340,119 530,181 720,133.5 910,181"><title>Fleece · 56 / 46 / 5.1 / 4.3 / 340</title></polyline>
+          <polyline class="ch-line ch-line--quiet ch-draw ch-d6" points="150,251.5 340,60 530,251 720,91.5 910,62.5"><title>Socks 3-pk · 18 / 60 / 1.1 / 4.7 / 790</title></polyline>
+          <polyline class="ch-line ch-line--hero ch-draw ch-d12" points="150,69.5 340,152.5 530,70.5 720,207 910,251.5"><title>Down Vest · 96 / 38 / 11.4 / 3.6 / 70</title></polyline>
+          <text class="ch-t-label ch-fade" x="920" y="66">Socks 3-pk <tspan class="ch-t-axis">790</tspan></text>
+          <text class="ch-t-label ch-fade" x="920" y="84.5">Cap <tspan class="ch-t-axis">720</tspan></text>
+          <text class="ch-t-label ch-fade" x="920" y="113.5">Merino Tee <tspan class="ch-t-axis">610</tspan></text>
+          <text class="ch-t-label ch-fade" x="920" y="184">Fleece <tspan class="ch-t-axis">340</tspan></text>
+          <text class="ch-t-label ch-fade" x="920" y="223.5">Rain Shell <tspan class="ch-t-axis">190</tspan></text>
+          <text class="ch-t-label ch-fade" x="920" y="242">Trail Jacket <tspan class="ch-t-axis">120</tspan></text>
+          <text class="ch-t-label ch-t-hero ch-fade" x="920" y="255">Down Vest <tspan class="ch-t-axis">70</tspan></text>
+          <text class="ch-t-label ch-t-end ch-t-hero ch-fade" x="140" y="73">Down Vest</text>
+          <text class="ch-t-label ch-t-end ch-fade" x="140" y="105.5">Trail Jacket</text>
+          <text class="ch-t-label ch-t-end ch-fade" x="140" y="124">Rain Shell</text>
+          <text class="ch-t-label ch-t-end ch-fade" x="140" y="166">Fleece</text>
+          <text class="ch-t-label ch-t-end ch-fade" x="140" y="208">Merino Tee</text>
+          <text class="ch-t-label ch-t-end ch-fade" x="140" y="245.5">Cap</text>
+          <text class="ch-t-label ch-t-end ch-fade" x="140" y="257.5">Socks 3-pk</text>
+          <text class="ch-t-note" x="40" y="308">Each axis runs from its own minimum (bottom) to maximum (top). Down Vest: dearest, thinnest margin, most returned, least loved, slowest.</text>
+        </g>
+      </svg>
+
+      <p class="ch-card__src">Commerce DB + reviews · 8-week trailing averages · 2025-09-01</p>
+    </figure>
+    <figure class="ch-card ch-card--wide" data-ch-type="ledger.year-heat">
+      <h2 class="ch-card__title">Fifty-two weeks by seven days</h2>
+      <p class="ch-card__sub">One cell per day · orders placed · darker = more · ISO weeks 1–52 of 2025 (30 Dec 2024 – 28 Dec 2025)</p>
+
+      <svg class="ch" viewBox="0 0 1080 220" role="img" aria-labelledby="l10-t l10-d">
+        <title id="l10-t">Daily orders across 2025, one cell per day</title>
+        <desc id="l10-d">Weekends run pale in every month, demand builds steadily from September, and the Black Friday weekend is the only stretch of four consecutive peak days.</desc>
+        <g id="l10-fig">
+          <text class="ch-t-axis ch-t-end" x="62" y="55">Mon</text>
+          <text class="ch-t-axis ch-t-end" x="62" y="87">Wed</text>
+          <text class="ch-t-axis ch-t-end" x="62" y="119">Fri</text>
+          <text class="ch-t-axis ch-t-end" x="62" y="151">Sun</text>
+          <rect class="ch-r5 ch-fade ch-d1" x="70" y="44" width="14" height="14"><title>2024-12-30, 176 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d1" x="70" y="60" width="14" height="14"><title>2024-12-31, 151 orders</title></rect>
+          <text class="ch-t-axis" x="70" y="34">Jan</text>
+          <rect class="ch-r1 ch-fade ch-d1" x="70" y="76" width="14" height="14"><title>2025-01-01, 35 orders</title></rect>
+          <rect class="ch-r5 ch-fade ch-d1" x="70" y="92" width="14" height="14"><title>2025-01-02, 170 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d1" x="70" y="108" width="14" height="14"><title>2025-01-03, 135 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d1" x="70" y="124" width="14" height="14"><title>2025-01-04, 83 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d1" x="70" y="140" width="14" height="14"><title>2025-01-05, 71 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d1" x="86" y="44" width="14" height="14"><title>2025-01-06, 150 orders</title></rect>
+          <rect class="ch-r5 ch-fade ch-d1" x="86" y="60" width="14" height="14"><title>2025-01-07, 175 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d1" x="86" y="76" width="14" height="14"><title>2025-01-08, 148 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d1" x="86" y="92" width="14" height="14"><title>2025-01-09, 161 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d1" x="86" y="108" width="14" height="14"><title>2025-01-10, 146 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d1" x="86" y="124" width="14" height="14"><title>2025-01-11, 85 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d1" x="86" y="140" width="14" height="14"><title>2025-01-12, 64 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d1" x="102" y="44" width="14" height="14"><title>2025-01-13, 144 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d1" x="102" y="60" width="14" height="14"><title>2025-01-14, 166 orders</title></rect>
+          <rect class="ch-r5 ch-fade ch-d1" x="102" y="76" width="14" height="14"><title>2025-01-15, 184 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d1" x="102" y="92" width="14" height="14"><title>2025-01-16, 154 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d1" x="102" y="108" width="14" height="14"><title>2025-01-17, 134 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d1" x="102" y="124" width="14" height="14"><title>2025-01-18, 81 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d1" x="102" y="140" width="14" height="14"><title>2025-01-19, 61 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d1" x="118" y="44" width="14" height="14"><title>2025-01-20, 152 orders</title></rect>
+          <rect class="ch-r5 ch-fade ch-d1" x="118" y="60" width="14" height="14"><title>2025-01-21, 178 orders</title></rect>
+          <rect class="ch-r5 ch-fade ch-d1" x="118" y="76" width="14" height="14"><title>2025-01-22, 178 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d1" x="118" y="92" width="14" height="14"><title>2025-01-23, 142 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d1" x="118" y="108" width="14" height="14"><title>2025-01-24, 135 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d1" x="118" y="124" width="14" height="14"><title>2025-01-25, 88 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d1" x="118" y="140" width="14" height="14"><title>2025-01-26, 62 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d1" x="134" y="44" width="14" height="14"><title>2025-01-27, 149 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d1" x="134" y="60" width="14" height="14"><title>2025-01-28, 168 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d1" x="134" y="76" width="14" height="14"><title>2025-01-29, 161 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d1" x="134" y="92" width="14" height="14"><title>2025-01-30, 141 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d1" x="134" y="108" width="14" height="14"><title>2025-01-31, 139 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d1" x="134" y="124" width="14" height="14"><title>2025-02-01, 72 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d1" x="134" y="140" width="14" height="14"><title>2025-02-02, 55 orders</title></rect>
+          <text class="ch-t-axis" x="150" y="34">Feb</text>
+          <rect class="ch-r4 ch-fade ch-d2" x="150" y="44" width="14" height="14"><title>2025-02-03, 124 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d2" x="150" y="60" width="14" height="14"><title>2025-02-04, 128 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d2" x="150" y="76" width="14" height="14"><title>2025-02-05, 137 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d2" x="150" y="92" width="14" height="14"><title>2025-02-06, 158 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d2" x="150" y="108" width="14" height="14"><title>2025-02-07, 128 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d2" x="150" y="124" width="14" height="14"><title>2025-02-08, 87 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d2" x="150" y="140" width="14" height="14"><title>2025-02-09, 53 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d2" x="166" y="44" width="14" height="14"><title>2025-02-10, 147 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d2" x="166" y="60" width="14" height="14"><title>2025-02-11, 154 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d2" x="166" y="76" width="14" height="14"><title>2025-02-12, 157 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d2" x="166" y="92" width="14" height="14"><title>2025-02-13, 148 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d2" x="166" y="108" width="14" height="14"><title>2025-02-14, 129 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d2" x="166" y="124" width="14" height="14"><title>2025-02-15, 84 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d2" x="166" y="140" width="14" height="14"><title>2025-02-16, 59 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d2" x="182" y="44" width="14" height="14"><title>2025-02-17, 131 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d2" x="182" y="60" width="14" height="14"><title>2025-02-18, 124 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d2" x="182" y="76" width="14" height="14"><title>2025-02-19, 154 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d2" x="182" y="92" width="14" height="14"><title>2025-02-20, 150 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d2" x="182" y="108" width="14" height="14"><title>2025-02-21, 111 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d2" x="182" y="124" width="14" height="14"><title>2025-02-22, 71 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d2" x="182" y="140" width="14" height="14"><title>2025-02-23, 60 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d2" x="198" y="44" width="14" height="14"><title>2025-02-24, 130 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d2" x="198" y="60" width="14" height="14"><title>2025-02-25, 143 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d2" x="198" y="76" width="14" height="14"><title>2025-02-26, 126 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d2" x="198" y="92" width="14" height="14"><title>2025-02-27, 114 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d2" x="198" y="108" width="14" height="14"><title>2025-02-28, 129 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d2" x="198" y="124" width="14" height="14"><title>2025-03-01, 69 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d2" x="198" y="140" width="14" height="14"><title>2025-03-02, 52 orders</title></rect>
+          <text class="ch-t-axis" x="214" y="34">Mar</text>
+          <rect class="ch-r4 ch-fade ch-d2" x="214" y="44" width="14" height="14"><title>2025-03-03, 122 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d2" x="214" y="60" width="14" height="14"><title>2025-03-04, 123 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d2" x="214" y="76" width="14" height="14"><title>2025-03-05, 114 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d2" x="214" y="92" width="14" height="14"><title>2025-03-06, 109 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d2" x="214" y="108" width="14" height="14"><title>2025-03-07, 110 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d2" x="214" y="124" width="14" height="14"><title>2025-03-08, 64 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d2" x="214" y="140" width="14" height="14"><title>2025-03-09, 58 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d3" x="230" y="44" width="14" height="14"><title>2025-03-10, 107 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d3" x="230" y="60" width="14" height="14"><title>2025-03-11, 116 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d3" x="230" y="76" width="14" height="14"><title>2025-03-12, 120 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d3" x="230" y="92" width="14" height="14"><title>2025-03-13, 104 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d3" x="230" y="108" width="14" height="14"><title>2025-03-14, 109 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d3" x="230" y="124" width="14" height="14"><title>2025-03-15, 60 orders</title></rect>
+          <rect class="ch-r1 ch-fade ch-d3" x="230" y="140" width="14" height="14"><title>2025-03-16, 48 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d3" x="246" y="44" width="14" height="14"><title>2025-03-17, 126 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d3" x="246" y="60" width="14" height="14"><title>2025-03-18, 118 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d3" x="246" y="76" width="14" height="14"><title>2025-03-19, 101 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d3" x="246" y="92" width="14" height="14"><title>2025-03-20, 106 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d3" x="246" y="108" width="14" height="14"><title>2025-03-21, 110 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d3" x="246" y="124" width="14" height="14"><title>2025-03-22, 58 orders</title></rect>
+          <rect class="ch-r1 ch-fade ch-d3" x="246" y="140" width="14" height="14"><title>2025-03-23, 45 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d3" x="262" y="44" width="14" height="14"><title>2025-03-24, 110 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d3" x="262" y="60" width="14" height="14"><title>2025-03-25, 119 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d3" x="262" y="76" width="14" height="14"><title>2025-03-26, 119 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d3" x="262" y="92" width="14" height="14"><title>2025-03-27, 106 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d3" x="262" y="108" width="14" height="14"><title>2025-03-28, 94 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d3" x="262" y="124" width="14" height="14"><title>2025-03-29, 62 orders</title></rect>
+          <rect class="ch-r1 ch-fade ch-d3" x="262" y="140" width="14" height="14"><title>2025-03-30, 47 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d3" x="278" y="44" width="14" height="14"><title>2025-03-31, 94 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d3" x="278" y="60" width="14" height="14"><title>2025-04-01, 92 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d3" x="278" y="76" width="14" height="14"><title>2025-04-02, 105 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d3" x="278" y="92" width="14" height="14"><title>2025-04-03, 97 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d3" x="278" y="108" width="14" height="14"><title>2025-04-04, 85 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d3" x="278" y="124" width="14" height="14"><title>2025-04-05, 63 orders</title></rect>
+          <rect class="ch-r1 ch-fade ch-d3" x="278" y="140" width="14" height="14"><title>2025-04-06, 48 orders</title></rect>
+          <text class="ch-t-axis" x="294" y="34">Apr</text>
+          <rect class="ch-r3 ch-fade ch-d3" x="294" y="44" width="14" height="14"><title>2025-04-07, 91 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d3" x="294" y="60" width="14" height="14"><title>2025-04-08, 97 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d3" x="294" y="76" width="14" height="14"><title>2025-04-09, 109 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d3" x="294" y="92" width="14" height="14"><title>2025-04-10, 88 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d3" x="294" y="108" width="14" height="14"><title>2025-04-11, 75 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d3" x="294" y="124" width="14" height="14"><title>2025-04-12, 52 orders</title></rect>
+          <rect class="ch-r1 ch-fade ch-d3" x="294" y="140" width="14" height="14"><title>2025-04-13, 43 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d4" x="310" y="44" width="14" height="14"><title>2025-04-14, 105 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d4" x="310" y="60" width="14" height="14"><title>2025-04-15, 98 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d4" x="310" y="76" width="14" height="14"><title>2025-04-16, 86 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d4" x="310" y="92" width="14" height="14"><title>2025-04-17, 97 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d4" x="310" y="108" width="14" height="14"><title>2025-04-18, 71 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d4" x="310" y="124" width="14" height="14"><title>2025-04-19, 55 orders</title></rect>
+          <rect class="ch-r1 ch-fade ch-d4" x="310" y="140" width="14" height="14"><title>2025-04-20, 38 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d4" x="326" y="44" width="14" height="14"><title>2025-04-21, 77 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d4" x="326" y="60" width="14" height="14"><title>2025-04-22, 84 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d4" x="326" y="76" width="14" height="14"><title>2025-04-23, 107 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d4" x="326" y="92" width="14" height="14"><title>2025-04-24, 85 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d4" x="326" y="108" width="14" height="14"><title>2025-04-25, 86 orders</title></rect>
+          <rect class="ch-r1 ch-fade ch-d4" x="326" y="124" width="14" height="14"><title>2025-04-26, 43 orders</title></rect>
+          <rect class="ch-r1 ch-fade ch-d4" x="326" y="140" width="14" height="14"><title>2025-04-27, 44 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d4" x="342" y="44" width="14" height="14"><title>2025-04-28, 75 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d4" x="342" y="60" width="14" height="14"><title>2025-04-29, 101 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d4" x="342" y="76" width="14" height="14"><title>2025-04-30, 97 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d4" x="342" y="92" width="14" height="14"><title>2025-05-01, 90 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d4" x="342" y="108" width="14" height="14"><title>2025-05-02, 73 orders</title></rect>
+          <rect class="ch-r1 ch-fade ch-d4" x="342" y="124" width="14" height="14"><title>2025-05-03, 46 orders</title></rect>
+          <rect class="ch-r1 ch-fade ch-d4" x="342" y="140" width="14" height="14"><title>2025-05-04, 42 orders</title></rect>
+          <text class="ch-t-axis" x="358" y="34">May</text>
+          <rect class="ch-r2 ch-fade ch-d4" x="358" y="44" width="14" height="14"><title>2025-05-05, 76 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d4" x="358" y="60" width="14" height="14"><title>2025-05-06, 82 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d4" x="358" y="76" width="14" height="14"><title>2025-05-07, 94 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d4" x="358" y="92" width="14" height="14"><title>2025-05-08, 89 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d4" x="358" y="108" width="14" height="14"><title>2025-05-09, 81 orders</title></rect>
+          <rect class="ch-r1 ch-fade ch-d4" x="358" y="124" width="14" height="14"><title>2025-05-10, 39 orders</title></rect>
+          <rect class="ch-r1 ch-fade ch-d4" x="358" y="140" width="14" height="14"><title>2025-05-11, 36 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d4" x="374" y="44" width="14" height="14"><title>2025-05-12, 76 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d4" x="374" y="60" width="14" height="14"><title>2025-05-13, 79 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d4" x="374" y="76" width="14" height="14"><title>2025-05-14, 77 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d4" x="374" y="92" width="14" height="14"><title>2025-05-15, 79 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d4" x="374" y="108" width="14" height="14"><title>2025-05-16, 67 orders</title></rect>
+          <rect class="ch-r1 ch-fade ch-d4" x="374" y="124" width="14" height="14"><title>2025-05-17, 49 orders</title></rect>
+          <rect class="ch-r1 ch-fade ch-d4" x="374" y="140" width="14" height="14"><title>2025-05-18, 34 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d5" x="390" y="44" width="14" height="14"><title>2025-05-19, 88 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d5" x="390" y="60" width="14" height="14"><title>2025-05-20, 76 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d5" x="390" y="76" width="14" height="14"><title>2025-05-21, 89 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d5" x="390" y="92" width="14" height="14"><title>2025-05-22, 91 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d5" x="390" y="108" width="14" height="14"><title>2025-05-23, 69 orders</title></rect>
+          <rect class="ch-r1 ch-fade ch-d5" x="390" y="124" width="14" height="14"><title>2025-05-24, 43 orders</title></rect>
+          <rect class="ch-r1 ch-fade ch-d5" x="390" y="140" width="14" height="14"><title>2025-05-25, 34 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d5" x="406" y="44" width="14" height="14"><title>2025-05-26, 87 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d5" x="406" y="60" width="14" height="14"><title>2025-05-27, 90 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d5" x="406" y="76" width="14" height="14"><title>2025-05-28, 87 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d5" x="406" y="92" width="14" height="14"><title>2025-05-29, 75 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d5" x="406" y="108" width="14" height="14"><title>2025-05-30, 80 orders</title></rect>
+          <rect class="ch-r1 ch-fade ch-d5" x="406" y="124" width="14" height="14"><title>2025-05-31, 41 orders</title></rect>
+          <rect class="ch-r1 ch-fade ch-d5" x="406" y="140" width="14" height="14"><title>2025-06-01, 38 orders</title></rect>
+          <text class="ch-t-axis" x="422" y="34">Jun</text>
+          <rect class="ch-r3 ch-fade ch-d5" x="422" y="44" width="14" height="14"><title>2025-06-02, 85 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d5" x="422" y="60" width="14" height="14"><title>2025-06-03, 75 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d5" x="422" y="76" width="14" height="14"><title>2025-06-04, 83 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d5" x="422" y="92" width="14" height="14"><title>2025-06-05, 76 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d5" x="422" y="108" width="14" height="14"><title>2025-06-06, 78 orders</title></rect>
+          <rect class="ch-r1 ch-fade ch-d5" x="422" y="124" width="14" height="14"><title>2025-06-07, 37 orders</title></rect>
+          <rect class="ch-r1 ch-fade ch-d5" x="422" y="140" width="14" height="14"><title>2025-06-08, 35 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d5" x="438" y="44" width="14" height="14"><title>2025-06-09, 89 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d5" x="438" y="60" width="14" height="14"><title>2025-06-10, 70 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d5" x="438" y="76" width="14" height="14"><title>2025-06-11, 75 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d5" x="438" y="92" width="14" height="14"><title>2025-06-12, 78 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d5" x="438" y="108" width="14" height="14"><title>2025-06-13, 63 orders</title></rect>
+          <rect class="ch-r1 ch-fade ch-d5" x="438" y="124" width="14" height="14"><title>2025-06-14, 45 orders</title></rect>
+          <rect class="ch-r1 ch-fade ch-d5" x="438" y="140" width="14" height="14"><title>2025-06-15, 36 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d5" x="454" y="44" width="14" height="14"><title>2025-06-16, 70 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d5" x="454" y="60" width="14" height="14"><title>2025-06-17, 79 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d5" x="454" y="76" width="14" height="14"><title>2025-06-18, 93 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d5" x="454" y="92" width="14" height="14"><title>2025-06-19, 91 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d5" x="454" y="108" width="14" height="14"><title>2025-06-20, 65 orders</title></rect>
+          <rect class="ch-r1 ch-fade ch-d5" x="454" y="124" width="14" height="14"><title>2025-06-21, 48 orders</title></rect>
+          <rect class="ch-r1 ch-fade ch-d5" x="454" y="140" width="14" height="14"><title>2025-06-22, 36 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d6" x="470" y="44" width="14" height="14"><title>2025-06-23, 69 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d6" x="470" y="60" width="14" height="14"><title>2025-06-24, 80 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d6" x="470" y="76" width="14" height="14"><title>2025-06-25, 73 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d6" x="470" y="92" width="14" height="14"><title>2025-06-26, 80 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d6" x="470" y="108" width="14" height="14"><title>2025-06-27, 64 orders</title></rect>
+          <rect class="ch-r1 ch-fade ch-d6" x="470" y="124" width="14" height="14"><title>2025-06-28, 41 orders</title></rect>
+          <rect class="ch-r1 ch-fade ch-d6" x="470" y="140" width="14" height="14"><title>2025-06-29, 39 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d6" x="486" y="44" width="14" height="14"><title>2025-06-30, 83 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d6" x="486" y="60" width="14" height="14"><title>2025-07-01, 77 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d6" x="486" y="76" width="14" height="14"><title>2025-07-02, 82 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d6" x="486" y="92" width="14" height="14"><title>2025-07-03, 72 orders</title></rect>
+          <rect class="ch-r1 ch-fade ch-d6" x="486" y="108" width="14" height="14"><title>2025-07-04, 14 orders</title></rect>
+          <rect class="ch-r1 ch-fade ch-d6" x="486" y="124" width="14" height="14"><title>2025-07-05, 42 orders</title></rect>
+          <rect class="ch-r1 ch-fade ch-d6" x="486" y="140" width="14" height="14"><title>2025-07-06, 40 orders</title></rect>
+          <text class="ch-t-axis" x="502" y="34">Jul</text>
+          <rect class="ch-r2 ch-fade ch-d6" x="502" y="44" width="14" height="14"><title>2025-07-07, 81 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d6" x="502" y="60" width="14" height="14"><title>2025-07-08, 96 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d6" x="502" y="76" width="14" height="14"><title>2025-07-09, 87 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d6" x="502" y="92" width="14" height="14"><title>2025-07-10, 76 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d6" x="502" y="108" width="14" height="14"><title>2025-07-11, 67 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d6" x="502" y="124" width="14" height="14"><title>2025-07-12, 51 orders</title></rect>
+          <rect class="ch-r1 ch-fade ch-d6" x="502" y="140" width="14" height="14"><title>2025-07-13, 34 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d6" x="518" y="44" width="14" height="14"><title>2025-07-14, 77 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d6" x="518" y="60" width="14" height="14"><title>2025-07-15, 93 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d6" x="518" y="76" width="14" height="14"><title>2025-07-16, 85 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d6" x="518" y="92" width="14" height="14"><title>2025-07-17, 84 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d6" x="518" y="108" width="14" height="14"><title>2025-07-18, 81 orders</title></rect>
+          <rect class="ch-r1 ch-fade ch-d6" x="518" y="124" width="14" height="14"><title>2025-07-19, 47 orders</title></rect>
+          <rect class="ch-r1 ch-fade ch-d6" x="518" y="140" width="14" height="14"><title>2025-07-20, 41 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d6" x="534" y="44" width="14" height="14"><title>2025-07-21, 102 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d6" x="534" y="60" width="14" height="14"><title>2025-07-22, 96 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d6" x="534" y="76" width="14" height="14"><title>2025-07-23, 105 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d6" x="534" y="92" width="14" height="14"><title>2025-07-24, 97 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d6" x="534" y="108" width="14" height="14"><title>2025-07-25, 79 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d6" x="534" y="124" width="14" height="14"><title>2025-07-26, 52 orders</title></rect>
+          <rect class="ch-r1 ch-fade ch-d6" x="534" y="140" width="14" height="14"><title>2025-07-27, 38 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d7" x="550" y="44" width="14" height="14"><title>2025-07-28, 79 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d7" x="550" y="60" width="14" height="14"><title>2025-07-29, 90 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d7" x="550" y="76" width="14" height="14"><title>2025-07-30, 86 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d7" x="550" y="92" width="14" height="14"><title>2025-07-31, 85 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d7" x="550" y="108" width="14" height="14"><title>2025-08-01, 97 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d7" x="550" y="124" width="14" height="14"><title>2025-08-02, 56 orders</title></rect>
+          <rect class="ch-r1 ch-fade ch-d7" x="550" y="140" width="14" height="14"><title>2025-08-03, 39 orders</title></rect>
+          <text class="ch-t-axis" x="566" y="34">Aug</text>
+          <rect class="ch-r3 ch-fade ch-d7" x="566" y="44" width="14" height="14"><title>2025-08-04, 102 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d7" x="566" y="60" width="14" height="14"><title>2025-08-05, 105 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d7" x="566" y="76" width="14" height="14"><title>2025-08-06, 105 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d7" x="566" y="92" width="14" height="14"><title>2025-08-07, 114 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d7" x="566" y="108" width="14" height="14"><title>2025-08-08, 87 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d7" x="566" y="124" width="14" height="14"><title>2025-08-09, 53 orders</title></rect>
+          <rect class="ch-r1 ch-fade ch-d7" x="566" y="140" width="14" height="14"><title>2025-08-10, 46 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d7" x="582" y="44" width="14" height="14"><title>2025-08-11, 94 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d7" x="582" y="60" width="14" height="14"><title>2025-08-12, 118 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d7" x="582" y="76" width="14" height="14"><title>2025-08-13, 107 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d7" x="582" y="92" width="14" height="14"><title>2025-08-14, 108 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d7" x="582" y="108" width="14" height="14"><title>2025-08-15, 107 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d7" x="582" y="124" width="14" height="14"><title>2025-08-16, 61 orders</title></rect>
+          <rect class="ch-r1 ch-fade ch-d7" x="582" y="140" width="14" height="14"><title>2025-08-17, 43 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d7" x="598" y="44" width="14" height="14"><title>2025-08-18, 96 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d7" x="598" y="60" width="14" height="14"><title>2025-08-19, 110 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d7" x="598" y="76" width="14" height="14"><title>2025-08-20, 106 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d7" x="598" y="92" width="14" height="14"><title>2025-08-21, 101 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d7" x="598" y="108" width="14" height="14"><title>2025-08-22, 103 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d7" x="598" y="124" width="14" height="14"><title>2025-08-23, 66 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d7" x="598" y="140" width="14" height="14"><title>2025-08-24, 52 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d7" x="614" y="44" width="14" height="14"><title>2025-08-25, 117 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d7" x="614" y="60" width="14" height="14"><title>2025-08-26, 102 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d7" x="614" y="76" width="14" height="14"><title>2025-08-27, 127 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d7" x="614" y="92" width="14" height="14"><title>2025-08-28, 129 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d7" x="614" y="108" width="14" height="14"><title>2025-08-29, 91 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d7" x="614" y="124" width="14" height="14"><title>2025-08-30, 70 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d7" x="614" y="140" width="14" height="14"><title>2025-08-31, 51 orders</title></rect>
+          <text class="ch-t-axis" x="630" y="34">Sep</text>
+          <rect class="ch-r3 ch-fade ch-d8" x="630" y="44" width="14" height="14"><title>2025-09-01, 113 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d8" x="630" y="60" width="14" height="14"><title>2025-09-02, 111 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d8" x="630" y="76" width="14" height="14"><title>2025-09-03, 106 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d8" x="630" y="92" width="14" height="14"><title>2025-09-04, 136 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d8" x="630" y="108" width="14" height="14"><title>2025-09-05, 107 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d8" x="630" y="124" width="14" height="14"><title>2025-09-06, 57 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d8" x="630" y="140" width="14" height="14"><title>2025-09-07, 62 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d8" x="646" y="44" width="14" height="14"><title>2025-09-08, 120 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d8" x="646" y="60" width="14" height="14"><title>2025-09-09, 130 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d8" x="646" y="76" width="14" height="14"><title>2025-09-10, 113 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d8" x="646" y="92" width="14" height="14"><title>2025-09-11, 124 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d8" x="646" y="108" width="14" height="14"><title>2025-09-12, 105 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d8" x="646" y="124" width="14" height="14"><title>2025-09-13, 74 orders</title></rect>
+          <rect class="ch-r1 ch-fade ch-d8" x="646" y="140" width="14" height="14"><title>2025-09-14, 48 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d8" x="662" y="44" width="14" height="14"><title>2025-09-15, 123 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d8" x="662" y="60" width="14" height="14"><title>2025-09-16, 149 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d8" x="662" y="76" width="14" height="14"><title>2025-09-17, 118 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d8" x="662" y="92" width="14" height="14"><title>2025-09-18, 127 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d8" x="662" y="108" width="14" height="14"><title>2025-09-19, 131 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d8" x="662" y="124" width="14" height="14"><title>2025-09-20, 66 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d8" x="662" y="140" width="14" height="14"><title>2025-09-21, 52 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d8" x="678" y="44" width="14" height="14"><title>2025-09-22, 150 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d8" x="678" y="60" width="14" height="14"><title>2025-09-23, 130 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d8" x="678" y="76" width="14" height="14"><title>2025-09-24, 136 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d8" x="678" y="92" width="14" height="14"><title>2025-09-25, 118 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d8" x="678" y="108" width="14" height="14"><title>2025-09-26, 135 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d8" x="678" y="124" width="14" height="14"><title>2025-09-27, 75 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d8" x="678" y="140" width="14" height="14"><title>2025-09-28, 54 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d8" x="694" y="44" width="14" height="14"><title>2025-09-29, 138 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d8" x="694" y="60" width="14" height="14"><title>2025-09-30, 147 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d8" x="694" y="76" width="14" height="14"><title>2025-10-01, 150 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d8" x="694" y="92" width="14" height="14"><title>2025-10-02, 118 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d8" x="694" y="108" width="14" height="14"><title>2025-10-03, 117 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d8" x="694" y="124" width="14" height="14"><title>2025-10-04, 87 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d8" x="694" y="140" width="14" height="14"><title>2025-10-05, 65 orders</title></rect>
+          <text class="ch-t-axis" x="710" y="34">Oct</text>
+          <rect class="ch-r4 ch-fade ch-d9" x="710" y="44" width="14" height="14"><title>2025-10-06, 151 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d9" x="710" y="60" width="14" height="14"><title>2025-10-07, 155 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d9" x="710" y="76" width="14" height="14"><title>2025-10-08, 134 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d9" x="710" y="92" width="14" height="14"><title>2025-10-09, 125 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d9" x="710" y="108" width="14" height="14"><title>2025-10-10, 137 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d9" x="710" y="124" width="14" height="14"><title>2025-10-11, 78 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d9" x="710" y="140" width="14" height="14"><title>2025-10-12, 66 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d9" x="726" y="44" width="14" height="14"><title>2025-10-13, 164 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d9" x="726" y="60" width="14" height="14"><title>2025-10-14, 159 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d9" x="726" y="76" width="14" height="14"><title>2025-10-15, 157 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d9" x="726" y="92" width="14" height="14"><title>2025-10-16, 127 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d9" x="726" y="108" width="14" height="14"><title>2025-10-17, 143 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d9" x="726" y="124" width="14" height="14"><title>2025-10-18, 73 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d9" x="726" y="140" width="14" height="14"><title>2025-10-19, 74 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d9" x="742" y="44" width="14" height="14"><title>2025-10-20, 146 orders</title></rect>
+          <rect class="ch-r5 ch-fade ch-d9" x="742" y="60" width="14" height="14"><title>2025-10-21, 172 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d9" x="742" y="76" width="14" height="14"><title>2025-10-22, 156 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d9" x="742" y="92" width="14" height="14"><title>2025-10-23, 168 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d9" x="742" y="108" width="14" height="14"><title>2025-10-24, 127 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d9" x="742" y="124" width="14" height="14"><title>2025-10-25, 89 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d9" x="742" y="140" width="14" height="14"><title>2025-10-26, 61 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d9" x="758" y="44" width="14" height="14"><title>2025-10-27, 154 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d9" x="758" y="60" width="14" height="14"><title>2025-10-28, 142 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d9" x="758" y="76" width="14" height="14"><title>2025-10-29, 157 orders</title></rect>
+          <rect class="ch-r5 ch-fade ch-d9" x="758" y="92" width="14" height="14"><title>2025-10-30, 177 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d9" x="758" y="108" width="14" height="14"><title>2025-10-31, 120 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d9" x="758" y="124" width="14" height="14"><title>2025-11-01, 92 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d9" x="758" y="140" width="14" height="14"><title>2025-11-02, 74 orders</title></rect>
+          <text class="ch-t-axis" x="774" y="34">Nov</text>
+          <rect class="ch-r4 ch-fade ch-d9" x="774" y="44" width="14" height="14"><title>2025-11-03, 164 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d9" x="774" y="60" width="14" height="14"><title>2025-11-04, 146 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d9" x="774" y="76" width="14" height="14"><title>2025-11-05, 141 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d9" x="774" y="92" width="14" height="14"><title>2025-11-06, 144 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d9" x="774" y="108" width="14" height="14"><title>2025-11-07, 132 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d9" x="774" y="124" width="14" height="14"><title>2025-11-08, 75 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d9" x="774" y="140" width="14" height="14"><title>2025-11-09, 77 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d10" x="790" y="44" width="14" height="14"><title>2025-11-10, 141 orders</title></rect>
+          <rect class="ch-r5 ch-fade ch-d10" x="790" y="60" width="14" height="14"><title>2025-11-11, 175 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d10" x="790" y="76" width="14" height="14"><title>2025-11-12, 148 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d10" x="790" y="92" width="14" height="14"><title>2025-11-13, 160 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d10" x="790" y="108" width="14" height="14"><title>2025-11-14, 143 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d10" x="790" y="124" width="14" height="14"><title>2025-11-15, 85 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d10" x="790" y="140" width="14" height="14"><title>2025-11-16, 79 orders</title></rect>
+          <rect class="ch-r5 ch-fade ch-d10" x="806" y="44" width="14" height="14"><title>2025-11-17, 171 orders</title></rect>
+          <rect class="ch-r5 ch-fade ch-d10" x="806" y="60" width="14" height="14"><title>2025-11-18, 184 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d10" x="806" y="76" width="14" height="14"><title>2025-11-19, 163 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d10" x="806" y="92" width="14" height="14"><title>2025-11-20, 164 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d10" x="806" y="108" width="14" height="14"><title>2025-11-21, 142 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d10" x="806" y="124" width="14" height="14"><title>2025-11-22, 82 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d10" x="806" y="140" width="14" height="14"><title>2025-11-23, 69 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d10" x="822" y="44" width="14" height="14"><title>2025-11-24, 161 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d10" x="822" y="60" width="14" height="14"><title>2025-11-25, 166 orders</title></rect>
+          <rect class="ch-r5 ch-fade ch-d10" x="822" y="76" width="14" height="14"><title>2025-11-26, 179 orders</title></rect>
+          <rect class="ch-r5 ch-fade ch-d10" x="822" y="92" width="14" height="14"><title>2025-11-27, 184 orders</title></rect>
+          <rect class="ch-r5 ch-fade ch-d10" x="822" y="108" width="14" height="14"><title>2025-11-28, 340 orders</title></rect>
+          <rect class="ch-r5 ch-fade ch-d10" x="822" y="124" width="14" height="14"><title>2025-11-29, 170 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d10" x="822" y="140" width="14" height="14"><title>2025-11-30, 159 orders</title></rect>
+          <text class="ch-t-axis" x="838" y="34">Dec</text>
+          <rect class="ch-r5 ch-fade ch-d10" x="838" y="44" width="14" height="14"><title>2025-12-01, 352 orders</title></rect>
+          <rect class="ch-r5 ch-fade ch-d10" x="838" y="60" width="14" height="14"><title>2025-12-02, 170 orders</title></rect>
+          <rect class="ch-r5 ch-fade ch-d10" x="838" y="76" width="14" height="14"><title>2025-12-03, 181 orders</title></rect>
+          <rect class="ch-r5 ch-fade ch-d10" x="838" y="92" width="14" height="14"><title>2025-12-04, 186 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d10" x="838" y="108" width="14" height="14"><title>2025-12-05, 159 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d10" x="838" y="124" width="14" height="14"><title>2025-12-06, 96 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d10" x="838" y="140" width="14" height="14"><title>2025-12-07, 70 orders</title></rect>
+          <rect class="ch-r5 ch-fade ch-d10" x="854" y="44" width="14" height="14"><title>2025-12-08, 183 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d10" x="854" y="60" width="14" height="14"><title>2025-12-09, 160 orders</title></rect>
+          <rect class="ch-r5 ch-fade ch-d10" x="854" y="76" width="14" height="14"><title>2025-12-10, 179 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d10" x="854" y="92" width="14" height="14"><title>2025-12-11, 160 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d10" x="854" y="108" width="14" height="14"><title>2025-12-12, 129 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d10" x="854" y="124" width="14" height="14"><title>2025-12-13, 91 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d10" x="854" y="140" width="14" height="14"><title>2025-12-14, 66 orders</title></rect>
+          <rect class="ch-r5 ch-fade ch-d11" x="870" y="44" width="14" height="14"><title>2025-12-15, 172 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d11" x="870" y="60" width="14" height="14"><title>2025-12-16, 151 orders</title></rect>
+          <rect class="ch-r5 ch-fade ch-d11" x="870" y="76" width="14" height="14"><title>2025-12-17, 175 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d11" x="870" y="92" width="14" height="14"><title>2025-12-18, 142 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d11" x="870" y="108" width="14" height="14"><title>2025-12-19, 161 orders</title></rect>
+          <rect class="ch-r3 ch-fade ch-d11" x="870" y="124" width="14" height="14"><title>2025-12-20, 85 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d11" x="870" y="140" width="14" height="14"><title>2025-12-21, 74 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d11" x="886" y="44" width="14" height="14"><title>2025-12-22, 147 orders</title></rect>
+          <rect class="ch-r5 ch-fade ch-d11" x="886" y="60" width="14" height="14"><title>2025-12-23, 189 orders</title></rect>
+          <rect class="ch-r5 ch-fade ch-d11" x="886" y="76" width="14" height="14"><title>2025-12-24, 185 orders</title></rect>
+          <rect class="ch-r1 ch-fade ch-d11" x="886" y="92" width="14" height="14"><title>2025-12-25, 36 orders</title></rect>
+          <rect class="ch-r4 ch-fade ch-d11" x="886" y="108" width="14" height="14"><title>2025-12-26, 162 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d11" x="886" y="124" width="14" height="14"><title>2025-12-27, 80 orders</title></rect>
+          <rect class="ch-r2 ch-fade ch-d11" x="886" y="140" width="14" height="14"><title>2025-12-28, 71 orders</title></rect>
+          <text class="ch-t-note" x="70" y="183">fewer</text>
+          <rect class="ch-r1" x="106" y="172" width="14" height="14"/>
+          <text class="ch-t-note" x="124" y="183"><50</text>
+          <rect class="ch-r2" x="164" y="172" width="14" height="14"/>
+          <text class="ch-t-note" x="182" y="183">50–84</text>
+          <rect class="ch-r3" x="222" y="172" width="14" height="14"/>
+          <text class="ch-t-note" x="240" y="183">85–119</text>
+          <rect class="ch-r4" x="280" y="172" width="14" height="14"/>
+          <text class="ch-t-note" x="298" y="183">120–169</text>
+          <rect class="ch-r5" x="338" y="172" width="14" height="14"/>
+          <text class="ch-t-note" x="356" y="183">170+</text>
+          <text class="ch-t-note" x="402" y="183">more · orders per day</text>
+          <text class="ch-t-note" x="630" y="183">Black Friday weekend is the only run of four dark days; Saturdays and Sundays stay pale all year.</text>
+        </g>
+      </svg>
+
+      <p class="ch-card__src">Orders DB · count of paid orders by calendar day · 2025-12-29</p>
+    </figure>
+  </div>
+</main>
+</body>
+</html>

@@ -1,0 +1,1002 @@
+<!DOCTYPE html>
+<!--
+  hq-pack-charts — plain gallery
+  One card per spec type in the plain family. Hand-drawn SVG, deterministic demo data, no script.
+  The <style> block is generated from assets/chart.css by scripts/sync-assets.py — do not hand-edit it.
+-->
+<html lang="en" data-ch-theme="light" data-ch-palette="mono">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plain — familiar forms, editorial finish</title>
+
+<!-- Webfonts are OPT-IN. Uncomment to use Instrument Serif / Geist; leave
+     commented and the system stack in chart.css renders offline with no
+     third-party request from the reader's browser.
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+-->
+
+<style>/* ch:css:start */
+/* GENERATED from assets/chart.css (ad62427d9525) — do not edit here. Run scripts/sync-assets.py. */
+/*
+ * hq-pack-charts — chart.css
+ *
+ * The single source of truth for every chart HQ produces.
+ *
+ * The contract, in one sentence: an HQ chart's SVG carries semantic CLASSES
+ * and never carries a colour. Re-skinning a chart is swapping the :root block
+ * below — nothing in the SVG body changes. The same contract hq-pack-diagrams
+ * uses, extended with data roles (series, ramp, hero, delta).
+ *
+ * Every --ch-* surface/ink/structure token falls back to its --dg-* twin, so a
+ * page that already carries a diagram skin (or a company brand pack mapped
+ * through the design-styles binding formula) re-skins charts for free.
+ *
+ * Do not add a colour literal to any SVG attribute. `scripts/lint-chart.py`
+ * fails the file if you do.
+ *
+ * Theme:    <html data-ch-theme="light|dark|auto">          (default: light)
+ * Palette:  <html data-ch-palette="mono|slate|moss|ember">  (default: mono)
+ * Density:  <svg class="ch ch--comfortable|ch--compact">
+ */
+
+/* ══════════════════════════════════════════════════════════════════════════
+   1. TOKENS
+   ══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Surface ─────────────────────────────────────────────────────────── */
+  --ch-paper:        var(--dg-paper, #f4f1ec);
+  --ch-paper-raised: var(--dg-paper-raised, #ffffff);
+  --ch-paper-sunk:   var(--dg-paper-sunk, rgba(27, 26, 24, 0.045));
+
+  /* ── Ink ─────────────────────────────────────────────────────────────── */
+  --ch-ink:          var(--dg-ink, #1b1a18);     /* titles, values, primary marks */
+  --ch-muted:        var(--dg-muted, #55524c);   /* subtitles, axis labels        */
+  --ch-soft:         var(--dg-soft, #8a857c);    /* source line, minor ticks      */
+
+  /* ── Structure ───────────────────────────────────────────────────────── */
+  --ch-rule:         var(--dg-rule, rgba(27, 26, 24, 0.14));        /* gridlines */
+  --ch-rule-strong:  var(--dg-rule-strong, rgba(27, 26, 24, 0.30)); /* baselines */
+
+  /* ── Data — MONO palette (the floor; every other palette overrides) ──────
+     data-1 is the hero slot. In mono the hero is ink and the rest is a
+     lightness ladder, so a mono chart never depends on hue to be read.      */
+  --ch-hero:         var(--ch-ink);
+  --ch-data-1:       var(--ch-ink);
+  --ch-data-2:       #5b5853;
+  --ch-data-3:       #8a857c;
+  --ch-data-4:       #b3ada3;
+  --ch-data-5:       #cfcac0;
+  --ch-data-6:       #e2ddd4;
+  --ch-data-fill:    0.16;      /* opacity for area / band fills             */
+  --ch-quiet:        #d9d4cb;   /* non-focal marks when one thing is hero    */
+  --ch-track:        rgba(27, 26, 24, 0.08); /* empty part of a bar / ring   */
+
+  /* ── Ramp — ordered / sequential (5 steps, light → dark) ─────────────── */
+  --ch-ramp-1:       #e6e2da;
+  --ch-ramp-2:       #c9c3b8;
+  --ch-ramp-3:       #a09a8f;
+  --ch-ramp-4:       #6d6860;
+  --ch-ramp-5:       #1b1a18;
+
+  /* ── Delta — semantic only, always paired with a sign or label ───────── */
+  --ch-up:           var(--dg-positive, #3f6b4a);
+  --ch-down:         var(--dg-negative, #9c3a2c);
+  --ch-flat:         var(--ch-muted);
+  --ch-up-tint:      var(--dg-positive-tint, rgba(63, 107, 74, 0.12));
+  --ch-down-tint:    var(--dg-negative-tint, rgba(156, 58, 44, 0.12));
+
+  /* ── Type ────────────────────────────────────────────────────────────────
+     Webfont names lead; a system stack follows so a chart renders correctly
+     with no network. Webfonts are opt-in — see assets/template.html.        */
+  --ch-font-display: var(--dg-font-display, "Instrument Serif", "Iowan Old Style",
+                     Palatino, Georgia, serif);
+  --ch-font-body:    var(--dg-font-body, "Geist", -apple-system, BlinkMacSystemFont,
+                     "Segoe UI", Inter, Roboto, system-ui, sans-serif);
+  --ch-font-mono:    var(--dg-font-mono, "Geist Mono", ui-monospace, SFMono-Regular,
+                     Menlo, Consolas, monospace);
+
+  /* ── Type scale (px, inside the SVG viewBox) ─────────────────────────────
+     Floors are a contract: 7px is the smallest label allowed in a half-width
+     card and 6px in a full-width one. Overflow goes to a <title> hover or a
+     footnote — never to smaller type.                                        */
+  --ch-fs-title:     16px;
+  --ch-fs-sub:       11.5px;
+  --ch-fs-value:     22px;
+  --ch-fs-big:       44px;
+  --ch-fs-axis:      9.5px;
+  --ch-fs-label:     10px;
+  --ch-fs-note:      9px;
+
+  /* ── Stroke ──────────────────────────────────────────────────────────── */
+  --ch-sw-hair:      0.6px;
+  --ch-sw-thin:      1px;
+  --ch-sw-line:      1.6px;
+  --ch-sw-bold:      2.4px;
+
+  /* ── Motion ──────────────────────────────────────────────────────────── */
+  --ch-dur:          900ms;
+  --ch-dur-slow:     1300ms;
+  --ch-ease:         cubic-bezier(0.22, 0.61, 0.36, 1);
+  --ch-ease-pop:     cubic-bezier(0.2, 0.7, 0.3, 1.25);
+  --ch-stagger:      28ms;
+}
+
+/* ── Palettes ───────────────────────────────────────────────────────────────
+   One palette per file. The agent picks from data semantics:
+     slate — ordered / sequential   (one series that has an order)
+     moss  — categorical, ≤ 4 kinds (unordered kinds that must be told apart)
+     ember — mono + one hero        (everything quiet except the point)
+   Unclear fit → stay on mono.                                               */
+
+[data-ch-palette="slate"] {
+  --ch-hero:    #2f5d8f;
+  --ch-data-1:  #2f5d8f;
+  --ch-data-2:  #5b7fa6;
+  --ch-data-3:  #86a1bd;
+  --ch-data-4:  #adc0d3;
+  --ch-data-5:  #cfdae5;
+  --ch-data-6:  #e6ecf2;
+  --ch-quiet:   #d6dde5;
+  --ch-track:   rgba(47, 93, 143, 0.10);
+  --ch-ramp-1:  #e6ecf2;
+  --ch-ramp-2:  #b9c9da;
+  --ch-ramp-3:  #86a1bd;
+  --ch-ramp-4:  #4f759d;
+  --ch-ramp-5:  #1f3f63;
+}
+
+[data-ch-palette="moss"] {
+  --ch-hero:    #3f6b4a;
+  --ch-data-1:  #3f6b4a;
+  --ch-data-2:  #9a7b4f;
+  --ch-data-3:  #4a6d7c;
+  --ch-data-4:  #a4584a;
+  --ch-data-5:  #8a857c;
+  --ch-data-6:  #b3ada3;
+  --ch-quiet:   #d8dcd2;
+  --ch-track:   rgba(63, 107, 74, 0.10);
+  --ch-ramp-1:  #e6ebe0;
+  --ch-ramp-2:  #bfcbb4;
+  --ch-ramp-3:  #8fa686;
+  --ch-ramp-4:  #5f8461;
+  --ch-ramp-5:  #2c4b34;
+}
+
+[data-ch-palette="ember"] {
+  --ch-hero:    #c2502f;
+  --ch-data-1:  #c2502f;
+  --ch-data-2:  #5b5853;
+  --ch-data-3:  #8a857c;
+  --ch-data-4:  #b3ada3;
+  --ch-data-5:  #cfcac0;
+  --ch-data-6:  #e2ddd4;
+  --ch-quiet:   #d9d4cb;
+  --ch-track:   rgba(194, 80, 47, 0.10);
+  --ch-ramp-1:  #f2e3dd;
+  --ch-ramp-2:  #e3b8a8;
+  --ch-ramp-3:  #d48a70;
+  --ch-ramp-4:  #c2502f;
+  --ch-ramp-5:  #7d2f18;
+}
+
+/* ── Dark theme ─────────────────────────────────────────────────────────── */
+
+[data-ch-theme="dark"] {
+  --ch-paper:        var(--dg-paper-dark, #171614);
+  --ch-paper-raised: #201f1c;
+  --ch-paper-sunk:   rgba(244, 241, 236, 0.06);
+  --ch-ink:          #f0ede6;
+  --ch-muted:        #b5b0a6;
+  --ch-soft:         #7d786f;
+  --ch-rule:         rgba(240, 237, 230, 0.14);
+  --ch-rule-strong:  rgba(240, 237, 230, 0.32);
+  --ch-data-2:       #b5b0a6;
+  --ch-data-3:       #8a857c;
+  --ch-data-4:       #64605a;
+  --ch-data-5:       #4a4741;
+  --ch-data-6:       #37342f;
+  --ch-quiet:        #3d3a35;
+  --ch-track:        rgba(240, 237, 230, 0.10);
+  --ch-ramp-1:       #37342f;
+  --ch-ramp-2:       #5c574f;
+  --ch-ramp-3:       #8a857c;
+  --ch-ramp-4:       #bfb9ae;
+  --ch-ramp-5:       #f0ede6;
+  --ch-up:           #7fb08a;
+  --ch-down:         #d8776a;
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-ch-theme="auto"] {
+    --ch-paper:        #171614;
+    --ch-paper-raised: #201f1c;
+    --ch-paper-sunk:   rgba(244, 241, 236, 0.06);
+    --ch-ink:          #f0ede6;
+    --ch-muted:        #b5b0a6;
+    --ch-soft:         #7d786f;
+    --ch-rule:         rgba(240, 237, 230, 0.14);
+    --ch-rule-strong:  rgba(240, 237, 230, 0.32);
+    --ch-quiet:        #3d3a35;
+    --ch-track:        rgba(240, 237, 230, 0.10);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   2. PAGE + CARD
+   ══════════════════════════════════════════════════════════════════════════ */
+
+html, body { margin: 0; }
+body {
+  background: var(--ch-paper);
+  color: var(--ch-ink);
+  font-family: var(--ch-font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+.ch-page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 48px 32px 72px;
+}
+.ch-page__eyebrow {
+  font-family: var(--ch-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ch-soft);
+  margin: 0 0 8px;
+}
+.ch-page__title {
+  font-family: var(--ch-font-display);
+  font-weight: 400;
+  font-size: 34px;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  margin: 0 0 8px;
+}
+.ch-page__dek {
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ch-muted);
+  max-width: 64ch;
+  margin: 0 0 32px;
+}
+
+/* Two-column grid; a .ch-card--wide spans both. */
+.ch-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+@media (max-width: 760px) { .ch-grid { grid-template-columns: 1fr; } }
+
+/* The card: h2 (conclusion) → .ch-card__sub (legend + range) → svg → .ch-card__src */
+.ch-card {
+  background: var(--ch-paper-raised);
+  border: 1px solid var(--ch-rule);
+  border-radius: 8px;
+  padding: 24px 24px 18px;
+  min-width: 0;
+}
+.ch-card--wide { grid-column: 1 / -1; }
+.ch-card--dark {
+  /* literal on purpose: the custom-property overrides below apply to this
+     element too, so background: var(--ch-ink) would resolve to the LIGHT ink */
+  background: #171614;
+  color: #f0ede6;
+  --ch-ink: #f0ede6; --ch-muted: #b5b0a6; --ch-soft: #7d786f;
+  --ch-rule: rgba(240,237,230,.14); --ch-rule-strong: rgba(240,237,230,.32);
+  --ch-paper: #171614; --ch-paper-raised: #201f1c;
+  --ch-track: rgba(240,237,230,.10); --ch-quiet: #3d3a35;
+}
+.ch-card__title {
+  font-size: var(--ch-fs-title);
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
+  margin: 0 0 4px;
+}
+.ch-card__sub {
+  font-size: var(--ch-fs-sub);
+  color: var(--ch-muted);
+  line-height: 1.4;
+  margin: 0 0 14px;
+}
+.ch-card__src {
+  font-family: var(--ch-font-mono);
+  font-size: var(--ch-fs-note);
+  letter-spacing: 0.04em;
+  color: var(--ch-soft);
+  margin: 12px 0 0;
+}
+.ch-card__note {
+  font-size: var(--ch-fs-label);
+  color: var(--ch-muted);
+  line-height: 1.45;
+  margin: 10px 0 0;
+}
+/* Editorial split: a prose column beside a wide chart. */
+.ch-card--split { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 24px; align-items: start; }
+.ch-card--split > .ch-card__prose { font-size: 13px; line-height: 1.5; color: var(--ch-muted); }
+.ch-card--split > .ch-card__prose > h2 { color: var(--ch-ink); }
+@media (max-width: 760px) { .ch-card--split { grid-template-columns: 1fr; } }
+
+/* ── Sheets — full-page report slots (spec/06-sheets.md) ──────────────── */
+.ch-sheet { max-width: 1080px; margin: 0 auto; padding: 56px 40px 64px; display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 40px; }
+.ch-sheet--fixed { width: 600px; height: 1000px; padding: 40px 36px; display: block; overflow: hidden; box-sizing: border-box; }
+.ch-sheet__main { min-width: 0; }
+.ch-sheet__eyebrow { font-family: var(--ch-font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ch-soft); margin: 0 0 12px; }
+.ch-sheet__title { font-family: var(--ch-font-display); font-weight: 400; font-size: 40px; line-height: 1.1; letter-spacing: -0.015em; margin: 0 0 12px; }
+.ch-sheet__title b { font-weight: 400; font-style: italic; color: var(--ch-hero); }
+.ch-sheet__dek { font-size: 15px; line-height: 1.5; color: var(--ch-muted); max-width: 60ch; margin: 0 0 28px; }
+.ch-sheet__kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 16px; padding: 20px 0; border-top: 1px solid var(--ch-rule-strong); border-bottom: 1px solid var(--ch-rule); margin: 0 0 32px; }
+.ch-kpi__value { font-size: 30px; font-weight: 700; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; line-height: 1; margin: 0 0 6px; }
+.ch-kpi__name { font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ch-muted); margin: 0; }
+.ch-kpi__delta { font-family: var(--ch-font-mono); font-size: 11px; margin: 4px 0 0; color: var(--ch-muted); }
+.ch-kpi__delta--up { color: var(--ch-up); }
+.ch-kpi__delta--down { color: var(--ch-down); }
+.ch-sheet__section { margin: 0 0 32px; }
+.ch-sheet__kicker { font-family: var(--ch-font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ch-soft); margin: 0 0 6px; }
+.ch-sheet__claim { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.3; margin: 0 0 14px; }
+.ch-sheet__rail { font-size: 12.5px; line-height: 1.55; color: var(--ch-muted); }
+.ch-sheet__rail h3 { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ch-soft); margin: 0 0 8px; font-weight: 600; }
+.ch-sheet__rail-block { padding: 16px; background: var(--ch-paper-sunk); border-radius: 6px; margin: 0 0 16px; }
+.ch-sheet__rail a { color: var(--ch-ink); }
+.ch-sheet__foot { font-family: var(--ch-font-mono); font-size: 10px; letter-spacing: 0.04em; color: var(--ch-soft); border-top: 1px solid var(--ch-rule); padding-top: 12px; margin-top: 24px; }
+@media (max-width: 900px) { .ch-sheet { grid-template-columns: 1fr; } }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   3. SVG ROLES — every class the chart body may use
+   ══════════════════════════════════════════════════════════════════════════ */
+
+svg.ch { display: block; width: 100%; height: auto; overflow: visible; font-family: var(--ch-font-body); }
+svg.ch text { fill: var(--ch-ink); }
+
+/* Ground + frame */
+.ch-bg      { fill: var(--ch-paper-raised); }
+.ch-band    { fill: var(--ch-paper-sunk); }
+.ch-grid    { stroke: var(--ch-rule); stroke-width: var(--ch-sw-hair); fill: none; }
+.ch-axis    { stroke: var(--ch-rule-strong); stroke-width: var(--ch-sw-thin); fill: none; }
+.ch-tick    { stroke: var(--ch-rule-strong); stroke-width: var(--ch-sw-hair); }
+.ch-rule    { stroke: var(--ch-rule); stroke-width: var(--ch-sw-hair); fill: none; }
+.ch-target  { stroke: var(--ch-ink); stroke-width: var(--ch-sw-thin); stroke-dasharray: 3 3; fill: none; }
+
+/* Text roles */
+.ch-t-value { font-size: var(--ch-fs-value); font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.ch-t-big   { font-size: var(--ch-fs-big);   font-weight: 700; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.ch-t-label { font-size: var(--ch-fs-label); fill: var(--ch-ink); }
+.ch-t-axis  { font-size: var(--ch-fs-axis);  fill: var(--ch-muted); font-variant-numeric: tabular-nums; }
+.ch-t-note  { font-size: var(--ch-fs-note);  fill: var(--ch-soft); }
+.ch-t-mono  { font-family: var(--ch-font-mono); }
+.ch-t-muted { fill: var(--ch-muted); }
+.ch-t-soft  { fill: var(--ch-soft); }
+.ch-t-hero  { fill: var(--ch-hero); }
+.ch-t-inv   { fill: var(--ch-paper-raised); }
+.ch-t-up    { fill: var(--ch-up); }
+.ch-t-down  { fill: var(--ch-down); }
+.ch-t-end   { text-anchor: end; }
+.ch-t-mid   { text-anchor: middle; }
+
+/* Marks — fills */
+.ch-mark    { fill: var(--ch-data-1); }
+.ch-hero    { fill: var(--ch-hero); }
+.ch-quiet   { fill: var(--ch-quiet); }
+.ch-track   { fill: var(--ch-track); }
+.ch-s1 { fill: var(--ch-data-1); }  .ch-s2 { fill: var(--ch-data-2); }
+.ch-s3 { fill: var(--ch-data-3); }  .ch-s4 { fill: var(--ch-data-4); }
+.ch-s5 { fill: var(--ch-data-5); }  .ch-s6 { fill: var(--ch-data-6); }
+.ch-r1 { fill: var(--ch-ramp-1); }  .ch-r2 { fill: var(--ch-ramp-2); }
+.ch-r3 { fill: var(--ch-ramp-3); }  .ch-r4 { fill: var(--ch-ramp-4); }
+.ch-r5 { fill: var(--ch-ramp-5); }
+.ch-up   { fill: var(--ch-up); }   .ch-down { fill: var(--ch-down); }  .ch-flat { fill: var(--ch-flat); }
+.ch-up-tint { fill: var(--ch-up-tint); } .ch-down-tint { fill: var(--ch-down-tint); }
+.ch-fill    { fill-opacity: var(--ch-data-fill); }   /* combine: class="ch-s1 ch-fill" */
+.ch-mask    { fill: var(--ch-paper-raised); }         /* label halo behind text       */
+
+/* Marks — strokes */
+.ch-line    { fill: none; stroke: var(--ch-data-1); stroke-width: var(--ch-sw-line); stroke-linecap: round; stroke-linejoin: round; }
+.ch-line--hero  { stroke: var(--ch-hero); stroke-width: var(--ch-sw-bold); }
+.ch-line--quiet { stroke: var(--ch-quiet); }
+.ch-line--s2 { stroke: var(--ch-data-2); } .ch-line--s3 { stroke: var(--ch-data-3); }
+.ch-line--s4 { stroke: var(--ch-data-4); } .ch-line--s5 { stroke: var(--ch-data-5); }
+.ch-line--s6 { stroke: var(--ch-data-6); }
+.ch-line--up { stroke: var(--ch-up); } .ch-line--down { stroke: var(--ch-down); }
+.ch-stroke  { fill: none; stroke: var(--ch-ink); stroke-width: var(--ch-sw-thin); }
+.ch-stroke--hair { stroke-width: var(--ch-sw-hair); }
+.ch-stroke--soft { stroke: var(--ch-soft); }
+.ch-stroke--hero { stroke: var(--ch-hero); }
+.ch-ring    { fill: none; stroke: var(--ch-data-1); stroke-width: 10px; stroke-linecap: butt; }
+.ch-ring--track { stroke: var(--ch-track); }
+.ch-ring--hero  { stroke: var(--ch-hero); }
+.ch-dot     { fill: var(--ch-data-1); }
+.ch-dot--open { fill: var(--ch-paper-raised); stroke: var(--ch-data-1); stroke-width: var(--ch-sw-thin); }
+.ch-dot--hero { fill: var(--ch-hero); }
+.ch-dot--quiet { fill: var(--ch-quiet); }
+
+/* Density */
+.ch--compact { --ch-fs-axis: 8.5px; --ch-fs-label: 9px; --ch-fs-title: 14px; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   4. MOTION — CSS only. No JavaScript is needed to draw or to animate.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.ch-pop  { transform-box: fill-box; transform-origin: center; animation: ch-pop var(--ch-dur) var(--ch-ease-pop) both; }
+.ch-rise { transform-box: fill-box; transform-origin: bottom; animation: ch-rise var(--ch-dur) var(--ch-ease) both; }
+.ch-grow { transform-box: fill-box; transform-origin: left;   animation: ch-grow var(--ch-dur) var(--ch-ease) both; }
+.ch-fade { animation: ch-fade var(--ch-dur) ease both; }
+.ch-draw { stroke-dasharray: 2000; stroke-dashoffset: 2000; animation: ch-draw var(--ch-dur-slow) var(--ch-ease) forwards; }
+
+/* Stagger: add ch-d1 … ch-d12 (each step = --ch-stagger). */
+.ch-d1 { animation-delay: calc(var(--ch-stagger) * 1); }  .ch-d2 { animation-delay: calc(var(--ch-stagger) * 2); }
+.ch-d3 { animation-delay: calc(var(--ch-stagger) * 3); }  .ch-d4 { animation-delay: calc(var(--ch-stagger) * 4); }
+.ch-d5 { animation-delay: calc(var(--ch-stagger) * 5); }  .ch-d6 { animation-delay: calc(var(--ch-stagger) * 6); }
+.ch-d7 { animation-delay: calc(var(--ch-stagger) * 7); }  .ch-d8 { animation-delay: calc(var(--ch-stagger) * 8); }
+.ch-d9 { animation-delay: calc(var(--ch-stagger) * 9); }  .ch-d10 { animation-delay: calc(var(--ch-stagger) * 10); }
+.ch-d11 { animation-delay: calc(var(--ch-stagger) * 11); } .ch-d12 { animation-delay: calc(var(--ch-stagger) * 12); }
+
+@keyframes ch-pop  { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes ch-rise { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes ch-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes ch-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ch-draw { to { stroke-dashoffset: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .ch-pop, .ch-rise, .ch-grow, .ch-fade, .ch-draw { animation: none; stroke-dashoffset: 0; opacity: 1; transform: none; }
+}
+@media print {
+  .ch-pop, .ch-rise, .ch-grow, .ch-fade, .ch-draw { animation: none; stroke-dashoffset: 0; opacity: 1; transform: none; }
+  .ch-card { break-inside: avoid; }
+}
+/* ch:css:end */</style>
+</head>
+<body>
+<main class="ch-page">
+  <p class="ch-page__eyebrow">hq-pack-charts · plain gallery</p>
+  <h1 class="ch-page__title">Plain — familiar forms, editorial finish</h1>
+  <p class="ch-page__dek">The shapes a reader already knows — bars, columns, lines, rings, dots — rebuilt with hairline grids, countable ticks, tabular figures and labels that sit on the marks instead of in a legend box.</p>
+
+  <div class="ch-grid">
+    <figure class="ch-card" data-ch-type="plain.bar-ranked">
+      <h2 class="ch-card__title">Sorted, labelled, one bar per category</h2>
+      <p class="ch-card__sub">90-day repeat purchase rate by acquisition channel · percent of first-time buyers · Mar–May 2026</p>
+
+      <svg class="ch" viewBox="0 0 520 300" role="img" aria-labelledby="p-bar-t p-bar-d">
+        <title id="p-bar-t">Repeat purchase rate by channel</title>
+        <desc id="p-bar-d">Referral customers come back most: 62 percent buy again within 90 days, almost four times the marketplace rate and well above the 38 percent channel average.</desc>
+        <g id="p-bar-fig">
+          <line class="ch-axis" x1="150" y1="14" x2="150" y2="262"/>
+          <line class="ch-target" x1="340" y1="14" x2="340" y2="262"/>
+          <text class="ch-t-note ch-t-mid ch-fade ch-d10" x="340" y="276">avg 38%</text>
+          <g>
+          <rect class="ch-hero ch-grow ch-d1" x="150" y="22" width="310" height="18"><title>Referral · 62</title></rect>
+          <rect class="ch-quiet ch-grow ch-d2" x="150" y="52" width="270" height="18"><title>Email · 54</title></rect>
+          <rect class="ch-quiet ch-grow ch-d3" x="150" y="82" width="235" height="18"><title>Organic search · 47</title></rect>
+          <rect class="ch-quiet ch-grow ch-d4" x="150" y="112" width="205" height="18"><title>Direct · 41</title></rect>
+          <rect class="ch-quiet ch-grow ch-d5" x="150" y="142" width="165" height="18"><title>Paid social · 33</title></rect>
+          <rect class="ch-quiet ch-grow ch-d6" x="150" y="172" width="145" height="18"><title>Affiliate · 29</title></rect>
+          <rect class="ch-quiet ch-grow ch-d7" x="150" y="202" width="105" height="18"><title>Display · 21</title></rect>
+          <rect class="ch-quiet ch-grow ch-d8" x="150" y="232" width="80" height="18"><title>Marketplace · 16</title></rect>
+          </g>
+          <text class="ch-t-label ch-t-end ch-fade ch-d1" x="140" y="35">Referral</text>
+          <text class="ch-t-label ch-t-hero ch-fade ch-d3" x="466" y="35">62%</text>
+          <text class="ch-t-label ch-t-end ch-fade ch-d2" x="140" y="65">Email</text>
+          <text class="ch-t-axis ch-fade ch-d4" x="426" y="65">54%</text>
+          <text class="ch-t-label ch-t-end ch-fade ch-d3" x="140" y="95">Organic search</text>
+          <text class="ch-t-axis ch-fade ch-d5" x="391" y="95">47%</text>
+          <text class="ch-t-label ch-t-end ch-fade ch-d4" x="140" y="125">Direct</text>
+          <text class="ch-t-axis ch-fade ch-d6" x="361" y="125">41%</text>
+          <text class="ch-t-label ch-t-end ch-fade ch-d5" x="140" y="155">Paid social</text>
+          <text class="ch-t-axis ch-fade ch-d7" x="321" y="155">33%</text>
+          <text class="ch-t-label ch-t-end ch-fade ch-d6" x="140" y="185">Affiliate</text>
+          <text class="ch-t-axis ch-fade ch-d8" x="301" y="185">29%</text>
+          <text class="ch-t-label ch-t-end ch-fade ch-d7" x="140" y="215">Display</text>
+          <text class="ch-t-axis ch-fade ch-d9" x="261" y="215">21%</text>
+          <text class="ch-t-label ch-t-end ch-fade ch-d8" x="140" y="245">Marketplace</text>
+          <text class="ch-t-axis ch-fade ch-d10" x="236" y="245">16%</text>
+        </g>
+      </svg>
+
+      <p class="ch-card__src">Orders warehouse · cohort = first order Mar–May 2026 · pulled 2026-08-28</p>
+    </figure>
+
+    <figure class="ch-card ch-card--wide" data-ch-type="plain.column-time">
+      <h2 class="ch-card__title">One column per period</h2>
+      <p class="ch-card__sub">Orders shipped per month · thousands · Jan 2024–Dec 2025 · dashed line = 24-month average</p>
+
+      <svg class="ch" viewBox="0 0 1080 320" role="img" aria-labelledby="p-col-t p-col-d">
+        <title id="p-col-t">Monthly orders shipped, 2024–2025</title>
+        <desc id="p-col-d">Orders climbed through both years and December 2025 set a record at 118 thousand, the first month more than fifty percent above the two-year average.</desc>
+        <g id="p-col-fig">
+          <line class="ch-grid" x1="48" y1="272" x2="990" y2="272"/>
+          <text class="ch-t-axis ch-t-end" x="40" y="275">0</text>
+          <line class="ch-grid" x1="48" y1="212" x2="990" y2="212"/>
+          <text class="ch-t-axis ch-t-end" x="40" y="215">30</text>
+          <line class="ch-grid" x1="48" y1="152" x2="990" y2="152"/>
+          <text class="ch-t-axis ch-t-end" x="40" y="155">60</text>
+          <line class="ch-grid" x1="48" y1="92" x2="990" y2="92"/>
+          <text class="ch-t-axis ch-t-end" x="40" y="95">90</text>
+          <line class="ch-grid" x1="48" y1="32" x2="990" y2="32"/>
+          <text class="ch-t-axis ch-t-end" x="40" y="35">120</text>
+          <line class="ch-axis" x1="48" y1="272" x2="990" y2="272"/>
+          <line class="ch-target" x1="48" y1="137.83" x2="990" y2="137.83"/>
+          <text class="ch-t-note" x="994" y="140.83">avg 67k</text>
+          <g>
+          <rect class="ch-quiet ch-rise ch-d1" x="52" y="190" width="26" height="82"><title>Jan 2024 · 41</title></rect>
+          <rect class="ch-quiet ch-rise ch-d2" x="91" y="196" width="26" height="76"><title>Feb 2024 · 38</title></rect>
+          <rect class="ch-quiet ch-rise ch-d3" x="130" y="184" width="26" height="88"><title>Mar 2024 · 44</title></rect>
+          <rect class="ch-quiet ch-rise ch-d4" x="169" y="178" width="26" height="94"><title>Apr 2024 · 47</title></rect>
+          <rect class="ch-quiet ch-rise ch-d5" x="208" y="168" width="26" height="104"><title>May 2024 · 52</title></rect>
+          <rect class="ch-quiet ch-rise ch-d6" x="247" y="174" width="26" height="98"><title>Jun 2024 · 49</title></rect>
+          <rect class="ch-quiet ch-rise ch-d7" x="286" y="162" width="26" height="110"><title>Jul 2024 · 55</title></rect>
+          <rect class="ch-quiet ch-rise ch-d8" x="325" y="156" width="26" height="116"><title>Aug 2024 · 58</title></rect>
+          <rect class="ch-quiet ch-rise ch-d9" x="364" y="164" width="26" height="108"><title>Sep 2024 · 54</title></rect>
+          <rect class="ch-quiet ch-rise ch-d10" x="403" y="150" width="26" height="122"><title>Oct 2024 · 61</title></rect>
+          <rect class="ch-quiet ch-rise ch-d11" x="442" y="140" width="26" height="132"><title>Nov 2024 · 66</title></rect>
+          <rect class="ch-quiet ch-rise ch-d12" x="481" y="128" width="26" height="144"><title>Dec 2024 · 72</title></rect>
+          <rect class="ch-quiet ch-rise ch-d12" x="520" y="146" width="26" height="126"><title>Jan 2025 · 63</title></rect>
+          <rect class="ch-quiet ch-rise ch-d12" x="559" y="152" width="26" height="120"><title>Feb 2025 · 60</title></rect>
+          <rect class="ch-quiet ch-rise ch-d12" x="598" y="136" width="26" height="136"><title>Mar 2025 · 68</title></rect>
+          <rect class="ch-quiet ch-rise ch-d12" x="637" y="130" width="26" height="142"><title>Apr 2025 · 71</title></rect>
+          <rect class="ch-quiet ch-rise ch-d12" x="676" y="118" width="26" height="154"><title>May 2025 · 77</title></rect>
+          <rect class="ch-quiet ch-rise ch-d12" x="715" y="124" width="26" height="148"><title>Jun 2025 · 74</title></rect>
+          <rect class="ch-quiet ch-rise ch-d12" x="754" y="108" width="26" height="164"><title>Jul 2025 · 82</title></rect>
+          <rect class="ch-quiet ch-rise ch-d12" x="793" y="96" width="26" height="176"><title>Aug 2025 · 88</title></rect>
+          <rect class="ch-quiet ch-rise ch-d12" x="832" y="104" width="26" height="168"><title>Sep 2025 · 84</title></rect>
+          <rect class="ch-quiet ch-rise ch-d12" x="871" y="90" width="26" height="182"><title>Oct 2025 · 91</title></rect>
+          <rect class="ch-quiet ch-rise ch-d12" x="910" y="78" width="26" height="194"><title>Nov 2025 · 97</title></rect>
+          <rect class="ch-hero ch-rise ch-d12" x="949" y="36" width="26" height="236"><title>Dec 2025 · 118</title></rect>
+          </g>
+          <text class="ch-t-axis ch-t-mid" x="65" y="286">J</text>
+          <text class="ch-t-axis ch-t-mid" x="104" y="286">F</text>
+          <text class="ch-t-axis ch-t-mid" x="143" y="286">M</text>
+          <text class="ch-t-axis ch-t-mid" x="182" y="286">A</text>
+          <text class="ch-t-axis ch-t-mid" x="221" y="286">M</text>
+          <text class="ch-t-axis ch-t-mid" x="260" y="286">J</text>
+          <text class="ch-t-axis ch-t-mid" x="299" y="286">J</text>
+          <text class="ch-t-axis ch-t-mid" x="338" y="286">A</text>
+          <text class="ch-t-axis ch-t-mid" x="377" y="286">S</text>
+          <text class="ch-t-axis ch-t-mid" x="416" y="286">O</text>
+          <text class="ch-t-axis ch-t-mid" x="455" y="286">N</text>
+          <text class="ch-t-axis ch-t-mid" x="494" y="286">D</text>
+          <text class="ch-t-axis ch-t-mid" x="533" y="286">J</text>
+          <text class="ch-t-axis ch-t-mid" x="572" y="286">F</text>
+          <text class="ch-t-axis ch-t-mid" x="611" y="286">M</text>
+          <text class="ch-t-axis ch-t-mid" x="650" y="286">A</text>
+          <text class="ch-t-axis ch-t-mid" x="689" y="286">M</text>
+          <text class="ch-t-axis ch-t-mid" x="728" y="286">J</text>
+          <text class="ch-t-axis ch-t-mid" x="767" y="286">J</text>
+          <text class="ch-t-axis ch-t-mid" x="806" y="286">A</text>
+          <text class="ch-t-axis ch-t-mid" x="845" y="286">S</text>
+          <text class="ch-t-axis ch-t-mid" x="884" y="286">O</text>
+          <text class="ch-t-axis ch-t-mid" x="923" y="286">N</text>
+          <text class="ch-t-axis ch-t-mid" x="962" y="286">D</text>
+          <text class="ch-t-note ch-t-mono" x="52" y="302">2024</text>
+          <text class="ch-t-note ch-t-mono" x="520" y="302">2025</text>
+          <line class="ch-rule" x1="513.5" y1="272" x2="513.5" y2="306"/>
+          <text class="ch-t-label ch-t-hero ch-t-end ch-fade ch-d12" x="975" y="28">Dec · 118k, best month on record</text>
+        </g>
+      </svg>
+
+      <p class="ch-card__src">Fulfilment ledger · counted at ship scan · pulled 2026-01-04</p>
+    </figure>
+
+    <figure class="ch-card ch-card--wide" data-ch-type="plain.line">
+      <h2 class="ch-card__title">One or two lines, end-labelled</h2>
+      <p class="ch-card__sub">Monthly revenue by order type · USD thousands · Jan 2024–Dec 2025 · bold = subscription, grey = one-off</p>
+
+      <svg class="ch" viewBox="0 0 1080 320" role="img" aria-labelledby="p-line-t p-line-d">
+        <title id="p-line-t">Subscription versus one-off revenue</title>
+        <desc id="p-line-d">Subscription revenue more than doubled over two years and overtook one-off revenue in December 2024; one-off has drifted down every quarter since.</desc>
+        <g id="p-line-fig">
+          <line class="ch-grid" x1="48" y1="272" x2="991" y2="272"/>
+          <text class="ch-t-axis ch-t-end" x="40" y="275">60</text>
+          <line class="ch-grid" x1="48" y1="212" x2="991" y2="212"/>
+          <text class="ch-t-axis ch-t-end" x="40" y="215">120</text>
+          <line class="ch-grid" x1="48" y1="152" x2="991" y2="152"/>
+          <text class="ch-t-axis ch-t-end" x="40" y="155">180</text>
+          <line class="ch-grid" x1="48" y1="92" x2="991" y2="92"/>
+          <text class="ch-t-axis ch-t-end" x="40" y="95">240</text>
+          <line class="ch-grid" x1="48" y1="32" x2="991" y2="32"/>
+          <text class="ch-t-axis ch-t-end" x="40" y="35">300</text>
+          <line class="ch-axis" x1="48" y1="272" x2="991" y2="272"/>
+          <line class="ch-tick" x1="48" y1="272" x2="48" y2="276"/>
+          <text class="ch-t-axis ch-t-mid" x="48" y="288">Jan 2024</text>
+          <line class="ch-tick" x1="171" y1="272" x2="171" y2="276"/>
+          <text class="ch-t-axis ch-t-mid" x="171" y="288">Apr</text>
+          <line class="ch-tick" x1="294" y1="272" x2="294" y2="276"/>
+          <text class="ch-t-axis ch-t-mid" x="294" y="288">Jul</text>
+          <line class="ch-tick" x1="417" y1="272" x2="417" y2="276"/>
+          <text class="ch-t-axis ch-t-mid" x="417" y="288">Oct</text>
+          <line class="ch-tick" x1="540" y1="272" x2="540" y2="276"/>
+          <text class="ch-t-axis ch-t-mid" x="540" y="288">Jan 2025</text>
+          <line class="ch-tick" x1="663" y1="272" x2="663" y2="276"/>
+          <text class="ch-t-axis ch-t-mid" x="663" y="288">Apr</text>
+          <line class="ch-tick" x1="786" y1="272" x2="786" y2="276"/>
+          <text class="ch-t-axis ch-t-mid" x="786" y="288">Jul</text>
+          <line class="ch-tick" x1="909" y1="272" x2="909" y2="276"/>
+          <text class="ch-t-axis ch-t-mid" x="909" y="288">Oct</text>
+          <line class="ch-rule" x1="499" y1="32" x2="499" y2="272"/>
+          <text class="ch-t-note ch-t-end ch-fade ch-d8" x="493" y="42">Dec 2024 · subscriptions overtake</text>
+          <polyline class="ch-line ch-line--s2 ch-draw" points="48,122 89,127 130,118 171,124 212,132 253,136 294,129 335,134 376,141 417,145 458,140 499,148 540,152 581,154 622,160 663,157 704,164 745,166 786,171 827,174 868,178 909,182 950,185 991,187"/>
+          <polyline class="ch-line ch-line--hero ch-draw ch-d4" points="48,212 89,208 130,201 171,204 212,192 253,186 294,180 335,174 376,167 417,161 458,152 499,146 540,142 581,134 622,126 663,118 704,111 745,102 786,94 827,85 868,77 909,70 950,61 991,48"/>
+          <circle class="ch-dot ch-dot--hero ch-pop ch-d10" cx="991" cy="48" r="3.5"/>
+          <circle class="ch-dot ch-pop ch-d10" cx="991" cy="187" r="2.5"/>
+          <text class="ch-t-label ch-t-hero ch-fade ch-d11" x="999" y="51">Subscription 284</text>
+          <text class="ch-t-label ch-t-muted ch-fade ch-d11" x="999" y="190">One-off 145</text>
+        </g>
+      </svg>
+
+      <p class="ch-card__src">Billing exports · recognised revenue, net of refunds · pulled 2026-01-06</p>
+    </figure>
+
+    <figure class="ch-card ch-card--wide" data-ch-type="plain.area-stacked">
+      <h2 class="ch-card__title">Composition over time, total on top</h2>
+      <p class="ch-card__sub">Monthly revenue by sales channel, stacked · USD thousands · Jan–Dec 2025 · darkest band = web, lightest = marketplace</p>
+
+      <svg class="ch" viewBox="0 0 1080 340" role="img" aria-labelledby="p-area-t p-area-d">
+        <title id="p-area-t">Revenue composition by channel, 2025</title>
+        <desc id="p-area-d">Total monthly revenue grew from 132 to 244 thousand across 2025, and the app channel supplied most of the increase, tripling while wholesale stayed flat.</desc>
+        <g id="p-area-fig">
+          <line class="ch-grid" x1="48" y1="292" x2="994" y2="292"/>
+          <text class="ch-t-axis ch-t-end" x="40" y="295">0</text>
+          <line class="ch-grid" x1="48" y1="242" x2="994" y2="242"/>
+          <text class="ch-t-axis ch-t-end" x="40" y="245">50</text>
+          <line class="ch-grid" x1="48" y1="192" x2="994" y2="192"/>
+          <text class="ch-t-axis ch-t-end" x="40" y="195">100</text>
+          <line class="ch-grid" x1="48" y1="142" x2="994" y2="142"/>
+          <text class="ch-t-axis ch-t-end" x="40" y="145">150</text>
+          <line class="ch-grid" x1="48" y1="92" x2="994" y2="92"/>
+          <text class="ch-t-axis ch-t-end" x="40" y="95">200</text>
+          <line class="ch-grid" x1="48" y1="42" x2="994" y2="42"/>
+          <text class="ch-t-axis ch-t-end" x="40" y="45">250</text>
+          <line class="ch-axis" x1="48" y1="292" x2="994" y2="292"/>
+          <text class="ch-t-axis ch-t-mid" x="48" y="308">Jan</text>
+          <text class="ch-t-axis ch-t-mid" x="134" y="308">Feb</text>
+          <text class="ch-t-axis ch-t-mid" x="220" y="308">Mar</text>
+          <text class="ch-t-axis ch-t-mid" x="306" y="308">Apr</text>
+          <text class="ch-t-axis ch-t-mid" x="392" y="308">May</text>
+          <text class="ch-t-axis ch-t-mid" x="478" y="308">Jun</text>
+          <text class="ch-t-axis ch-t-mid" x="564" y="308">Jul</text>
+          <text class="ch-t-axis ch-t-mid" x="650" y="308">Aug</text>
+          <text class="ch-t-axis ch-t-mid" x="736" y="308">Sep</text>
+          <text class="ch-t-axis ch-t-mid" x="822" y="308">Oct</text>
+          <text class="ch-t-axis ch-t-mid" x="908" y="308">Nov</text>
+          <text class="ch-t-axis ch-t-mid" x="994" y="308">Dec</text>
+          <polygon class="ch-s2 ch-fade ch-d1" points="48,230 134,226 220,222 306,224 392,217 478,212 564,208 650,204 736,201 822,197 908,193 994,188 994,292 908,292 822,292 736,292 650,292 564,292 478,292 392,292 306,292 220,292 134,292 48,292"><title>Web · Dec 2025 · 104</title></polygon>
+          <polygon class="ch-s3 ch-fade ch-d3" points="48,210 134,202 220,195 306,193 392,183 478,174 564,165 650,157 736,149 822,139 908,129 994,118 994,188 908,193 822,197 736,201 650,204 564,208 478,212 392,217 306,224 220,222 134,226 48,230"><title>App · Dec 2025 · 70</title></polygon>
+          <polygon class="ch-s4 ch-fade ch-d5" points="48,170 134,164 220,154 306,154 392,141 478,134 564,122 650,116 736,105 822,97 908,84 994,75 994,118 908,129 822,139 736,149 650,157 564,165 478,174 392,183 306,193 220,195 134,202 48,210"><title>Wholesale · Dec 2025 · 43</title></polygon>
+          <polygon class="ch-s5 ch-fade ch-d7" points="48,160 134,152 220,141 306,139 392,125 478,116 564,103 650,95 736,83 822,73 908,59 994,48 994,75 908,84 822,97 736,105 650,116 564,122 478,134 392,141 306,154 220,154 134,164 48,170"><title>Marketplace · Dec 2025 · 27</title></polygon>
+          <polyline class="ch-line ch-line--hero ch-draw ch-d8" points="48,160 134,152 220,141 306,139 392,125 478,116 564,103 650,95 736,83 822,73 908,59 994,48"/>
+          <text class="ch-t-label ch-t-hero ch-fade ch-d12" x="1002" y="44">Total 244</text>
+          <text class="ch-t-label ch-t-muted ch-fade ch-d12" x="1002" y="243">Web 104</text>
+          <text class="ch-t-label ch-t-muted ch-fade ch-d12" x="1002" y="156">App 70</text>
+          <text class="ch-t-label ch-t-muted ch-fade ch-d12" x="1002" y="99.5">Wholesale 43</text>
+          <text class="ch-t-label ch-t-muted ch-fade ch-d12" x="1002" y="64.5">Marketplace 27</text>
+          <text class="ch-t-note ch-fade ch-d10" x="52" y="44">Total in Jan 2025: 132</text>
+        </g>
+      </svg>
+
+      <p class="ch-card__src">Finance close pack · channel = order origin · pulled 2026-01-09</p>
+    </figure>
+
+    <figure class="ch-card" data-ch-type="plain.ring">
+      <h2 class="ch-card__title">Share of a whole, one number in the middle</h2>
+      <p class="ch-card__sub">Support tickets by inbound channel · percent of tickets · Jul 2026</p>
+
+      <svg class="ch" viewBox="0 0 520 300" role="img" aria-labelledby="p-ring-t p-ring-d">
+        <title id="p-ring-t">Support tickets by channel</title>
+        <desc id="p-ring-d">Email still carries just over half of all support tickets, chat has grown to almost a third, and phone is now less than one in five.</desc>
+        <g id="p-ring-fig">
+          <path class="ch-hero ch-fade ch-d1" d="M260.00,48.00 A100,100 0 1 1 247.47,247.21 L248.72,237.29 A90,90 0 1 0 260.00,58.00 Z"><title>Email · 52% · sweep 187.2°</title></path>
+          <text class="ch-t-label ch-fade ch-d4" x="373.78" y="158.16">Email · 52%</text>
+          <path class="ch-s3 ch-fade ch-d3" d="M247.47,247.21 A100,100 0 0 1 172.37,99.82 L181.13,104.64 A90,90 0 0 0 248.72,237.29 Z"><title>Chat · 31% · sweep 111.6°</title></path>
+          <text class="ch-t-label ch-t-end ch-fade ch-d6" x="158.43" y="202.75">Chat · 31%</text>
+          <path class="ch-s5 ch-fade ch-d5" d="M172.37,99.82 A100,100 0 0 1 260.00,48.00 L260.00,58.00 A90,90 0 0 0 181.13,104.64 Z"><title>Phone · 17% · sweep 61.2°</title></path>
+          <text class="ch-t-label ch-t-end ch-fade ch-d8" x="201.97" y="52.88">Phone · 17%</text>
+          <text class="ch-t-big ch-t-mid ch-fade ch-d8" x="260" y="160">52%</text>
+          <text class="ch-t-label ch-t-muted ch-t-mid ch-fade ch-d9" x="260" y="180">of tickets arrive by email</text>
+          <text class="ch-t-note ch-t-mid" x="260" y="290">n = 4,812 tickets · shares sum to 100</text>
+        </g>
+      </svg>
+
+      <p class="ch-card__src">Helpdesk export · 4,812 tickets opened 1–31 Jul 2026 · pulled 2026-08-02</p>
+    </figure>
+
+    <figure class="ch-card" data-ch-type="plain.scatter">
+      <h2 class="ch-card__title">Two measures, one dot per entity</h2>
+      <p class="ch-card__sub">One dot per merchant · average order value in USD against 90-day repeat rate in percent · Q2 2026</p>
+
+      <svg class="ch" viewBox="0 0 520 300" role="img" aria-labelledby="p-scat-t p-scat-d">
+        <title id="p-scat-t">Order value against repeat rate, by merchant</title>
+        <desc id="p-scat-d">Merchants with higher order values generally see more repeat buying, but Club Cellar keeps 54 percent of customers at a modest basket while Atelier Nine sells big baskets that almost never return.</desc>
+        <g id="p-scat-fig">
+          <line class="ch-grid" x1="56" y1="260" x2="496" y2="260"/>
+          <text class="ch-t-axis ch-t-end" x="48" y="263">0</text>
+          <line class="ch-grid" x1="56" y1="180" x2="496" y2="180"/>
+          <text class="ch-t-axis ch-t-end" x="48" y="183">20</text>
+          <line class="ch-grid" x1="56" y1="100" x2="496" y2="100"/>
+          <text class="ch-t-axis ch-t-end" x="48" y="103">40</text>
+          <line class="ch-grid" x1="56" y1="20" x2="496" y2="20"/>
+          <text class="ch-t-axis ch-t-end" x="48" y="23">60</text>
+          <line class="ch-axis" x1="56" y1="260" x2="496" y2="260"/>
+          <line class="ch-tick" x1="56" y1="260" x2="56" y2="264"/>
+          <text class="ch-t-axis ch-t-mid" x="56" y="275">20</text>
+          <line class="ch-tick" x1="144" y1="260" x2="144" y2="264"/>
+          <text class="ch-t-axis ch-t-mid" x="144" y="275">40</text>
+          <line class="ch-tick" x1="232" y1="260" x2="232" y2="264"/>
+          <text class="ch-t-axis ch-t-mid" x="232" y="275">60</text>
+          <line class="ch-tick" x1="320" y1="260" x2="320" y2="264"/>
+          <text class="ch-t-axis ch-t-mid" x="320" y="275">80</text>
+          <line class="ch-tick" x1="408" y1="260" x2="408" y2="264"/>
+          <text class="ch-t-axis ch-t-mid" x="408" y="275">100</text>
+          <line class="ch-tick" x1="496" y1="260" x2="496" y2="264"/>
+          <text class="ch-t-axis ch-t-mid" x="496" y="275">120</text>
+          <text class="ch-t-note ch-t-end" x="496" y="291">Average order value, USD →</text>
+          <text class="ch-t-note" x="62" y="14">Repeat rate, % of customers ↑</text>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d1" cx="193.36" cy="197.55" r="3"><title>Merchant 01 · AOV 51 · repeat 16%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d2" cx="186.54" cy="216.51" r="3"><title>Merchant 02 · AOV 50 · repeat 11%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d3" cx="80.61" cy="200.47" r="3"><title>Merchant 03 · AOV 26 · repeat 15%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d4" cx="239.85" cy="168.18" r="3"><title>Merchant 04 · AOV 62 · repeat 23%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d5" cx="251.96" cy="179.63" r="3"><title>Merchant 05 · AOV 65 · repeat 20%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d6" cx="117.3" cy="252" r="3"><title>Merchant 06 · AOV 34 · repeat 2%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d7" cx="252.58" cy="193.67" r="3"><title>Merchant 07 · AOV 65 · repeat 17%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d8" cx="158.7" cy="227.8" r="3"><title>Merchant 08 · AOV 43 · repeat 8%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d9" cx="279.1" cy="187.35" r="3"><title>Merchant 09 · AOV 71 · repeat 18%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d10" cx="398.57" cy="137.98" r="3"><title>Merchant 10 · AOV 98 · repeat 31%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d11" cx="311.28" cy="131.25" r="3"><title>Merchant 11 · AOV 78 · repeat 32%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d12" cx="430.84" cy="87.37" r="3"><title>Merchant 12 · AOV 105 · repeat 43%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d1" cx="87.26" cy="238.1" r="3"><title>Merchant 13 · AOV 27 · repeat 5%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d2" cx="345.01" cy="135.89" r="3"><title>Merchant 14 · AOV 86 · repeat 31%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d3" cx="144.68" cy="191.19" r="3"><title>Merchant 15 · AOV 40 · repeat 17%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d4" cx="244.63" cy="149.17" r="3"><title>Merchant 16 · AOV 63 · repeat 28%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d5" cx="222.47" cy="161.04" r="3"><title>Merchant 17 · AOV 58 · repeat 25%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d6" cx="159.32" cy="174.56" r="3"><title>Merchant 18 · AOV 43 · repeat 21%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d7" cx="107.67" cy="218.16" r="3"><title>Merchant 19 · AOV 32 · repeat 10%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d8" cx="105.25" cy="246.31" r="3"><title>Merchant 20 · AOV 31 · repeat 3%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d9" cx="344.08" cy="170.62" r="3"><title>Merchant 21 · AOV 85 · repeat 22%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d10" cx="235.33" cy="146.38" r="3"><title>Merchant 22 · AOV 61 · repeat 28%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d11" cx="406.99" cy="98.21" r="3"><title>Merchant 23 · AOV 100 · repeat 40%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d12" cx="85.92" cy="222.29" r="3"><title>Merchant 24 · AOV 27 · repeat 9%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d1" cx="362.89" cy="136.18" r="3"><title>Merchant 25 · AOV 90 · repeat 31%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d2" cx="227.42" cy="177.57" r="3"><title>Merchant 26 · AOV 59 · repeat 21%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d3" cx="252.43" cy="151.33" r="3"><title>Merchant 27 · AOV 65 · repeat 27%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d4" cx="89.45" cy="252" r="3"><title>Merchant 28 · AOV 28 · repeat 2%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d5" cx="223.42" cy="192.93" r="3"><title>Merchant 29 · AOV 58 · repeat 17%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d6" cx="130.14" cy="208.19" r="3"><title>Merchant 30 · AOV 37 · repeat 13%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d7" cx="140.26" cy="234.87" r="3"><title>Merchant 31 · AOV 39 · repeat 6%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d8" cx="249.99" cy="146.68" r="3"><title>Merchant 32 · AOV 64 · repeat 28%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d9" cx="200.5" cy="176.3" r="3"><title>Merchant 33 · AOV 53 · repeat 21%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d10" cx="376.08" cy="136.4" r="3"><title>Merchant 34 · AOV 93 · repeat 31%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d11" cx="162.94" cy="228.77" r="3"><title>Merchant 35 · AOV 44 · repeat 8%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d12" cx="352.99" cy="152.32" r="3"><title>Merchant 36 · AOV 87 · repeat 27%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d1" cx="214.09" cy="196.39" r="3"><title>Merchant 37 · AOV 56 · repeat 16%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d2" cx="204.05" cy="209.22" r="3"><title>Merchant 38 · AOV 54 · repeat 13%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d3" cx="329.09" cy="123.3" r="3"><title>Merchant 39 · AOV 82 · repeat 34%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d4" cx="143.55" cy="187.21" r="3"><title>Merchant 40 · AOV 40 · repeat 18%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d5" cx="406.34" cy="137.44" r="3"><title>Merchant 41 · AOV 100 · repeat 31%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d6" cx="281.39" cy="168.63" r="3"><title>Merchant 42 · AOV 71 · repeat 23%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d7" cx="275.62" cy="181.76" r="3"><title>Merchant 43 · AOV 70 · repeat 20%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d8" cx="148.82" cy="200.09" r="3"><title>Merchant 44 · AOV 41 · repeat 15%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d9" cx="362.95" cy="138.55" r="3"><title>Merchant 45 · AOV 90 · repeat 30%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d10" cx="230.67" cy="167.06" r="3"><title>Merchant 46 · AOV 60 · repeat 23%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d11" cx="242.24" cy="172.14" r="3"><title>Merchant 47 · AOV 62 · repeat 22%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d12" cx="396.85" cy="143.49" r="3"><title>Merchant 48 · AOV 97 · repeat 29%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d1" cx="344.68" cy="173.09" r="3"><title>Merchant 49 · AOV 86 · repeat 22%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d2" cx="410.51" cy="150.19" r="3"><title>Merchant 50 · AOV 101 · repeat 27%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d3" cx="316.11" cy="141.33" r="3"><title>Merchant 51 · AOV 79 · repeat 30%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d4" cx="397.53" cy="90.91" r="3"><title>Merchant 52 · AOV 98 · repeat 42%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d5" cx="415.21" cy="147.69" r="3"><title>Merchant 53 · AOV 102 · repeat 28%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d6" cx="96.79" cy="204.32" r="3"><title>Merchant 54 · AOV 29 · repeat 14%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d7" cx="190.82" cy="228.69" r="3"><title>Merchant 55 · AOV 51 · repeat 8%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d8" cx="385.91" cy="142.77" r="3"><title>Merchant 56 · AOV 95 · repeat 29%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d9" cx="83.2" cy="252" r="3"><title>Merchant 57 · AOV 26 · repeat 2%</title></circle>
+          <circle class="ch-dot ch-dot--quiet ch-pop ch-d10" cx="291.96" cy="177.92" r="3"><title>Merchant 58 · AOV 74 · repeat 21%</title></circle>
+          <circle class="ch-dot ch-dot--hero ch-pop ch-d12" cx="117.6" cy="44" r="4.5"><title>Club Cellar · AOV 34 · repeat 54%</title></circle>
+          <line class="ch-rule" x1="123.6" y1="44" x2="139.6" y2="44"/>
+          <text class="ch-t-label ch-t-hero ch-fade ch-d12" x="143.6" y="47">Club Cellar · 54% repeat at $34</text>
+          <circle class="ch-dot ch-dot--open ch-pop ch-d12" cx="460.8" cy="228" r="4.5"><title>Atelier Nine · AOV 112 · repeat 8%</title></circle>
+          <line class="ch-rule" x1="454.8" y1="228" x2="438.8" y2="228"/>
+          <text class="ch-t-label ch-t-end ch-fade ch-d12" x="434.8" y="231">Atelier Nine · 8% repeat at $112</text>
+        </g>
+      </svg>
+
+      <p class="ch-card__src">Merchant analytics · 60 merchants with 200+ orders in Q2 2026 · pulled 2026-07-14</p>
+    </figure>
+
+    <figure class="ch-card" data-ch-type="plain.histogram">
+      <h2 class="ch-card__title">Counted into bins</h2>
+      <p class="ch-card__sub">Orders counted into one-day delivery-time bins · number of orders · shipped Aug 2026</p>
+
+      <svg class="ch" viewBox="0 0 520 300" role="img" aria-labelledby="p-hist-t p-hist-d">
+        <title id="p-hist-t">Distribution of delivery times</title>
+        <desc id="p-hist-d">Half of August orders arrived within 5.8 days; the distribution peaks at five to six days with a thin tail of 21 orders taking ten days or more.</desc>
+        <g id="p-hist-fig">
+          <line class="ch-grid" x1="48" y1="262" x2="496" y2="262"/>
+          <text class="ch-t-axis ch-t-end" x="40" y="265">0</text>
+          <line class="ch-grid" x1="48" y1="202" x2="496" y2="202"/>
+          <text class="ch-t-axis ch-t-end" x="40" y="205">20</text>
+          <line class="ch-grid" x1="48" y1="142" x2="496" y2="142"/>
+          <text class="ch-t-axis ch-t-end" x="40" y="145">40</text>
+          <line class="ch-grid" x1="48" y1="82" x2="496" y2="82"/>
+          <text class="ch-t-axis ch-t-end" x="40" y="85">60</text>
+          <line class="ch-axis" x1="48" y1="262" x2="496" y2="262"/>
+          <g>
+          <rect class="ch-mark ch-rise ch-d1" x="49" y="253" width="30" height="9"><title>0–1 days · 3</title></rect>
+          <rect class="ch-mark ch-rise ch-d2" x="81" y="235" width="30" height="27"><title>1–2 days · 9</title></rect>
+          <rect class="ch-mark ch-rise ch-d3" x="113" y="199" width="30" height="63"><title>2–3 days · 21</title></rect>
+          <rect class="ch-mark ch-rise ch-d4" x="145" y="148" width="30" height="114"><title>3–4 days · 38</title></rect>
+          <rect class="ch-mark ch-rise ch-d5" x="177" y="106" width="30" height="156"><title>4–5 days · 52</title></rect>
+          <rect class="ch-mark ch-rise ch-d6" x="209" y="79" width="30" height="183"><title>5–6 days · 61</title></rect>
+          <rect class="ch-mark ch-rise ch-d7" x="241" y="100" width="30" height="162"><title>6–7 days · 54</title></rect>
+          <rect class="ch-mark ch-rise ch-d8" x="273" y="142" width="30" height="120"><title>7–8 days · 40</title></rect>
+          <rect class="ch-mark ch-rise ch-d9" x="305" y="181" width="30" height="81"><title>8–9 days · 27</title></rect>
+          <rect class="ch-mark ch-rise ch-d10" x="337" y="211" width="30" height="51"><title>9–10 days · 17</title></rect>
+          <rect class="ch-mark ch-rise ch-d11" x="369" y="232" width="30" height="30"><title>10–11 days · 10</title></rect>
+          <rect class="ch-mark ch-rise ch-d12" x="401" y="244" width="30" height="18"><title>11–12 days · 6</title></rect>
+          <rect class="ch-mark ch-rise ch-d12" x="433" y="253" width="30" height="9"><title>12–13 days · 3</title></rect>
+          <rect class="ch-mark ch-rise ch-d12" x="465" y="256" width="30" height="6"><title>13–14 days · 2</title></rect>
+          </g>
+          <line class="ch-tick" x1="48" y1="262" x2="48" y2="266"/>
+          <text class="ch-t-axis ch-t-mid" x="48" y="277">0</text>
+          <line class="ch-tick" x1="112" y1="262" x2="112" y2="266"/>
+          <text class="ch-t-axis ch-t-mid" x="112" y="277">2</text>
+          <line class="ch-tick" x1="176" y1="262" x2="176" y2="266"/>
+          <text class="ch-t-axis ch-t-mid" x="176" y="277">4</text>
+          <line class="ch-tick" x1="240" y1="262" x2="240" y2="266"/>
+          <text class="ch-t-axis ch-t-mid" x="240" y="277">6</text>
+          <line class="ch-tick" x1="304" y1="262" x2="304" y2="266"/>
+          <text class="ch-t-axis ch-t-mid" x="304" y="277">8</text>
+          <line class="ch-tick" x1="368" y1="262" x2="368" y2="266"/>
+          <text class="ch-t-axis ch-t-mid" x="368" y="277">10</text>
+          <line class="ch-tick" x1="432" y1="262" x2="432" y2="266"/>
+          <text class="ch-t-axis ch-t-mid" x="432" y="277">12</text>
+          <line class="ch-tick" x1="496" y1="262" x2="496" y2="266"/>
+          <text class="ch-t-axis ch-t-mid" x="496" y="277">14</text>
+          <text class="ch-t-note ch-t-end" x="496" y="292">Days from order to delivery →</text>
+          <text class="ch-t-note" x="8" y="14">Orders</text>
+          <line class="ch-target" x1="233.44" y1="20" x2="233.44" y2="262"/>
+          <text class="ch-t-label ch-fade ch-d12" x="239.44" y="30">median 5.8 days</text>
+          <text class="ch-t-note ch-fade ch-d12" x="239.44" y="42">n = 343</text>
+        </g>
+      </svg>
+
+      <p class="ch-card__src">Carrier scans · 343 orders shipped 1–31 Aug 2026 · pulled 2026-09-01</p>
+    </figure>
+
+    <figure class="ch-card ch-card--wide" data-ch-type="plain.waterfall">
+      <h2 class="ch-card__title">From start to end, step by step</h2>
+      <p class="ch-card__sub">Gross bookings to net revenue, one bar per adjustment · USD thousands · Q2 2026</p>
+
+      <svg class="ch" viewBox="0 0 1080 320" role="img" aria-labelledby="p-wf-t p-wf-d">
+        <title id="p-wf-t">Gross bookings to net revenue, Q2 2026</title>
+        <desc id="p-wf-d">Of 1,240 thousand in gross bookings, 965 thousand reached net revenue; discounts and taxes were the two largest deductions and together removed more than shipping fees and upsells added back.</desc>
+        <g id="p-wf-fig">
+          <line class="ch-grid" x1="48" y1="272" x2="1000" y2="272"/>
+          <text class="ch-t-axis ch-t-end" x="40" y="275">0</text>
+          <line class="ch-grid" x1="48" y1="192" x2="1000" y2="192"/>
+          <text class="ch-t-axis ch-t-end" x="40" y="195">400</text>
+          <line class="ch-grid" x1="48" y1="112" x2="1000" y2="112"/>
+          <text class="ch-t-axis ch-t-end" x="40" y="115">800</text>
+          <line class="ch-grid" x1="48" y1="32" x2="1000" y2="32"/>
+          <text class="ch-t-axis ch-t-end" x="40" y="35">1,200</text>
+          <line class="ch-axis" x1="48" y1="272" x2="1000" y2="272"/>
+          <g>
+          <rect class="ch-mark ch-rise ch-d1" x="69" y="24" width="76" height="248"><title>Gross bookings · 1240</title></rect>
+          <rect class="ch-down ch-rise ch-d2" x="188" y="24" width="76" height="26"><title>Discounts · 130</title></rect>
+          <rect class="ch-down ch-rise ch-d3" x="307" y="50" width="76" height="17"><title>Refunds · 85</title></rect>
+          <rect class="ch-up ch-rise ch-d4" x="426" y="54" width="76" height="13"><title>Shipping fees · 65</title></rect>
+          <rect class="ch-down ch-rise ch-d5" x="545" y="54" width="76" height="20"><title>Taxes · 100</title></rect>
+          <rect class="ch-down ch-rise ch-d6" x="664" y="74" width="76" height="14"><title>Marketplace fees · 70</title></rect>
+          <rect class="ch-up ch-rise ch-d7" x="783" y="79" width="76" height="9"><title>Upsells · 45</title></rect>
+          <rect class="ch-mark ch-rise ch-d8" x="902" y="79" width="76" height="193"><title>Net revenue · 965</title></rect>
+          </g>
+          <line class="ch-rule" x1="145" y1="24" x2="188" y2="24"/>
+          <line class="ch-rule" x1="264" y1="50" x2="307" y2="50"/>
+          <line class="ch-rule" x1="383" y1="67" x2="426" y2="67"/>
+          <line class="ch-rule" x1="502" y1="54" x2="545" y2="54"/>
+          <line class="ch-rule" x1="621" y1="74" x2="664" y2="74"/>
+          <line class="ch-rule" x1="740" y1="88" x2="783" y2="88"/>
+          <line class="ch-rule" x1="859" y1="79" x2="902" y2="79"/>
+          <text class="ch-t-label ch-t-mid ch-fade ch-d3" x="107" y="18">1,240</text>
+          <text class="ch-t-axis ch-t-mid" x="107" y="290">Gross bookings</text>
+          <text class="ch-t-label ch-t-down ch-t-mid ch-fade ch-d4" x="226" y="63">−130</text>
+          <text class="ch-t-axis ch-t-mid" x="226" y="290">Discounts</text>
+          <text class="ch-t-label ch-t-down ch-t-mid ch-fade ch-d5" x="345" y="80">−85</text>
+          <text class="ch-t-axis ch-t-mid" x="345" y="290">Refunds</text>
+          <text class="ch-t-label ch-t-up ch-t-mid ch-fade ch-d6" x="464" y="48">+65</text>
+          <text class="ch-t-axis ch-t-mid" x="464" y="290">Shipping fees</text>
+          <text class="ch-t-label ch-t-down ch-t-mid ch-fade ch-d7" x="583" y="87">−100</text>
+          <text class="ch-t-axis ch-t-mid" x="583" y="290">Taxes</text>
+          <text class="ch-t-label ch-t-down ch-t-mid ch-fade ch-d8" x="702" y="101">−70</text>
+          <text class="ch-t-axis ch-t-mid" x="702" y="290">Marketplace fees</text>
+          <text class="ch-t-label ch-t-up ch-t-mid ch-fade ch-d9" x="821" y="73">+45</text>
+          <text class="ch-t-axis ch-t-mid" x="821" y="290">Upsells</text>
+          <text class="ch-t-label ch-t-mid ch-fade ch-d10" x="940" y="73">965</text>
+          <text class="ch-t-axis ch-t-mid" x="940" y="290">Net revenue</text>
+          <text class="ch-t-note ch-t-end" x="1000" y="306">Green = adds to revenue, red = takes from it · net = 78% of gross</text>
+        </g>
+      </svg>
+
+      <p class="ch-card__src">Finance close pack · Q2 2026 · rounded to nearest 5k · pulled 2026-07-21</p>
+    </figure>
+
+    <figure class="ch-card" data-ch-type="plain.box-ticks">
+      <h2 class="ch-card__title">Five-number summary with the outliers shown</h2>
+      <p class="ch-card__sub">Time to first reply by support team · hours · Aug 2026 · median printed beside each box</p>
+
+      <svg class="ch" viewBox="0 0 520 300" role="img" aria-labelledby="p-box-t p-box-d">
+        <title id="p-box-t">First-reply time by support team</title>
+        <desc id="p-box-d">Sales answers fastest with a median of 5 hours and the tightest spread, while Tech takes 18 hours at the median and its slowest ticket waited 55 hours.</desc>
+        <g id="p-box-fig">
+          <line class="ch-grid" x1="56" y1="260" x2="500" y2="260"/>
+          <text class="ch-t-axis ch-t-end" x="48" y="263">0</text>
+          <line class="ch-grid" x1="56" y1="200" x2="500" y2="200"/>
+          <text class="ch-t-axis ch-t-end" x="48" y="203">15</text>
+          <line class="ch-grid" x1="56" y1="140" x2="500" y2="140"/>
+          <text class="ch-t-axis ch-t-end" x="48" y="143">30</text>
+          <line class="ch-grid" x1="56" y1="80" x2="500" y2="80"/>
+          <text class="ch-t-axis ch-t-end" x="48" y="83">45</text>
+          <line class="ch-grid" x1="56" y1="20" x2="500" y2="20"/>
+          <text class="ch-t-axis ch-t-end" x="48" y="23">60</text>
+          <text class="ch-t-note" x="62" y="14">Hours to first reply</text>
+          <g>
+          <rect class="ch-quiet ch-rise ch-d1" x="84" y="204" width="40" height="32"><title>Billing IQR 6–14 h · 8</title></rect>
+          <rect class="ch-quiet ch-rise ch-d2" x="172" y="152" width="40" height="64"><title>Tech IQR 11–27 h · 16</title></rect>
+          <rect class="ch-quiet ch-rise ch-d3" x="260" y="228" width="40" height="20"><title>Sales IQR 3–8 h · 5</title></rect>
+          <rect class="ch-quiet ch-rise ch-d4" x="348" y="176" width="40" height="36"><title>Onboarding IQR 12–21 h · 9</title></rect>
+          <rect class="ch-quiet ch-rise ch-d5" x="436" y="200" width="40" height="32"><title>Returns IQR 7–15 h · 8</title></rect>
+          </g>
+          <line class="ch-stroke" x1="104" y1="252" x2="104" y2="236"/>
+          <line class="ch-stroke" x1="104" y1="204" x2="104" y2="172"/>
+          <line class="ch-stroke" x1="96" y1="252" x2="112" y2="252"/>
+          <line class="ch-stroke" x1="96" y1="172" x2="112" y2="172"/>
+          <line class="ch-stroke" x1="84" y1="224" x2="124" y2="224"/>
+          <text class="ch-t-label ch-fade ch-d4" x="129" y="227">9</text>
+          <circle class="ch-dot ch-dot--open ch-pop ch-d7" cx="104" cy="124" r="3"><title>Billing outlier · 34 h</title></circle>
+          <text class="ch-t-axis ch-t-mid" x="104" y="280">Billing</text>
+          <line class="ch-stroke" x1="192" y1="244" x2="192" y2="216"/>
+          <line class="ch-stroke" x1="192" y1="152" x2="192" y2="96"/>
+          <line class="ch-stroke" x1="184" y1="244" x2="200" y2="244"/>
+          <line class="ch-stroke" x1="184" y1="96" x2="200" y2="96"/>
+          <line class="ch-stroke" x1="172" y1="188" x2="212" y2="188"/>
+          <text class="ch-t-label ch-fade ch-d5" x="217" y="191">18</text>
+          <circle class="ch-dot ch-dot--open ch-pop ch-d8" cx="192" cy="40" r="3"><title>Tech outlier · 55 h</title></circle>
+          <text class="ch-t-axis ch-t-mid" x="192" y="280">Tech</text>
+          <line class="ch-stroke" x1="280" y1="256" x2="280" y2="248"/>
+          <line class="ch-stroke" x1="280" y1="228" x2="280" y2="208"/>
+          <line class="ch-stroke" x1="272" y1="256" x2="288" y2="256"/>
+          <line class="ch-stroke" x1="272" y1="208" x2="288" y2="208"/>
+          <line class="ch-stroke" x1="260" y1="240" x2="300" y2="240"/>
+          <text class="ch-t-label ch-fade ch-d6" x="305" y="243">5</text>
+          <circle class="ch-dot ch-dot--open ch-pop ch-d9" cx="280" cy="176" r="3"><title>Sales outlier · 21 h</title></circle>
+          <circle class="ch-dot ch-dot--open ch-pop ch-d9" cx="280" cy="164" r="3"><title>Sales outlier · 24 h</title></circle>
+          <text class="ch-t-axis ch-t-mid" x="280" y="280">Sales</text>
+          <line class="ch-stroke" x1="368" y1="236" x2="368" y2="212"/>
+          <line class="ch-stroke" x1="368" y1="176" x2="368" y2="140"/>
+          <line class="ch-stroke" x1="360" y1="236" x2="376" y2="236"/>
+          <line class="ch-stroke" x1="360" y1="140" x2="376" y2="140"/>
+          <line class="ch-stroke" x1="348" y1="196" x2="388" y2="196"/>
+          <text class="ch-t-label ch-fade ch-d7" x="393" y="199">16</text>
+          <text class="ch-t-axis ch-t-mid" x="368" y="280">Onboarding</text>
+          <line class="ch-stroke" x1="456" y1="248" x2="456" y2="232"/>
+          <line class="ch-stroke" x1="456" y1="200" x2="456" y2="160"/>
+          <line class="ch-stroke" x1="448" y1="248" x2="464" y2="248"/>
+          <line class="ch-stroke" x1="448" y1="160" x2="464" y2="160"/>
+          <line class="ch-stroke" x1="436" y1="218" x2="476" y2="218"/>
+          <text class="ch-t-label ch-fade ch-d8" x="481" y="221">10.5</text>
+          <circle class="ch-dot ch-dot--open ch-pop ch-d11" cx="456" cy="84" r="3"><title>Returns outlier · 44 h</title></circle>
+          <text class="ch-t-axis ch-t-mid" x="456" y="280">Returns</text>
+          <text class="ch-t-note ch-t-mid" x="278" y="296">Box = middle half of tickets · tick = median · whiskers = full range · open dots = outliers</text>
+        </g>
+      </svg>
+
+      <p class="ch-card__src">Helpdesk export · 2,140 tickets, Aug 2026 · outliers = beyond 1.5 × IQR · pulled 2026-09-01</p>
+    </figure>
+  </div>
+</main>
+</body>
+</html>

@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<!--
+  hq-pack-charts — sheet.monthly
+  A monthly operations sheet: title, lede, four KPIs, four findings, source rail.
+  Demo organisation: Fable & Loom (fictional). Palette: moss.
+-->
+<html lang="en" data-ch-theme="light" data-ch-palette="moss">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fable & Loom · Monthly operations · August 2026</title>
+
+<!-- Webfonts are OPT-IN. Uncomment to use Instrument Serif / Geist; leave
+     commented and the system stack in chart.css renders offline with no
+     third-party request from the reader's browser.
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+-->
+
+<style>/* ch:css:start */
+/* GENERATED from assets/chart.css (ad62427d9525) — do not edit here. Run scripts/sync-assets.py. */
+/*
+ * hq-pack-charts — chart.css
+ *
+ * The single source of truth for every chart HQ produces.
+ *
+ * The contract, in one sentence: an HQ chart's SVG carries semantic CLASSES
+ * and never carries a colour. Re-skinning a chart is swapping the :root block
+ * below — nothing in the SVG body changes. The same contract hq-pack-diagrams
+ * uses, extended with data roles (series, ramp, hero, delta).
+ *
+ * Every --ch-* surface/ink/structure token falls back to its --dg-* twin, so a
+ * page that already carries a diagram skin (or a company brand pack mapped
+ * through the design-styles binding formula) re-skins charts for free.
+ *
+ * Do not add a colour literal to any SVG attribute. `scripts/lint-chart.py`
+ * fails the file if you do.
+ *
+ * Theme:    <html data-ch-theme="light|dark|auto">          (default: light)
+ * Palette:  <html data-ch-palette="mono|slate|moss|ember">  (default: mono)
+ * Density:  <svg class="ch ch--comfortable|ch--compact">
+ */
+
+/* ══════════════════════════════════════════════════════════════════════════
+   1. TOKENS
+   ══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Surface ─────────────────────────────────────────────────────────── */
+  --ch-paper:        var(--dg-paper, #f4f1ec);
+  --ch-paper-raised: var(--dg-paper-raised, #ffffff);
+  --ch-paper-sunk:   var(--dg-paper-sunk, rgba(27, 26, 24, 0.045));
+
+  /* ── Ink ─────────────────────────────────────────────────────────────── */
+  --ch-ink:          var(--dg-ink, #1b1a18);     /* titles, values, primary marks */
+  --ch-muted:        var(--dg-muted, #55524c);   /* subtitles, axis labels        */
+  --ch-soft:         var(--dg-soft, #8a857c);    /* source line, minor ticks      */
+
+  /* ── Structure ───────────────────────────────────────────────────────── */
+  --ch-rule:         var(--dg-rule, rgba(27, 26, 24, 0.14));        /* gridlines */
+  --ch-rule-strong:  var(--dg-rule-strong, rgba(27, 26, 24, 0.30)); /* baselines */
+
+  /* ── Data — MONO palette (the floor; every other palette overrides) ──────
+     data-1 is the hero slot. In mono the hero is ink and the rest is a
+     lightness ladder, so a mono chart never depends on hue to be read.      */
+  --ch-hero:         var(--ch-ink);
+  --ch-data-1:       var(--ch-ink);
+  --ch-data-2:       #5b5853;
+  --ch-data-3:       #8a857c;
+  --ch-data-4:       #b3ada3;
+  --ch-data-5:       #cfcac0;
+  --ch-data-6:       #e2ddd4;
+  --ch-data-fill:    0.16;      /* opacity for area / band fills             */
+  --ch-quiet:        #d9d4cb;   /* non-focal marks when one thing is hero    */
+  --ch-track:        rgba(27, 26, 24, 0.08); /* empty part of a bar / ring   */
+
+  /* ── Ramp — ordered / sequential (5 steps, light → dark) ─────────────── */
+  --ch-ramp-1:       #e6e2da;
+  --ch-ramp-2:       #c9c3b8;
+  --ch-ramp-3:       #a09a8f;
+  --ch-ramp-4:       #6d6860;
+  --ch-ramp-5:       #1b1a18;
+
+  /* ── Delta — semantic only, always paired with a sign or label ───────── */
+  --ch-up:           var(--dg-positive, #3f6b4a);
+  --ch-down:         var(--dg-negative, #9c3a2c);
+  --ch-flat:         var(--ch-muted);
+  --ch-up-tint:      var(--dg-positive-tint, rgba(63, 107, 74, 0.12));
+  --ch-down-tint:    var(--dg-negative-tint, rgba(156, 58, 44, 0.12));
+
+  /* ── Type ────────────────────────────────────────────────────────────────
+     Webfont names lead; a system stack follows so a chart renders correctly
+     with no network. Webfonts are opt-in — see assets/template.html.        */
+  --ch-font-display: var(--dg-font-display, "Instrument Serif", "Iowan Old Style",
+                     Palatino, Georgia, serif);
+  --ch-font-body:    var(--dg-font-body, "Geist", -apple-system, BlinkMacSystemFont,
+                     "Segoe UI", Inter, Roboto, system-ui, sans-serif);
+  --ch-font-mono:    var(--dg-font-mono, "Geist Mono", ui-monospace, SFMono-Regular,
+                     Menlo, Consolas, monospace);
+
+  /* ── Type scale (px, inside the SVG viewBox) ─────────────────────────────
+     Floors are a contract: 7px is the smallest label allowed in a half-width
+     card and 6px in a full-width one. Overflow goes to a <title> hover or a
+     footnote — never to smaller type.                                        */
+  --ch-fs-title:     16px;
+  --ch-fs-sub:       11.5px;
+  --ch-fs-value:     22px;
+  --ch-fs-big:       44px;
+  --ch-fs-axis:      9.5px;
+  --ch-fs-label:     10px;
+  --ch-fs-note:      9px;
+
+  /* ── Stroke ──────────────────────────────────────────────────────────── */
+  --ch-sw-hair:      0.6px;
+  --ch-sw-thin:      1px;
+  --ch-sw-line:      1.6px;
+  --ch-sw-bold:      2.4px;
+
+  /* ── Motion ──────────────────────────────────────────────────────────── */
+  --ch-dur:          900ms;
+  --ch-dur-slow:     1300ms;
+  --ch-ease:         cubic-bezier(0.22, 0.61, 0.36, 1);
+  --ch-ease-pop:     cubic-bezier(0.2, 0.7, 0.3, 1.25);
+  --ch-stagger:      28ms;
+}
+
+/* ── Palettes ───────────────────────────────────────────────────────────────
+   One palette per file. The agent picks from data semantics:
+     slate — ordered / sequential   (one series that has an order)
+     moss  — categorical, ≤ 4 kinds (unordered kinds that must be told apart)
+     ember — mono + one hero        (everything quiet except the point)
+   Unclear fit → stay on mono.                                               */
+
+[data-ch-palette="slate"] {
+  --ch-hero:    #2f5d8f;
+  --ch-data-1:  #2f5d8f;
+  --ch-data-2:  #5b7fa6;
+  --ch-data-3:  #86a1bd;
+  --ch-data-4:  #adc0d3;
+  --ch-data-5:  #cfdae5;
+  --ch-data-6:  #e6ecf2;
+  --ch-quiet:   #d6dde5;
+  --ch-track:   rgba(47, 93, 143, 0.10);
+  --ch-ramp-1:  #e6ecf2;
+  --ch-ramp-2:  #b9c9da;
+  --ch-ramp-3:  #86a1bd;
+  --ch-ramp-4:  #4f759d;
+  --ch-ramp-5:  #1f3f63;
+}
+
+[data-ch-palette="moss"] {
+  --ch-hero:    #3f6b4a;
+  --ch-data-1:  #3f6b4a;
+  --ch-data-2:  #9a7b4f;
+  --ch-data-3:  #4a6d7c;
+  --ch-data-4:  #a4584a;
+  --ch-data-5:  #8a857c;
+  --ch-data-6:  #b3ada3;
+  --ch-quiet:   #d8dcd2;
+  --ch-track:   rgba(63, 107, 74, 0.10);
+  --ch-ramp-1:  #e6ebe0;
+  --ch-ramp-2:  #bfcbb4;
+  --ch-ramp-3:  #8fa686;
+  --ch-ramp-4:  #5f8461;
+  --ch-ramp-5:  #2c4b34;
+}
+
+[data-ch-palette="ember"] {
+  --ch-hero:    #c2502f;
+  --ch-data-1:  #c2502f;
+  --ch-data-2:  #5b5853;
+  --ch-data-3:  #8a857c;
+  --ch-data-4:  #b3ada3;
+  --ch-data-5:  #cfcac0;
+  --ch-data-6:  #e2ddd4;
+  --ch-quiet:   #d9d4cb;
+  --ch-track:   rgba(194, 80, 47, 0.10);
+  --ch-ramp-1:  #f2e3dd;
+  --ch-ramp-2:  #e3b8a8;
+  --ch-ramp-3:  #d48a70;
+  --ch-ramp-4:  #c2502f;
+  --ch-ramp-5:  #7d2f18;
+}
+
+/* ── Dark theme ─────────────────────────────────────────────────────────── */
+
+[data-ch-theme="dark"] {
+  --ch-paper:        var(--dg-paper-dark, #171614);
+  --ch-paper-raised: #201f1c;
+  --ch-paper-sunk:   rgba(244, 241, 236, 0.06);
+  --ch-ink:          #f0ede6;
+  --ch-muted:        #b5b0a6;
+  --ch-soft:         #7d786f;
+  --ch-rule:         rgba(240, 237, 230, 0.14);
+  --ch-rule-strong:  rgba(240, 237, 230, 0.32);
+  --ch-data-2:       #b5b0a6;
+  --ch-data-3:       #8a857c;
+  --ch-data-4:       #64605a;
+  --ch-data-5:       #4a4741;
+  --ch-data-6:       #37342f;
+  --ch-quiet:        #3d3a35;
+  --ch-track:        rgba(240, 237, 230, 0.10);
+  --ch-ramp-1:       #37342f;
+  --ch-ramp-2:       #5c574f;
+  --ch-ramp-3:       #8a857c;
+  --ch-ramp-4:       #bfb9ae;
+  --ch-ramp-5:       #f0ede6;
+  --ch-up:           #7fb08a;
+  --ch-down:         #d8776a;
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-ch-theme="auto"] {
+    --ch-paper:        #171614;
+    --ch-paper-raised: #201f1c;
+    --ch-paper-sunk:   rgba(244, 241, 236, 0.06);
+    --ch-ink:          #f0ede6;
+    --ch-muted:        #b5b0a6;
+    --ch-soft:         #7d786f;
+    --ch-rule:         rgba(240, 237, 230, 0.14);
+    --ch-rule-strong:  rgba(240, 237, 230, 0.32);
+    --ch-quiet:        #3d3a35;
+    --ch-track:        rgba(240, 237, 230, 0.10);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   2. PAGE + CARD
+   ══════════════════════════════════════════════════════════════════════════ */
+
+html, body { margin: 0; }
+body {
+  background: var(--ch-paper);
+  color: var(--ch-ink);
+  font-family: var(--ch-font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+.ch-page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 48px 32px 72px;
+}
+.ch-page__eyebrow {
+  font-family: var(--ch-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ch-soft);
+  margin: 0 0 8px;
+}
+.ch-page__title {
+  font-family: var(--ch-font-display);
+  font-weight: 400;
+  font-size: 34px;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  margin: 0 0 8px;
+}
+.ch-page__dek {
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ch-muted);
+  max-width: 64ch;
+  margin: 0 0 32px;
+}
+
+/* Two-column grid; a .ch-card--wide spans both. */
+.ch-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+@media (max-width: 760px) { .ch-grid { grid-template-columns: 1fr; } }
+
+/* The card: h2 (conclusion) → .ch-card__sub (legend + range) → svg → .ch-card__src */
+.ch-card {
+  background: var(--ch-paper-raised);
+  border: 1px solid var(--ch-rule);
+  border-radius: 8px;
+  padding: 24px 24px 18px;
+  min-width: 0;
+}
+.ch-card--wide { grid-column: 1 / -1; }
+.ch-card--dark {
+  /* literal on purpose: the custom-property overrides below apply to this
+     element too, so background: var(--ch-ink) would resolve to the LIGHT ink */
+  background: #171614;
+  color: #f0ede6;
+  --ch-ink: #f0ede6; --ch-muted: #b5b0a6; --ch-soft: #7d786f;
+  --ch-rule: rgba(240,237,230,.14); --ch-rule-strong: rgba(240,237,230,.32);
+  --ch-paper: #171614; --ch-paper-raised: #201f1c;
+  --ch-track: rgba(240,237,230,.10); --ch-quiet: #3d3a35;
+}
+.ch-card__title {
+  font-size: var(--ch-fs-title);
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
+  margin: 0 0 4px;
+}
+.ch-card__sub {
+  font-size: var(--ch-fs-sub);
+  color: var(--ch-muted);
+  line-height: 1.4;
+  margin: 0 0 14px;
+}
+.ch-card__src {
+  font-family: var(--ch-font-mono);
+  font-size: var(--ch-fs-note);
+  letter-spacing: 0.04em;
+  color: var(--ch-soft);
+  margin: 12px 0 0;
+}
+.ch-card__note {
+  font-size: var(--ch-fs-label);
+  color: var(--ch-muted);
+  line-height: 1.45;
+  margin: 10px 0 0;
+}
+/* Editorial split: a prose column beside a wide chart. */
+.ch-card--split { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 24px; align-items: start; }
+.ch-card--split > .ch-card__prose { font-size: 13px; line-height: 1.5; color: var(--ch-muted); }
+.ch-card--split > .ch-card__prose > h2 { color: var(--ch-ink); }
+@media (max-width: 760px) { .ch-card--split { grid-template-columns: 1fr; } }
+
+/* ── Sheets — full-page report slots (spec/06-sheets.md) ──────────────── */
+.ch-sheet { max-width: 1080px; margin: 0 auto; padding: 56px 40px 64px; display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 40px; }
+.ch-sheet--fixed { width: 600px; height: 1000px; padding: 40px 36px; display: block; overflow: hidden; box-sizing: border-box; }
+.ch-sheet__main { min-width: 0; }
+.ch-sheet__eyebrow { font-family: var(--ch-font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ch-soft); margin: 0 0 12px; }
+.ch-sheet__title { font-family: var(--ch-font-display); font-weight: 400; font-size: 40px; line-height: 1.1; letter-spacing: -0.015em; margin: 0 0 12px; }
+.ch-sheet__title b { font-weight: 400; font-style: italic; color: var(--ch-hero); }
+.ch-sheet__dek { font-size: 15px; line-height: 1.5; color: var(--ch-muted); max-width: 60ch; margin: 0 0 28px; }
+.ch-sheet__kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 16px; padding: 20px 0; border-top: 1px solid var(--ch-rule-strong); border-bottom: 1px solid var(--ch-rule); margin: 0 0 32px; }
+.ch-kpi__value { font-size: 30px; font-weight: 700; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; line-height: 1; margin: 0 0 6px; }
+.ch-kpi__name { font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ch-muted); margin: 0; }
+.ch-kpi__delta { font-family: var(--ch-font-mono); font-size: 11px; margin: 4px 0 0; color: var(--ch-muted); }
+.ch-kpi__delta--up { color: var(--ch-up); }
+.ch-kpi__delta--down { color: var(--ch-down); }
+.ch-sheet__section { margin: 0 0 32px; }
+.ch-sheet__kicker { font-family: var(--ch-font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ch-soft); margin: 0 0 6px; }
+.ch-sheet__claim { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.3; margin: 0 0 14px; }
+.ch-sheet__rail { font-size: 12.5px; line-height: 1.55; color: var(--ch-muted); }
+.ch-sheet__rail h3 { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ch-soft); margin: 0 0 8px; font-weight: 600; }
+.ch-sheet__rail-block { padding: 16px; background: var(--ch-paper-sunk); border-radius: 6px; margin: 0 0 16px; }
+.ch-sheet__rail a { color: var(--ch-ink); }
+.ch-sheet__foot { font-family: var(--ch-font-mono); font-size: 10px; letter-spacing: 0.04em; color: var(--ch-soft); border-top: 1px solid var(--ch-rule); padding-top: 12px; margin-top: 24px; }
+@media (max-width: 900px) { .ch-sheet { grid-template-columns: 1fr; } }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   3. SVG ROLES — every class the chart body may use
+   ══════════════════════════════════════════════════════════════════════════ */
+
+svg.ch { display: block; width: 100%; height: auto; overflow: visible; font-family: var(--ch-font-body); }
+svg.ch text { fill: var(--ch-ink); }
+
+/* Ground + frame */
+.ch-bg      { fill: var(--ch-paper-raised); }
+.ch-band    { fill: var(--ch-paper-sunk); }
+.ch-grid    { stroke: var(--ch-rule); stroke-width: var(--ch-sw-hair); fill: none; }
+.ch-axis    { stroke: var(--ch-rule-strong); stroke-width: var(--ch-sw-thin); fill: none; }
+.ch-tick    { stroke: var(--ch-rule-strong); stroke-width: var(--ch-sw-hair); }
+.ch-rule    { stroke: var(--ch-rule); stroke-width: var(--ch-sw-hair); fill: none; }
+.ch-target  { stroke: var(--ch-ink); stroke-width: var(--ch-sw-thin); stroke-dasharray: 3 3; fill: none; }
+
+/* Text roles */
+.ch-t-value { font-size: var(--ch-fs-value); font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.ch-t-big   { font-size: var(--ch-fs-big);   font-weight: 700; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.ch-t-label { font-size: var(--ch-fs-label); fill: var(--ch-ink); }
+.ch-t-axis  { font-size: var(--ch-fs-axis);  fill: var(--ch-muted); font-variant-numeric: tabular-nums; }
+.ch-t-note  { font-size: var(--ch-fs-note);  fill: var(--ch-soft); }
+.ch-t-mono  { font-family: var(--ch-font-mono); }
+.ch-t-muted { fill: var(--ch-muted); }
+.ch-t-soft  { fill: var(--ch-soft); }
+.ch-t-hero  { fill: var(--ch-hero); }
+.ch-t-inv   { fill: var(--ch-paper-raised); }
+.ch-t-up    { fill: var(--ch-up); }
+.ch-t-down  { fill: var(--ch-down); }
+.ch-t-end   { text-anchor: end; }
+.ch-t-mid   { text-anchor: middle; }
+
+/* Marks — fills */
+.ch-mark    { fill: var(--ch-data-1); }
+.ch-hero    { fill: var(--ch-hero); }
+.ch-quiet   { fill: var(--ch-quiet); }
+.ch-track   { fill: var(--ch-track); }
+.ch-s1 { fill: var(--ch-data-1); }  .ch-s2 { fill: var(--ch-data-2); }
+.ch-s3 { fill: var(--ch-data-3); }  .ch-s4 { fill: var(--ch-data-4); }
+.ch-s5 { fill: var(--ch-data-5); }  .ch-s6 { fill: var(--ch-data-6); }
+.ch-r1 { fill: var(--ch-ramp-1); }  .ch-r2 { fill: var(--ch-ramp-2); }
+.ch-r3 { fill: var(--ch-ramp-3); }  .ch-r4 { fill: var(--ch-ramp-4); }
+.ch-r5 { fill: var(--ch-ramp-5); }
+.ch-up   { fill: var(--ch-up); }   .ch-down { fill: var(--ch-down); }  .ch-flat { fill: var(--ch-flat); }
+.ch-up-tint { fill: var(--ch-up-tint); } .ch-down-tint { fill: var(--ch-down-tint); }
+.ch-fill    { fill-opacity: var(--ch-data-fill); }   /* combine: class="ch-s1 ch-fill" */
+.ch-mask    { fill: var(--ch-paper-raised); }         /* label halo behind text       */
+
+/* Marks — strokes */
+.ch-line    { fill: none; stroke: var(--ch-data-1); stroke-width: var(--ch-sw-line); stroke-linecap: round; stroke-linejoin: round; }
+.ch-line--hero  { stroke: var(--ch-hero); stroke-width: var(--ch-sw-bold); }
+.ch-line--quiet { stroke: var(--ch-quiet); }
+.ch-line--s2 { stroke: var(--ch-data-2); } .ch-line--s3 { stroke: var(--ch-data-3); }
+.ch-line--s4 { stroke: var(--ch-data-4); } .ch-line--s5 { stroke: var(--ch-data-5); }
+.ch-line--s6 { stroke: var(--ch-data-6); }
+.ch-line--up { stroke: var(--ch-up); } .ch-line--down { stroke: var(--ch-down); }
+.ch-stroke  { fill: none; stroke: var(--ch-ink); stroke-width: var(--ch-sw-thin); }
+.ch-stroke--hair { stroke-width: var(--ch-sw-hair); }
+.ch-stroke--soft { stroke: var(--ch-soft); }
+.ch-stroke--hero { stroke: var(--ch-hero); }
+.ch-ring    { fill: none; stroke: var(--ch-data-1); stroke-width: 10px; stroke-linecap: butt; }
+.ch-ring--track { stroke: var(--ch-track); }
+.ch-ring--hero  { stroke: var(--ch-hero); }
+.ch-dot     { fill: var(--ch-data-1); }
+.ch-dot--open { fill: var(--ch-paper-raised); stroke: var(--ch-data-1); stroke-width: var(--ch-sw-thin); }
+.ch-dot--hero { fill: var(--ch-hero); }
+.ch-dot--quiet { fill: var(--ch-quiet); }
+
+/* Density */
+.ch--compact { --ch-fs-axis: 8.5px; --ch-fs-label: 9px; --ch-fs-title: 14px; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   4. MOTION — CSS only. No JavaScript is needed to draw or to animate.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.ch-pop  { transform-box: fill-box; transform-origin: center; animation: ch-pop var(--ch-dur) var(--ch-ease-pop) both; }
+.ch-rise { transform-box: fill-box; transform-origin: bottom; animation: ch-rise var(--ch-dur) var(--ch-ease) both; }
+.ch-grow { transform-box: fill-box; transform-origin: left;   animation: ch-grow var(--ch-dur) var(--ch-ease) both; }
+.ch-fade { animation: ch-fade var(--ch-dur) ease both; }
+.ch-draw { stroke-dasharray: 2000; stroke-dashoffset: 2000; animation: ch-draw var(--ch-dur-slow) var(--ch-ease) forwards; }
+
+/* Stagger: add ch-d1 … ch-d12 (each step = --ch-stagger). */
+.ch-d1 { animation-delay: calc(var(--ch-stagger) * 1); }  .ch-d2 { animation-delay: calc(var(--ch-stagger) * 2); }
+.ch-d3 { animation-delay: calc(var(--ch-stagger) * 3); }  .ch-d4 { animation-delay: calc(var(--ch-stagger) * 4); }
+.ch-d5 { animation-delay: calc(var(--ch-stagger) * 5); }  .ch-d6 { animation-delay: calc(var(--ch-stagger) * 6); }
+.ch-d7 { animation-delay: calc(var(--ch-stagger) * 7); }  .ch-d8 { animation-delay: calc(var(--ch-stagger) * 8); }
+.ch-d9 { animation-delay: calc(var(--ch-stagger) * 9); }  .ch-d10 { animation-delay: calc(var(--ch-stagger) * 10); }
+.ch-d11 { animation-delay: calc(var(--ch-stagger) * 11); } .ch-d12 { animation-delay: calc(var(--ch-stagger) * 12); }
+
+@keyframes ch-pop  { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes ch-rise { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes ch-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes ch-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ch-draw { to { stroke-dashoffset: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .ch-pop, .ch-rise, .ch-grow, .ch-fade, .ch-draw { animation: none; stroke-dashoffset: 0; opacity: 1; transform: none; }
+}
+@media print {
+  .ch-pop, .ch-rise, .ch-grow, .ch-fade, .ch-draw { animation: none; stroke-dashoffset: 0; opacity: 1; transform: none; }
+  .ch-card { break-inside: avoid; }
+}
+/* ch:css:end */</style>
+</head>
+<body>
+<main class="ch-sheet">
+  <div class="ch-sheet__main">
+  <p class="ch-sheet__eyebrow">Fable &amp; Loom · Monthly operations · August 2026</p>
+  <h1 class="ch-sheet__title">A record month for orders, <b>paid for in shipping speed</b></h1>
+  <p class="ch-sheet__dek">August brought 14,208 orders and $1.21M of net revenue, both the highest in the company’s history, with the back-to-school send driving a late-month peak. The cost showed up in service: on-time shipping and support response both missed target, and support went off track in the final week.</p>
+
+  <div class="ch-sheet__kpis">
+    <div class="ch-kpi">
+      <p class="ch-kpi__value">14,208</p>
+      <p class="ch-kpi__name">Orders</p>
+      <p class="ch-kpi__delta ch-kpi__delta--up">+8.4% vs July</p>
+    </div>
+    <div class="ch-kpi">
+      <p class="ch-kpi__value">$1.21M</p>
+      <p class="ch-kpi__name">Net revenue</p>
+      <p class="ch-kpi__delta ch-kpi__delta--up">+6.1% vs July</p>
+    </div>
+    <div class="ch-kpi">
+      <p class="ch-kpi__value">94.2%</p>
+      <p class="ch-kpi__name">On-time shipping</p>
+      <p class="ch-kpi__delta ch-kpi__delta--down">−1.3 pts vs July</p>
+    </div>
+    <div class="ch-kpi">
+      <p class="ch-kpi__value">6.8%</p>
+      <p class="ch-kpi__name">Return rate</p>
+      <p class="ch-kpi__delta ch-kpi__delta--up">−0.4 pts vs July</p>
+    </div>
+  </div>
+
+  <section class="ch-sheet__section">
+    <p class="ch-sheet__kicker">01</p>
+    <p class="ch-sheet__claim">Orders built through the month and peaked on August 24.</p>
+    <figure class="ch-card ch-card--wide" data-ch-type="plain.column-time">
+      <h2 class="ch-card__title">Orders built through the month and peaked with the back-to-school send</h2>
+      <p class="ch-card__sub">Orders shipped per calendar day · count · 1–31 August 2026 · quiet columns are weekends</p>
+      <svg class="ch" viewBox="0 0 760 300" role="img" aria-labelledby="mo1-t mo1-d">
+        <title id="mo1-t">Orders per day, August 2026</title>
+        <desc id="mo1-d">Orders climbed through August from around 400 a day to a peak of 612 on the 24th, the day of the back-to-school email; the month closed with 14,208 orders.</desc>
+        <line class="ch-grid" x1="44" y1="190" x2="726" y2="190"/>
+        <text class="ch-t-axis ch-t-end" x="38" y="193">200</text>
+        <line class="ch-grid" x1="44" y1="130" x2="726" y2="130"/>
+        <text class="ch-t-axis ch-t-end" x="38" y="133">400</text>
+        <line class="ch-grid" x1="44" y1="70" x2="726" y2="70"/>
+        <text class="ch-t-axis ch-t-end" x="38" y="73">600</text>
+        <line class="ch-axis" x1="44" y1="250" x2="726" y2="250"/>
+        <g id="mo1-cols">
+          <rect class="ch-mark ch-rise ch-d1" x="47" y="131.5" width="16" height="118.5"><title>Aug 1 · 395</title></rect>
+          <rect class="ch-quiet ch-rise ch-d1" x="69" y="136" width="16" height="114"><title>Aug 2 · 380</title></rect>
+          <rect class="ch-quiet ch-rise ch-d1" x="91" y="148" width="16" height="102"><title>Aug 3 · 340</title></rect>
+          <rect class="ch-mark ch-rise ch-d2" x="113" y="150.4" width="16" height="99.6"><title>Aug 4 · 332</title></rect>
+          <rect class="ch-mark ch-rise ch-d2" x="135" y="127" width="16" height="123"><title>Aug 5 · 410</title></rect>
+          <rect class="ch-mark ch-rise ch-d2" x="157" y="122.8" width="16" height="127.2"><title>Aug 6 · 424</title></rect>
+          <rect class="ch-mark ch-rise ch-d3" x="179" y="118.6" width="16" height="131.4"><title>Aug 7 · 438</title></rect>
+          <rect class="ch-mark ch-rise ch-d3" x="201" y="124.3" width="16" height="125.7"><title>Aug 8 · 419</title></rect>
+          <rect class="ch-quiet ch-rise ch-d3" x="223" y="141.4" width="16" height="108.6"><title>Aug 9 · 362</title></rect>
+          <rect class="ch-quiet ch-rise ch-d4" x="245" y="145" width="16" height="105"><title>Aug 10 · 350</title></rect>
+          <rect class="ch-mark ch-rise ch-d4" x="267" y="118.6" width="16" height="131.4"><title>Aug 11 · 438</title></rect>
+          <rect class="ch-mark ch-rise ch-d4" x="289" y="114.4" width="16" height="135.6"><title>Aug 12 · 452</title></rect>
+          <rect class="ch-mark ch-rise ch-d5" x="311" y="110.2" width="16" height="139.8"><title>Aug 13 · 466</title></rect>
+          <rect class="ch-mark ch-rise ch-d5" x="333" y="112" width="16" height="138"><title>Aug 14 · 460</title></rect>
+          <rect class="ch-mark ch-rise ch-d5" x="355" y="128.2" width="16" height="121.8"><title>Aug 15 · 406</title></rect>
+          <rect class="ch-quiet ch-rise ch-d6" x="377" y="133.6" width="16" height="116.4"><title>Aug 16 · 388</title></rect>
+          <rect class="ch-quiet ch-rise ch-d6" x="399" y="106" width="16" height="144"><title>Aug 17 · 480</title></rect>
+          <rect class="ch-mark ch-rise ch-d6" x="421" y="101.8" width="16" height="148.2"><title>Aug 18 · 494</title></rect>
+          <rect class="ch-mark ch-rise ch-d7" x="443" y="97.6" width="16" height="152.4"><title>Aug 19 · 508</title></rect>
+          <rect class="ch-mark ch-rise ch-d7" x="465" y="93.4" width="16" height="156.6"><title>Aug 20 · 522</title></rect>
+          <rect class="ch-mark ch-rise ch-d7" x="487" y="112.3" width="16" height="137.7"><title>Aug 21 · 459</title></rect>
+          <rect class="ch-mark ch-rise ch-d8" x="509" y="121" width="16" height="129"><title>Aug 22 · 430</title></rect>
+          <rect class="ch-quiet ch-rise ch-d8" x="531" y="85" width="16" height="165"><title>Aug 23 · 550</title></rect>
+          <rect class="ch-hero ch-rise ch-d8" x="553" y="66.4" width="16" height="183.6"><title>Aug 24 · 612</title></rect>
+          <rect class="ch-mark ch-rise ch-d9" x="575" y="76.3" width="16" height="173.7"><title>Aug 25 · 579</title></rect>
+          <rect class="ch-mark ch-rise ch-d9" x="597" y="90.4" width="16" height="159.6"><title>Aug 26 · 532</title></rect>
+          <rect class="ch-mark ch-rise ch-d9" x="619" y="107.8" width="16" height="142.2"><title>Aug 27 · 474</title></rect>
+          <rect class="ch-mark ch-rise ch-d10" x="641" y="117.1" width="16" height="132.9"><title>Aug 28 · 443</title></rect>
+          <rect class="ch-mark ch-rise ch-d10" x="663" y="82.9" width="16" height="167.1"><title>Aug 29 · 557</title></rect>
+          <rect class="ch-quiet ch-rise ch-d10" x="685" y="80.5" width="16" height="169.5"><title>Aug 30 · 565</title></rect>
+          <rect class="ch-quiet ch-rise ch-d11" x="707" y="87.1" width="16" height="162.9"><title>Aug 31 · 543</title></rect>
+        </g>
+        <text class="ch-t-axis ch-t-mid" x="55" y="266">1</text>
+        <text class="ch-t-axis ch-t-mid" x="143" y="266">5</text>
+        <text class="ch-t-axis ch-t-mid" x="253" y="266">10</text>
+        <text class="ch-t-axis ch-t-mid" x="363" y="266">15</text>
+        <text class="ch-t-axis ch-t-mid" x="473" y="266">20</text>
+        <text class="ch-t-axis ch-t-mid" x="583" y="266">25</text>
+        <text class="ch-t-axis ch-t-mid" x="715" y="266">31</text>
+        <text class="ch-t-value ch-t-mid ch-t-hero ch-fade ch-d12" x="561" y="58.4">612</text>
+        <text class="ch-t-note ch-t-mid ch-fade ch-d12" x="561" y="34.4">back-to-school email · Aug 24</text>
+        <text class="ch-t-note" x="44" y="284">Weekend days are shown quiet · August 2026 · 14,208 orders in total</text>
+      </svg>
+      <p class="ch-card__src">Fable &amp; Loom order ledger · Shopify export · 2026-09-01</p>
+    </figure>
+  </section>
+
+  <section class="ch-sheet__section">
+    <p class="ch-sheet__kicker">02</p>
+    <p class="ch-sheet__claim">Two service targets were missed, both narrowly.</p>
+    <figure class="ch-card" data-ch-type="signal.bullet">
+      <h2 class="ch-card__title">Two of four service targets were missed, both by under three points</h2>
+      <p class="ch-card__sub">Actual (bar) against target (dashed tick) · percent · August 2026 · track spans 0–100</p>
+      <svg class="ch" viewBox="0 0 760 220" role="img" aria-labelledby="mo2-t mo2-d">
+        <title id="mo2-t">Four service measures against their August targets</title>
+        <desc id="mo2-d">Two of four service measures beat target in August: repeat-purchase share and email revenue share; on-time shipping and four-hour support response both fell short by about two points.</desc>
+        <text class="ch-t-note" x="200" y="12">0</text>
+        <text class="ch-t-note ch-t-end" x="700" y="12">100</text>
+        <g id="mo2-bars">
+          <rect class="ch-track" x="200" y="20" width="500" height="26"/>
+          <rect class="ch-track" x="200" y="64" width="500" height="26"/>
+          <rect class="ch-track" x="200" y="108" width="500" height="26"/>
+          <rect class="ch-track" x="200" y="152" width="500" height="26"/>
+        </g>
+        <g id="mo2-actual">
+          <rect class="ch-down ch-grow ch-d1" x="200" y="26" width="471" height="14"><title>On-time shipping · 94.2</title></rect>
+          <rect class="ch-mark ch-grow ch-d2" x="200" y="70" width="205" height="14"><title>Repeat-purchase share · 41.0</title></rect>
+          <rect class="ch-down ch-grow ch-d3" x="200" y="114" width="435" height="14"><title>Support answered in 4 h · 87.0</title></rect>
+          <rect class="ch-mark ch-grow ch-d4" x="200" y="158" width="140" height="14"><title>Email share of revenue · 28.0</title></rect>
+        </g>
+        <line class="ch-target" x1="680" y1="18" x2="680" y2="48"/>
+        <text class="ch-t-label ch-t-end" x="188" y="37">On-time shipping</text>
+        <text class="ch-t-axis ch-fade ch-d4 ch-t-down" x="712" y="37">94.2% <tspan class="ch-t-soft">of 96%</tspan></text>
+        <line class="ch-target" x1="390" y1="62" x2="390" y2="92"/>
+        <text class="ch-t-label ch-t-end" x="188" y="81">Repeat-purchase share</text>
+        <text class="ch-t-axis ch-fade ch-d5" x="712" y="81">41.0% <tspan class="ch-t-soft">of 38%</tspan></text>
+        <line class="ch-target" x1="650" y1="106" x2="650" y2="136"/>
+        <text class="ch-t-label ch-t-end" x="188" y="125">Support answered in 4 h</text>
+        <text class="ch-t-axis ch-fade ch-d6 ch-t-down" x="712" y="125">87.0% <tspan class="ch-t-soft">of 90%</tspan></text>
+        <line class="ch-target" x1="325" y1="150" x2="325" y2="180"/>
+        <text class="ch-t-label ch-t-end" x="188" y="169">Email share of revenue</text>
+        <text class="ch-t-axis ch-fade ch-d7" x="712" y="169">28.0% <tspan class="ch-t-soft">of 25%</tspan></text>
+        <text class="ch-t-note" x="200" y="204">Dashed tick = August target · bar in red text = below target</text>
+      </svg>
+      <p class="ch-card__src">Fable &amp; Loom ops scorecard · ShipStation, Gorgias, Klaviyo · 2026-09-01</p>
+    </figure>
+  </section>
+
+  <section class="ch-sheet__section">
+    <p class="ch-sheet__kicker">03</p>
+    <p class="ch-sheet__claim">Discounts and returns took fifteen percent of gross sales.</p>
+    <figure class="ch-card" data-ch-type="plain.waterfall">
+      <h2 class="ch-card__title">Discounts and returns took 15 cents of every gross dollar</h2>
+      <p class="ch-card__sub">Bridge from gross sales to net revenue · USD thousands · August 2026 · red = deduction, green = addition</p>
+      <svg class="ch" viewBox="0 0 760 280" role="img" aria-labelledby="mo3-t mo3-d">
+        <title id="mo3-t">Gross sales to net revenue, August 2026</title>
+        <desc id="mo3-d">Of 1,412 thousand dollars in gross sales, discounts and returns took 214 thousand and shipping subsidy 41 thousand; wholesale added 54 thousand, leaving net revenue of 1,211 thousand.</desc>
+        <line class="ch-grid" x1="60" y1="180" x2="732" y2="180"/>
+        <text class="ch-t-axis ch-t-end" x="54" y="183">500</text>
+        <line class="ch-grid" x1="60" y1="110" x2="732" y2="110"/>
+        <text class="ch-t-axis ch-t-end" x="54" y="113">1,000</text>
+        <line class="ch-grid" x1="60" y1="40" x2="732" y2="40"/>
+        <text class="ch-t-axis ch-t-end" x="54" y="43">1,500</text>
+        <line class="ch-axis" x1="60" y1="250" x2="732" y2="250"/>
+        <line class="ch-rule" x1="152" y1="52.32" x2="192" y2="52.32"/>
+        <line class="ch-rule" x1="264" y1="68.84" x2="304" y2="68.84"/>
+        <line class="ch-rule" x1="376" y1="82.28" x2="416" y2="82.28"/>
+        <line class="ch-rule" x1="488" y1="88.02" x2="528" y2="88.02"/>
+        <line class="ch-rule" x1="600" y1="80.46" x2="640" y2="80.46"/>
+        <g id="mo3-steps">
+          <rect class="ch-mark ch-rise ch-d1" x="80" y="52.32" width="72" height="197.68"><title>Gross sales · 1412</title></rect>
+          <rect class="ch-down ch-rise ch-d2" x="192" y="52.32" width="72" height="16.52"><title>Discounts · 118</title></rect>
+          <rect class="ch-down ch-rise ch-d3" x="304" y="68.84" width="72" height="13.44"><title>Returns · 96</title></rect>
+          <rect class="ch-down ch-rise ch-d4" x="416" y="82.28" width="72" height="5.74"><title>Shipping subsidy · 41</title></rect>
+          <rect class="ch-up ch-rise ch-d5" x="528" y="80.46" width="72" height="7.56"><title>Wholesale · 54</title></rect>
+          <rect class="ch-mark ch-rise ch-d6" x="640" y="80.46" width="72" height="169.54"><title>Net revenue · 1211</title></rect>
+        </g>
+        <text class="ch-t-label ch-t-mid ch-fade ch-d3" x="116" y="46.32">1,412</text>
+        <text class="ch-t-axis ch-t-mid" x="116" y="266">Gross sales</text>
+        <text class="ch-t-label ch-t-mid ch-fade ch-d4 ch-t-down" x="228" y="46.32">−118</text>
+        <text class="ch-t-axis ch-t-mid" x="228" y="266">Discounts</text>
+        <text class="ch-t-label ch-t-mid ch-fade ch-d5 ch-t-down" x="340" y="62.84">−96</text>
+        <text class="ch-t-axis ch-t-mid" x="340" y="266">Returns</text>
+        <text class="ch-t-label ch-t-mid ch-fade ch-d6 ch-t-down" x="452" y="76.28">−41</text>
+        <text class="ch-t-axis ch-t-mid" x="452" y="266">Shipping subsidy</text>
+        <text class="ch-t-label ch-t-mid ch-fade ch-d7 ch-t-up" x="564" y="74.46">+54</text>
+        <text class="ch-t-axis ch-t-mid" x="564" y="266">Wholesale</text>
+        <text class="ch-t-label ch-t-mid ch-fade ch-d8" x="676" y="74.46">1,211</text>
+        <text class="ch-t-axis ch-t-mid" x="676" y="266">Net revenue</text>
+      </svg>
+      <p class="ch-card__src">Fable &amp; Loom finance close · August 2026 · unaudited</p>
+    </figure>
+  </section>
+
+  <section class="ch-sheet__section">
+    <p class="ch-sheet__kicker">04</p>
+    <p class="ch-sheet__claim">Support went off track in the peak week; everything else held.</p>
+    <figure class="ch-card" data-ch-type="signal.status-grid">
+      <h2 class="ch-card__title">Support was the only function to go off track, and it did so in the peak week</h2>
+      <p class="ch-card__sub">One cell per function per week · state: on track, watch (!), off track (×) · weeks 1–4 of August 2026</p>
+      <svg class="ch" viewBox="0 0 760 260" role="img" aria-labelledby="mo4-t mo4-d">
+        <title id="mo4-t">Weekly health of six functions, August 2026</title>
+        <desc id="mo4-d">Email and the website stayed on track all month; customer support slipped to watch in weeks two and three and went off track in week four, when ticket volume followed the order peak.</desc>
+        <text class="ch-t-axis ch-t-mid" x="230.0" y="22">W1</text>
+        <text class="ch-t-axis ch-t-mid" x="298.0" y="22">W2</text>
+        <text class="ch-t-axis ch-t-mid" x="366.0" y="22">W3</text>
+        <text class="ch-t-axis ch-t-mid" x="434.0" y="22">W4</text>
+        <g id="mo4-cells">
+          <text class="ch-t-label ch-t-end" x="188" y="51">Fulfilment</text>
+          <rect class="ch-up ch-pop ch-d1" x="200" y="34" width="60" height="26" rx="2"><title>Fulfilment · W1 · on track</title></rect>
+          <rect class="ch-up ch-pop ch-d1" x="268" y="34" width="60" height="26" rx="2"><title>Fulfilment · W2 · on track</title></rect>
+          <rect class="ch-s2 ch-pop ch-d1" x="336" y="34" width="60" height="26" rx="2"><title>Fulfilment · W3 · watch</title></rect>
+          <text class="ch-t-label ch-t-inv ch-t-mid ch-fade ch-d3" x="366.0" y="52">!</text>
+          <rect class="ch-up ch-pop ch-d1" x="404" y="34" width="60" height="26" rx="2"><title>Fulfilment · W4 · on track</title></rect>
+          <text class="ch-t-label ch-t-end" x="188" y="85">Customer support</text>
+          <rect class="ch-up ch-pop ch-d2" x="200" y="68" width="60" height="26" rx="2"><title>Customer support · W1 · on track</title></rect>
+          <rect class="ch-s2 ch-pop ch-d2" x="268" y="68" width="60" height="26" rx="2"><title>Customer support · W2 · watch</title></rect>
+          <text class="ch-t-label ch-t-inv ch-t-mid ch-fade ch-d4" x="298.0" y="86">!</text>
+          <rect class="ch-s2 ch-pop ch-d2" x="336" y="68" width="60" height="26" rx="2"><title>Customer support · W3 · watch</title></rect>
+          <text class="ch-t-label ch-t-inv ch-t-mid ch-fade ch-d4" x="366.0" y="86">!</text>
+          <rect class="ch-down ch-pop ch-d2" x="404" y="68" width="60" height="26" rx="2"><title>Customer support · W4 · off track</title></rect>
+          <text class="ch-t-label ch-t-inv ch-t-mid ch-fade ch-d4" x="434.0" y="86">×</text>
+          <text class="ch-t-label ch-t-end" x="188" y="119">Paid social</text>
+          <rect class="ch-s2 ch-pop ch-d3" x="200" y="102" width="60" height="26" rx="2"><title>Paid social · W1 · watch</title></rect>
+          <text class="ch-t-label ch-t-inv ch-t-mid ch-fade ch-d5" x="230.0" y="120">!</text>
+          <rect class="ch-up ch-pop ch-d3" x="268" y="102" width="60" height="26" rx="2"><title>Paid social · W2 · on track</title></rect>
+          <rect class="ch-up ch-pop ch-d3" x="336" y="102" width="60" height="26" rx="2"><title>Paid social · W3 · on track</title></rect>
+          <rect class="ch-up ch-pop ch-d3" x="404" y="102" width="60" height="26" rx="2"><title>Paid social · W4 · on track</title></rect>
+          <text class="ch-t-label ch-t-end" x="188" y="153">Email</text>
+          <rect class="ch-up ch-pop ch-d4" x="200" y="136" width="60" height="26" rx="2"><title>Email · W1 · on track</title></rect>
+          <rect class="ch-up ch-pop ch-d4" x="268" y="136" width="60" height="26" rx="2"><title>Email · W2 · on track</title></rect>
+          <rect class="ch-up ch-pop ch-d4" x="336" y="136" width="60" height="26" rx="2"><title>Email · W3 · on track</title></rect>
+          <rect class="ch-up ch-pop ch-d4" x="404" y="136" width="60" height="26" rx="2"><title>Email · W4 · on track</title></rect>
+          <text class="ch-t-label ch-t-end" x="188" y="187">Inventory</text>
+          <rect class="ch-up ch-pop ch-d5" x="200" y="170" width="60" height="26" rx="2"><title>Inventory · W1 · on track</title></rect>
+          <rect class="ch-up ch-pop ch-d5" x="268" y="170" width="60" height="26" rx="2"><title>Inventory · W2 · on track</title></rect>
+          <rect class="ch-s2 ch-pop ch-d5" x="336" y="170" width="60" height="26" rx="2"><title>Inventory · W3 · watch</title></rect>
+          <text class="ch-t-label ch-t-inv ch-t-mid ch-fade ch-d7" x="366.0" y="188">!</text>
+          <rect class="ch-s2 ch-pop ch-d5" x="404" y="170" width="60" height="26" rx="2"><title>Inventory · W4 · watch</title></rect>
+          <text class="ch-t-label ch-t-inv ch-t-mid ch-fade ch-d7" x="434.0" y="188">!</text>
+          <text class="ch-t-label ch-t-end" x="188" y="221">Website</text>
+          <rect class="ch-up ch-pop ch-d6" x="200" y="204" width="60" height="26" rx="2"><title>Website · W1 · on track</title></rect>
+          <rect class="ch-up ch-pop ch-d6" x="268" y="204" width="60" height="26" rx="2"><title>Website · W2 · on track</title></rect>
+          <rect class="ch-up ch-pop ch-d6" x="336" y="204" width="60" height="26" rx="2"><title>Website · W3 · on track</title></rect>
+          <rect class="ch-up ch-pop ch-d6" x="404" y="204" width="60" height="26" rx="2"><title>Website · W4 · on track</title></rect>
+        </g>
+        <rect class="ch-up" x="200" y="244" width="10" height="10" rx="2"/>
+        <text class="ch-t-note" x="216" y="253">on track</text>
+        <rect class="ch-s2" x="280" y="244" width="10" height="10" rx="2"/>
+        <text class="ch-t-note" x="296" y="253">! watch</text>
+        <rect class="ch-down" x="360" y="244" width="10" height="10" rx="2"/>
+        <text class="ch-t-note" x="376" y="253">× off track</text>
+        <text class="ch-t-note" x="500" y="253">Customer support went off track in W4 as ticket volume followed the peak week.</text>
+      </svg>
+      <p class="ch-card__src">Fable &amp; Loom weekly ops review · 2026-08-31</p>
+    </figure>
+  </section>
+  </div>
+
+  <aside class="ch-sheet__rail">
+    <div class="ch-sheet__rail-block">
+      <h3>About</h3>
+      <p>Fable &amp; Loom is a fictional direct-to-consumer home-textiles brand. This monthly summarises operations for the leadership meeting on the first Monday of the month.</p>
+    </div>
+    <div class="ch-sheet__rail-block">
+      <h3>Method</h3>
+      <p>Orders and revenue come from the Shopify order ledger at close of 31 August. On-time shipping counts orders scanned by the carrier within two business days. Return rate is returns received in August over orders shipped in July. Targets are the FY2026 operating plan.</p>
+    </div>
+    <div class="ch-sheet__rail-block">
+      <h3>Definitions</h3>
+      <p><strong>Watch</strong> — a leading indicator missed its weekly threshold. <strong>Off track</strong> — a plan metric missed for the week and no recovery is scheduled.</p>
+    </div>
+    <div class="ch-sheet__rail-block">
+      <h3>Source</h3>
+      <p>Close pack and query notebook: <a href="#">fl-ops-2026-08.xlsx</a>. Wholesale revenue is recognised on invoice, not on shipment.</p>
+    </div>
+    <p class="ch-sheet__foot">2026-09-01 · Operations · v1.0</p>
+  </aside>
+</main>
+</body>
+</html>

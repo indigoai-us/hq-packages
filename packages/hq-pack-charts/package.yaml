@@ -1,0 +1,21 @@
+source: "github:indigoai-us/hq-packages#packages/hq-pack-charts"
+name: hq-pack-charts
+version: 0.1.0
+publisher: '@indigoai-us'
+access: public
+description: 'Editorial data charts and report sheets as self-contained HTML — token-driven, brand-bound, linted'
+requires:
+  hqCore: '>=12.0.0'
+recommends:
+  packs:
+    - hq-pack-design-styles   # brand binding; the default skin works without it
+    - hq-pack-diagrams        # shares the --dg-* skin; not required
+contributes:
+  workers: []
+  knowledge:
+    - charts
+  skills:
+    - chart
+  hooks: []
+  policies: []
+  commands: []

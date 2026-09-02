@@ -1,0 +1,294 @@
+# hq-pack-charts — chart type registry
+#
+# The single source of truth for what /chart can draw. README counts, the
+# selection table, and scripts/test-lint.py all derive from this file.
+#
+# families:
+#   ledger — record-level, slow read. One mark per record, honest units,
+#            marginalia. Long-form, papers, annual reviews.
+#   plain  — familiar silhouettes (bar, line, area, ring, scatter) rebuilt with
+#            countable ticks, hairlines and editorial type.
+#   signal — fast read. Big numbers, bold bars, deltas, status. Weekly reports,
+#            dashboards, "tell me in three seconds".
+#
+# tier:
+#   primary  — default pool. Compare at least three of these first.
+#   fallback — only when no primary can honestly encode the shape, and the
+#              reason is written down. Some data shapes bypass the audit
+#              (see spec/03-selection.md).
+#
+# status:
+#   spec    — has a card in the gallery file and can be drawn from it
+#   planned — reserved id, no card yet. Do not improvise it.
+
+version: 1
+
+families:
+  ledger:
+    gallery: assets/galleries/ledger.html
+    read_time: 20–60s
+  plain:
+    gallery: assets/galleries/plain.html
+    read_time: 10–30s
+  signal:
+    gallery: assets/galleries/signal.html
+    read_time: 3–10s
+
+types:
+  # ── ledger ───────────────────────────────────────────────────────────────
+  - id: ledger.dot-strip
+    name: Dot strip
+    family: ledger
+    tier: primary
+    status: spec
+    card: "One dot per record, by category"
+    shape: many records, one categorical key, optional numeric value
+    when: show the population, not a summary; ≤ 400 records
+    sibling: [plain.histogram]
+  - id: ledger.record-rows
+    name: Record rows
+    family: ledger
+    tier: primary
+    status: spec
+    card: "Every row printed, one tick per row"
+    shape: ≤ 60 named records, one numeric value each
+    when: audit, roster, governance writing where names matter
+    sibling: [plain.bar-ranked]
+  - id: ledger.unit-grid
+    name: Unit grid
+    family: ledger
+    tier: primary
+    status: spec
+    card: "One square per unit, grouped by owner"
+    shape: many-to-one attribution; counts per group ≤ 200 total
+    when: composition where each unit is a real thing (people, repos, orders)
+    sibling: [plain.ring]
+  - id: ledger.slope-pairs
+    name: Slope pairs
+    family: ledger
+    tier: primary
+    status: spec
+    card: "Before and after, one line per entity"
+    shape: ≤ 20 entities × exactly two periods
+    when: rank or value change between two moments
+    sibling: [signal.dumbbell]
+  - id: ledger.tick-distribution
+    name: Tick distribution
+    family: ledger
+    tier: primary
+    status: spec
+    card: "Every observation as a tick on the line"
+    shape: 1–6 groups × many numeric observations
+    when: spread and outliers per group, without summarising away the points
+    sibling: [plain.box-ticks]
+  - id: ledger.event-line
+    name: Event line
+    family: ledger
+    tier: primary
+    status: spec
+    card: "Dated events on one hairline"
+    shape: ≤ 40 dated events, optional category
+    when: chronology where density over time is the story
+    sibling: [plain.column-time]
+  - id: ledger.small-multiples
+    name: Small multiples
+    family: ledger
+    tier: primary
+    status: spec
+    card: "The same tiny chart, once per entity"
+    shape: 4–16 entities × a short series
+    when: compare shapes of trend across entities, not exact values
+    sibling: [plain.line]
+  - id: ledger.column-roster
+    name: Column roster
+    family: ledger
+    tier: primary
+    status: spec
+    card: "Names stacked under their owner"
+    shape: many-to-one, ≤ 50 named items across ≤ 8 owners
+    when: who owns what, printed so every name is present
+    sibling: [ledger.unit-grid]
+  - id: ledger.parallel-lines
+    name: Parallel lines
+    family: ledger
+    tier: fallback
+    status: spec
+    card: "One entity across several measures"
+    shape: ≤ 12 entities × 3–6 continuous measures
+    when: profile comparison; bypasses the primary audit
+    sibling: []
+  - id: ledger.year-heat
+    name: Year heat
+    family: ledger
+    tier: fallback
+    status: spec
+    card: "Fifty-two weeks by seven days"
+    shape: one daily value for a whole year
+    when: seasonality and streaks; bypasses the primary audit
+    sibling: []
+
+  # ── plain ────────────────────────────────────────────────────────────────
+  - id: plain.bar-ranked
+    name: Ranked bars
+    family: plain
+    tier: primary
+    status: spec
+    card: "Sorted, labelled, one bar per category"
+    shape: ≤ 15 categories × one value
+    when: which is biggest, and by how much
+    sibling: [ledger.record-rows, signal.bar-delta]
+  - id: plain.column-time
+    name: Time columns
+    family: plain
+    tier: primary
+    status: spec
+    card: "One column per period"
+    shape: 6–36 periods × one value
+    when: level over time where each period is a discrete count
+    sibling: [plain.line]
+  - id: plain.line
+    name: Line
+    family: plain
+    tier: primary
+    status: spec
+    card: "One or two lines, end-labelled"
+    shape: 8–120 points × 1–3 series
+    when: continuous trend; the shape matters more than any single value
+    sibling: [plain.column-time, ledger.small-multiples]
+  - id: plain.area-stacked
+    name: Stacked area
+    family: plain
+    tier: fallback
+    status: spec
+    card: "Composition over time, total on top"
+    shape: 2–5 series over a continuous axis where the total must also read
+    when: bypasses the primary audit for this exact shape
+    sibling: []
+  - id: plain.ring
+    name: Ring
+    family: plain
+    tier: primary
+    status: spec
+    card: "Share of a whole, one number in the middle"
+    shape: 2–5 parts of one whole
+    when: one part-to-whole; never for comparing many slices
+    sibling: [ledger.unit-grid, plain.bar-ranked]
+  - id: plain.scatter
+    name: Scatter
+    family: plain
+    tier: primary
+    status: spec
+    card: "Two measures, one dot per entity"
+    shape: 10–300 entities × two numeric measures, optional label
+    when: relationship, clusters, and outliers
+    sibling: [ledger.dot-strip]
+  - id: plain.histogram
+    name: Histogram
+    family: plain
+    tier: primary
+    status: spec
+    card: "Counted into bins"
+    shape: many numeric observations, one variable
+    when: shape of a distribution when records are too many to print
+    sibling: [ledger.tick-distribution]
+  - id: plain.waterfall
+    name: Waterfall
+    family: plain
+    tier: primary
+    status: spec
+    card: "From start to end, step by step"
+    shape: a start, ≤ 8 signed steps, an end
+    when: bridge or decomposition (gross to net, plan to actual)
+    sibling: []
+  - id: plain.box-ticks
+    name: Box with ticks
+    family: plain
+    tier: fallback
+    status: spec
+    card: "Five-number summary with the outliers shown"
+    shape: 2–8 groups × five-number summary + outliers
+    when: bypasses the primary audit for this exact shape
+    sibling: [ledger.tick-distribution]
+  - id: plain.candles
+    name: Candles
+    family: plain
+    tier: fallback
+    status: planned
+    card: "Open, high, low, close"
+    shape: OHLC per period
+    when: bypasses the primary audit for this exact shape
+    sibling: []
+
+  # ── signal ───────────────────────────────────────────────────────────────
+  - id: signal.big-number
+    name: Big number
+    family: signal
+    tier: primary
+    status: spec
+    card: "The number, the delta, the range"
+    shape: 1–4 headline metrics with a comparison value
+    when: the answer is a number and the reader has three seconds
+    sibling: [signal.kpi-spark]
+  - id: signal.kpi-spark
+    name: KPI with sparkline
+    family: signal
+    tier: primary
+    status: spec
+    card: "Number, delta, and the last twelve periods"
+    shape: 1–6 metrics × short series
+    when: dashboards and weekly reports
+    sibling: [signal.big-number, ledger.small-multiples]
+  - id: signal.bullet
+    name: Bullet bars
+    family: signal
+    tier: primary
+    status: spec
+    card: "Actual against target, on a range"
+    shape: ≤ 8 measures × actual, target, and a qualitative range
+    when: progress to goal for several things at once
+    sibling: [signal.progress-ring]
+  - id: signal.bar-delta
+    name: Ranked bars with delta
+    family: signal
+    tier: primary
+    status: spec
+    card: "Ranked now, and how each moved"
+    shape: ≤ 12 categories × current value + change
+    when: leaderboard with movement
+    sibling: [plain.bar-ranked, signal.dumbbell]
+  - id: signal.progress-ring
+    name: Progress ring
+    family: signal
+    tier: primary
+    status: spec
+    card: "How far along, one ring each"
+    shape: 1–6 fractions of a goal
+    when: completion or utilisation at a glance
+    sibling: [signal.bullet]
+  - id: signal.dumbbell
+    name: Dumbbell
+    family: signal
+    tier: primary
+    status: spec
+    card: "Then and now, one bar per row"
+    shape: ≤ 15 rows × two values
+    when: change between two periods where the size of the gap is the point
+    sibling: [ledger.slope-pairs]
+  - id: signal.status-grid
+    name: Status grid
+    family: signal
+    tier: primary
+    status: spec
+    card: "Rows by columns, each cell a state"
+    shape: ≤ 12 rows × ≤ 12 columns × a small ordinal state
+    when: health boards, coverage matrices, rollout progress
+    sibling: [ledger.year-heat]
+  - id: signal.share-bar
+    name: Share bar
+    family: signal
+    tier: primary
+    status: spec
+    card: "One bar, split by part"
+    shape: 2–6 parts of one whole, optionally × a few rows
+    when: composition where the ring would waste space
+    sibling: [plain.ring]
