@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Isolated bin must exec work-mesh.mjs (not hq-work-mesh.mjs) and --help must work.
+# Legacy isolated-bin helper may still be copied manually, but --help must not
+# advertise listen/watch (removed in 0.2.0). apply.sh no longer installs it.
 set -euo pipefail
 PACK="$(cd "$(dirname "$0")/../.." && pwd)"
 TMP="$(mktemp -d)"
@@ -21,5 +22,16 @@ if grep -q 'hq-work-mesh.mjs' "$HOME/.hq/work-mesh/bin/work-mesh.sh" && \
 fi
 
 out="$("$HOME/.hq/work-mesh/bin/work-mesh.sh" --help)"
-echo "$out" | grep -q listen
+echo "$out" | grep -q doctor
+echo "$out" | grep -q 'hq mesh daemon'
+! echo "$out" | grep -E '^  listen ' >/dev/null
+! echo "$out" | grep -E '^  watch ' >/dev/null
+
+set +e
+err="$("$HOME/.hq/work-mesh/bin/work-mesh.sh" listen 2>&1)"
+code=$?
+set -e
+test "$code" -eq 2
+echo "$err" | grep -q 'hq mesh daemon'
+
 echo "isolated-bin.test: ok"
