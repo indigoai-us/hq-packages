@@ -61,6 +61,27 @@ echo "$out" | grep -q "no longer installed"
 out2="$(bash "$PACK/scripts/apply.sh")"
 echo "$out2" | grep -q "no legacy LaunchAgent plist"
 
+# Reused-PID case: pidfile points at a live process that is NOT the legacy
+# listener. Fake /proc cmdline (like launchctl above) so ownership check fails;
+# apply must remove the pidfile without signalling the process.
+sleep 120 &
+reuse_pid=$!
+trap 'kill "$reuse_pid" 2>/dev/null || true; rm -rf "$TMP"' EXIT
+mkdir -p "$HOME/.hq/work-mesh" "$TMP/proc/$reuse_pid"
+echo "$reuse_pid" >"$HOME/.hq/work-mesh/listen.pid"
+# Unrelated cmdline fixture (null-separated, as real /proc/<pid>/cmdline).
+printf 'sleep\0%s\0' '120' >"$TMP/proc/$reuse_pid/cmdline"
+export HQ_WORK_MESH_PROC_ROOT="$TMP/proc"
+
+out3="$(bash "$PACK/scripts/apply.sh")"
+echo "$out3" | grep -q "pid $reuse_pid in listen.pid was not owned by legacy listener"
+test ! -f "$HOME/.hq/work-mesh/listen.pid"
+kill -0 "$reuse_pid" 2>/dev/null
+kill "$reuse_pid" 2>/dev/null || true
+wait "$reuse_pid" 2>/dev/null || true
+trap 'rm -rf "$TMP"' EXIT
+unset HQ_WORK_MESH_PROC_ROOT
+
 # Reject listen/watch verbs.
 set +e
 err="$(node "$PACK/scripts/hq-work-mesh.mjs" listen 2>&1)"

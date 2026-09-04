@@ -29,13 +29,13 @@ hq mesh daemon install | status | doctor | uninstall
 hq mesh daemon run          # foreground
 
 # Session (hooks enqueue most kinds; agents use these for Board signals)
-hq mesh session task-status --session <sid> --enqueue --seq <n> --task-id <id> --status queued|in_progress|review|done
-hq mesh session blocked --session <sid> --enqueue --seq <n> --reason "<short>"
-hq mesh session note --session <sid> --enqueue --seq <n> --summary "<<=280 chars>"
+hq mesh session task-status --session-id <sid> --enqueue --seq <n> --task-id <id> --status queued|in_progress|review|done
+hq mesh session blocked --session-id <sid> --enqueue --seq <n> --reason "<short>"
+hq mesh session note --session-id <sid> --enqueue --seq <n> --summary "<<=280 chars>"
 hq mesh session flush
 
 # Context
-hq mesh context reconcile --session <sid>
+hq mesh context reconcile --observation-file <path>
 hq mesh context default get|set|clear
 hq mesh context untracked <sessionId>
 hq mesh context organize --session <sid> --decision <id> --option <id>

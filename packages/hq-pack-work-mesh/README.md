@@ -31,12 +31,12 @@ legacy LaunchAgent `ai.getindigo.hq-work-mesh-listen`. It does **not** install
 bash core/scripts/hq-work-mesh-genesis.sh --company indigo my-project
 
 # Manual session signals (presence/turns are automatic via hooks + daemon)
-hq mesh session task-status --session <sid> --enqueue --seq <n> --task-id US-001 --status in_progress
-hq mesh session blocked --session <sid> --enqueue --seq <n> --reason "waiting on design"
-hq mesh session note --session <sid> --enqueue --seq <n> --summary "shipped card coalescing"
+hq mesh session task-status --session-id <sid> --enqueue --seq <n> --task-id US-001 --status in_progress
+hq mesh session blocked --session-id <sid> --enqueue --seq <n> --reason "waiting on design"
+hq mesh session note --session-id <sid> --enqueue --seq <n> --summary "shipped card coalescing"
 
 # Context
-hq mesh context reconcile --session <sid>
+hq mesh context reconcile --observation-file <path>
 hq mesh context organize --session <sid> --decision <id> --option <id>
 ```
 

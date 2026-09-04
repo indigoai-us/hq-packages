@@ -24,6 +24,25 @@ OLD_LISTEN_PIDFILE="$HOME_DIR/.hq/work-mesh/listen.pid"
 
 echo "apply: pack=$PACK_ROOT hq=$HQ_ROOT"
 
+# Resolve process command line. HQ_WORK_MESH_PROC_ROOT overrides /proc for tests.
+legacy_listen_cmdline() {
+  local pid="$1"
+  local proc_root="${HQ_WORK_MESH_PROC_ROOT:-/proc}"
+  if [ -r "${proc_root}/${pid}/cmdline" ]; then
+    tr '\0' ' ' <"${proc_root}/${pid}/cmdline" 2>/dev/null || true
+    return 0
+  fi
+  ps -o command= -p "$pid" 2>/dev/null || true
+}
+
+legacy_listen_cmdline_owned() {
+  local cmdline="$1"
+  case "$cmdline" in
+    *"hq-work-mesh.mjs listen"*|*"/.hq/work-mesh/bin"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 # 1. Unload and remove the legacy listen LaunchAgent (idempotent).
 unload_old_listen() {
   if command -v launchctl >/dev/null 2>&1; then
@@ -41,14 +60,25 @@ unload_old_listen() {
     echo "apply: no legacy LaunchAgent plist for $OLD_LISTEN_LABEL"
   fi
 
-  # Linux / nohup leftover from install-listen.sh
+  # Linux / nohup leftover from install-listen.sh.
+  # Only SIGTERM when the live process cmdline still looks like the legacy listener
+  # (PID reuse must not kill an unrelated process).
   if [ -f "$OLD_LISTEN_PIDFILE" ]; then
     old_pid="$(cat "$OLD_LISTEN_PIDFILE" 2>/dev/null || true)"
     if [ -n "${old_pid:-}" ] && kill -0 "$old_pid" 2>/dev/null; then
-      kill "$old_pid" 2>/dev/null || true
+      cmdline="$(legacy_listen_cmdline "$old_pid")"
+      if legacy_listen_cmdline_owned "$cmdline"; then
+        kill "$old_pid" 2>/dev/null || true
+        rm -f "$OLD_LISTEN_PIDFILE"
+        echo "apply: cleared legacy listen pidfile"
+      else
+        rm -f "$OLD_LISTEN_PIDFILE"
+        echo "apply: pid $old_pid in listen.pid was not owned by legacy listener; removed stale pidfile"
+      fi
+    else
+      rm -f "$OLD_LISTEN_PIDFILE"
+      echo "apply: cleared legacy listen pidfile"
     fi
-    rm -f "$OLD_LISTEN_PIDFILE"
-    echo "apply: cleared legacy listen pidfile"
   fi
 }
 unload_old_listen
