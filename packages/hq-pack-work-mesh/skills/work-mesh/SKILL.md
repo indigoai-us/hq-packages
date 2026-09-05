@@ -50,6 +50,10 @@ bash core/scripts/hq-work-mesh-genesis.sh --company <slug> <project>
 `apply.sh` inserts `/prd` Step 5.6b so cloud-backed `/prd` runs genesis after
 board upsert (policy `hq-work-mesh-prd-genesis`).
 
+## Progress posts need a real summary
+
+`hq-work-mesh.mjs progress` / `report` has no placeholder default. With no `--summary` and no task transition the call is a no-op (`posted:false`, `skipReason:no_summary`, exit 0). A `--story`/`--task` transition without a summary posts a synthesized `"US-003 → doing: Title"` line. The same summary for the same project inside 10 minutes is coalesced client-side (`skipReason:coalesced`; last posts live in `~/.hq/work-mesh/cache/last-progress.json`, bounded to 200 entries). `start`, `blocked`, and `done` are unaffected.
+
 ## Rules
 
 - MQTT and events are metadata-only. Never put prompts, transcripts, tokens, or credentials on the wire or in spool lines.

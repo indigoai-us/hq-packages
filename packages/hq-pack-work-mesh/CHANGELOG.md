@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- `progress` / `report` no longer posts a placeholder ("Project work is in
+  progress.") when `--summary` is missing. No summary and no task transition
+  is a no-op (`posted:false`, `skipReason:no_summary`, exit 0); a task
+  transition without a summary posts a synthesized `"US-003 → doing: Title"`
+  line; an identical summary for the same project inside 10 minutes is
+  coalesced client-side (`skipReason:coalesced`). Last posts are recorded in
+  `~/.hq/work-mesh/cache/last-progress.json` (bounded to 200 entries,
+  corrupt-file tolerant). New exported helpers: `decideProgressPost`,
+  `readLastProgress`, `recordLastProgress`. `claim` / `blocked` / `done`
+  keep their defaults.
+
 ## 0.2.0 — 2026-09-04
 
 - **Breaking:** removed `listen` and `watch` verbs from `hq-work-mesh.mjs`.

@@ -12,6 +12,7 @@ import {
   createBoundedLruSet,
   createReconcileCoordinator,
   cursorBinding,
+  decideProgressPost,
   deterministicBackoffMs,
   fetchRealtimeConfig,
   loadBoundCursor,
@@ -22,6 +23,8 @@ import {
   parseRealtimeV2Wake,
   parseWorkFeed,
   readBoundedResponseText,
+  readLastProgress,
+  recordLastProgress,
   reconcileV2,
   redactedDiagnostic,
   redactedRealtimeConfig,
@@ -570,4 +573,76 @@ test("project rollups remain linear with 10,000 distinct owners on one project",
     distinctOwners: 10_000,
     elapsedMs: Number(elapsedMs.toFixed(2)),
   }));
+});
+
+test("progress post with no summary and no task transition is skipped", () => {
+  const decision = decideProgressPost({ eventKind: "progress", summary: "   ", nowMs: 1_000 });
+  assert.deepEqual(decision, { post: false, reason: "no_summary", summary: "" });
+});
+
+test("progress post with a task transition synthesizes a specific summary", () => {
+  const decision = decideProgressPost({
+    eventKind: "progress",
+    taskId: "US-003",
+    taskStatus: "in_progress",
+    taskTitle: "Create company card",
+    nowMs: 1_000,
+  });
+  assert.deepEqual(decision, { post: true, reason: "ok", summary: "US-003 → doing: Create company card" });
+  const untitled = decideProgressPost({ eventKind: "progress", taskId: "US-004", taskStatus: "done", nowMs: 1_000 });
+  assert.deepEqual(untitled, { post: true, reason: "ok", summary: "US-004 → done" });
+});
+
+test("identical progress summary inside the window is coalesced", () => {
+  const lastPost = { summary: "US-003 → doing: Create company card", at: 60_000 };
+  const decision = decideProgressPost({
+    eventKind: "progress",
+    taskId: "US-003",
+    taskStatus: "doing",
+    taskTitle: "Create company card",
+    lastPost,
+    nowMs: 60_000 + 5 * 60 * 1000,
+  });
+  assert.deepEqual(decision, { post: false, reason: "coalesced", summary: "US-003 → doing: Create company card" });
+  const explicit = decideProgressPost({ eventKind: "progress", summary: "Tests green", lastPost: { summary: "Tests green", at: 0 }, nowMs: 1_000 });
+  assert.equal(explicit.post, false);
+  assert.equal(explicit.reason, "coalesced");
+});
+
+test("different summary or a post outside the window still posts", () => {
+  const lastPost = { summary: "Tests green", at: 0 };
+  const different = decideProgressPost({ eventKind: "progress", summary: "Deploy verified", lastPost, nowMs: 1_000 });
+  assert.deepEqual(different, { post: true, reason: "ok", summary: "Deploy verified" });
+  const stale = decideProgressPost({ eventKind: "progress", summary: "Tests green", lastPost, nowMs: 10 * 60 * 1000 });
+  assert.deepEqual(stale, { post: true, reason: "ok", summary: "Tests green" });
+  const custom = decideProgressPost({ eventKind: "progress", summary: "Tests green", lastPost, nowMs: 5_000, windowMs: 1_000 });
+  assert.equal(custom.post, true);
+});
+
+test("claim, blocked, and done posts are unaffected by the progress gate", () => {
+  const lastPost = { summary: "", at: 0 };
+  for (const eventKind of ["claim", "blocked", "done", "note"]) {
+    const decision = decideProgressPost({ eventKind, summary: "", lastPost, nowMs: 1 });
+    assert.equal(decision.post, true, eventKind);
+    assert.equal(decision.reason, "ok", eventKind);
+  }
+});
+
+test("last-progress store is bounded and tolerates a corrupt file", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "work-mesh-last-progress-"));
+  const file = path.join(dir, "last-progress.json");
+  fs.writeFileSync(file, "{not json");
+  assert.deepEqual(readLastProgress(file), {});
+  const written = recordLastProgress("cmp_a/project-a", "first", 1_000, file, 3);
+  assert.deepEqual(written, { "cmp_a/project-a": { summary: "first", at: 1_000 } });
+  for (let index = 0; index < 5; index += 1) {
+    recordLastProgress(`cmp_a/project-${index}`, `s${index}`, 2_000 + index, file, 3);
+  }
+  const store = readLastProgress(file);
+  assert.equal(Object.keys(store).length, 3);
+  assert.equal(store["cmp_a/project-4"].summary, "s4");
+  assert.equal(store["cmp_a/project-a"], undefined, "oldest entry evicted first");
+  fs.writeFileSync(file, JSON.stringify({ ok: { summary: "x", at: 5 }, bad: { summary: "y", at: "nope" }, worse: null, arr: [1] }));
+  assert.deepEqual(readLastProgress(file), { ok: { summary: "x", at: 5 } });
+  assert.deepEqual(readLastProgress(path.join(dir, "missing.json")), {});
 });
