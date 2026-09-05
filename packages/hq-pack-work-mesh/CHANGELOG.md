@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.0 — 2026-09-04
+
+- **Breaking:** removed `listen` and `watch` verbs from `hq-work-mesh.mjs`.
+  Presence, spool flush, and MQTT are owned by **`hq mesh daemon`** (hq-cli).
+  Install with `hq mesh daemon install`; check with `hq mesh daemon status`.
+- Deleted `scripts/install-listen.sh` and `hooks/SessionStart/60-work-mesh-bin.sh`.
+- `apply.sh` no longer installs the isolated `~/.hq/work-mesh/bin` listen
+  daemon. On apply it idempotently unloads and removes the legacy LaunchAgent
+  `ai.getindigo.hq-work-mesh-listen` (and clears a leftover Linux listen pidfile).
+- Package still provides genesis (`hq-work-mesh-genesis.sh`), doctor, and Board
+  story helpers; docs and the skill point operators at the new CLI verbs.
+
 ## 0.1.5 — 2026-08-17
 
 - `apply.sh` now inserts `/prd` Step 5.6b (work-mesh genesis) into local

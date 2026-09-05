@@ -77,10 +77,10 @@ Commands:
   blocked    Append a blocked event to the project thread
   done       Append a done event to the project thread
   note       Append a note event to the project thread
-  watch      Subscribe to work-mesh MQTT topics and update the machine cache
-  listen     Alias for watch — the cache service (doorbell in, files out)
   story      PATCH one Board story status (queued|in_progress|review|done)
   doctor     Audit local projects vs mesh, warm cache; --apply repairs (paced)
+
+Deprecated (removed in 0.2.0): listen and watch. Use \`hq mesh daemon\` instead.
 
 Options:
   --company <slug|uid>     Company slug or cloud uid
@@ -98,9 +98,7 @@ Options:
   --json                   Print machine-readable JSON
   --silent                 Suppress human-readable output
   --dry-run                Resolve inputs without writing
-  --once                   For watch/listen: exit after the first MQTT message
-  --timeout-ms <ms>        For watch/listen: exit after this many milliseconds
-  --cache-file <path>      For watch/listen/check: live cache path
+  --cache-file <path>      For check: live cache path
   --apply                  Doctor: PUT missing/stale views + ensure channels (paced)
   --cache-only             Doctor: GET + write cache only (never PUT)
   --all                    Doctor: include project dirs without prd.json
@@ -120,7 +118,6 @@ Environment:
   HQ_PRO_API_URL=<url>         Fallback hq-pro API base URL
   HQ_WORK_MESH_TOKEN=<jwt>     Use a non-refreshable bearer token instead of HQ auth cache
   HQ_WORK_MESH_STRICT=1        Return non-zero on auth/network/API failures
-  HQ_WORK_MESH_MQTT_MODULE=<path|name>  MQTT module override for watch
 `;
 }
 
@@ -213,7 +210,6 @@ function normalizeCommand(command) {
   if (command === "status") return "check";
   if (command === "report") return "progress";
   if (command === "finish" || command === "complete" || command === "completed") return "done";
-  if (command === "listen") return "watch";
   if (command === "audit") return "doctor";
   return command;
 }
@@ -2555,7 +2551,15 @@ async function main() {
     return;
   }
 
-  if (!["check", "start", "progress", "blocked", "done", "note", "watch", "story", "doctor", "warm"].includes(command)) {
+  if (command === "listen" || command === "watch") {
+    console.error(
+      "work-mesh: listen/watch were removed in 0.2.0. Install and run the hq-cli daemon instead:\n  hq mesh daemon install\n  hq mesh daemon status",
+    );
+    process.exitCode = 2;
+    return;
+  }
+
+  if (!["check", "start", "progress", "blocked", "done", "note", "story", "doctor", "warm"].includes(command)) {
     console.error(usage());
     process.exitCode = 2;
     return;
@@ -2583,7 +2587,7 @@ async function main() {
     return;
   }
 
-  if (!["check", "watch"].includes(command) && !opts.project) {
+  if (command !== "check" && !opts.project) {
     failSoft(opts, "project is required");
     return;
   }
@@ -2593,29 +2597,6 @@ async function main() {
     auth = await resolveAuth();
   } catch (err) {
     failSoft(opts, "auth unavailable", err instanceof Error ? err.message : err);
-    return;
-  }
-
-  if (command === "watch") {
-    let company;
-    if (opts.company) {
-      try {
-        company = await resolveCompanyUid(auth.apiUrl, auth.token, opts.company);
-      } catch (err) {
-        failSoft(opts, "company unavailable", err instanceof Error ? err.message : err, [auth.token]);
-        return;
-      }
-    }
-    let releaseCacheLock;
-    try {
-      opts.cache_file = canonicalDestination(liveCacheFile(opts));
-      releaseCacheLock = acquireCacheLock(opts);
-      await watchWorkMesh(auth, opts, company);
-    } catch (err) {
-      failSoft(opts, "watch failed", err instanceof Error ? err.message : err, [auth.token]);
-    } finally {
-      releaseCacheLock?.();
-    }
     return;
   }
 

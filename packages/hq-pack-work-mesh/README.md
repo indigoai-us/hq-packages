@@ -1,35 +1,28 @@
 # hq-pack-work-mesh
 
-Upgrade a local HQ so it works with the live work mesh — without waiting for hq-core promotion.
+Dogfood pack for Work Mesh genesis and Board helpers. **0.2.0** removes the
+legacy `listen` / `watch` cache daemon. Presence and spool flush live in
+**hq-cli**:
 
-Installs the listen cache service, genesis on `/prd`, Board/Status snapshot helpers, and an isolated agent-box listener. MQTT stays ids-only. Apps and agents read `~/.hq/work-mesh/cache/`.
+```bash
+hq mesh daemon install
+hq mesh daemon status
+hq mesh daemon doctor
+```
 
-## Install (another HQ / teammate)
+## Install
 
 From the HQ root:
 
 ```bash
 hq install github:indigoai-us/hq-packages#packages/hq-pack-work-mesh --allow-hooks
 bash core/packages/hq-pack-work-mesh/scripts/apply.sh
+hq mesh daemon install
 ```
 
-Git install (no npm). `private: true` on purpose: this pack stays off the public npm feed until it is promoted into hq-core.
-
-`hq install` copies the pack into `core/packages/hq-pack-work-mesh/` and runs `scan-packages.sh` (skills, command, policies, namespaced scripts). `apply.sh` then drops the isolated helper at `~/.hq/work-mesh/bin` so `/update-hq` cannot roll listen back to a July `core/scripts/work-mesh.sh`.
-
-On a local dogfood tree that already symlinks `packages/source/hq-pack-work-mesh`, just run `apply.sh` after you edit it. Do **not** re-run `hq install` there; it would replace the symlink with a copy.
-
-On an **agent box** (no desktop MQTT):
-
-```bash
-bash core/packages/hq-pack-work-mesh/scripts/install-listen.sh
-```
-
-That installs the npm `mqtt` **client** under `~/.hq/work-mesh/runtime` and detaches listen (LaunchAgent on macOS, nohup on Linux). Do not install a broker. Deacon is this same path: `node ~/.hq/work-mesh/bin/work-mesh.mjs listen` as `ec2-user`.
-
-Skip `install-listen` on a Mac that already runs HQ desktop MQTT. Two cache writers will fight. Pass `--force` only if you mean to replace an isolated listen you own.
-
-`apply.sh` / `install-listen.sh` never overwrite `hq-agent/core` or cloud-init user-data.
+`apply.sh` wires genesis into local PRD skills and **unloads/removes** any
+legacy LaunchAgent `ai.getindigo.hq-work-mesh-listen`. It does **not** install
+`~/.hq/work-mesh/bin` or start a Node listen process.
 
 ## After install
 
@@ -37,52 +30,35 @@ Skip `install-listen` on a Mac that already runs HQ desktop MQTT. Two cache writ
 # New project → mesh thread + channel + Board snapshot
 bash core/scripts/hq-work-mesh-genesis.sh --company indigo my-project
 
-# Local mesh doctor (audit + warm cache; no doorbells)
-bash ~/.hq/work-mesh/bin/work-mesh.sh doctor --company indigo
-# Repair missing/stale views, paced so we do not flood /work
-bash ~/.hq/work-mesh/bin/work-mesh.sh doctor --company indigo --apply --limit 20
+# Manual session signals (presence/turns are automatic via hooks + daemon)
+hq mesh session task-status --session-id <sid> --enqueue --seq <n> --task-id US-001 --status in_progress
+hq mesh session blocked --session-id <sid> --enqueue --seq <n> --reason "waiting on design"
+hq mesh session note --session-id <sid> --enqueue --seq <n> --summary "shipped card coalescing"
 
-# Story status
-bash ~/.hq/work-mesh/bin/work-mesh.sh story --company indigo --project my-project --story US-001 --status in_progress
-
-# Cache writer (agent boxes; already started by install-listen)
-tail -f ~/.hq/work-mesh/logs/listen.log
+# Context
+hq mesh context reconcile --observation-file <path>
+hq mesh context organize --session <sid> --decision <id> --option <id>
 ```
-
-`apply.sh` inserts `/prd` Step 5.6b (work-mesh genesis) into the local PRD skill (`.agents`, `.claude`, `personal`). Cloud-backed `/prd` then runs `hq-work-mesh-genesis.sh` after board upsert. Re-running apply is a no-op when the step is already present. Policy `hq-work-mesh-prd-genesis` is the same rule.
 
 ## Layout
 
 ```
 packages/hq-pack-work-mesh/
-├── package.yaml
+├── package.yaml          # 0.2.0 — no SessionStart listen heal hook
 ├── README.md
 ├── skills/work-mesh/SKILL.md
 ├── commands/work-mesh.md
-├── hooks/SessionStart/60-work-mesh-bin.sh
 ├── policies/
 ├── knowledge/work-mesh/
 └── scripts/
-    ├── hq-work-mesh.sh / .mjs    # listen + start/progress/story
+    ├── hq-work-mesh.sh / .mjs    # check/start/progress/story/doctor (no listen/watch)
     ├── genesis.sh
-    ├── hq-work-mesh-genesis.sh   # namespaced scan-packages entry
-    ├── install-listen.sh
-    ├── apply.sh
-    └── lib/install-isolated-bin.sh
-```
-
-Isolated machine layout:
-
-```
-~/.hq/work-mesh/
-  bin/work-mesh.sh      # wrapper → work-mesh.mjs
-  bin/work-mesh.mjs
-  bin/genesis.sh
-  runtime/node_modules/mqtt
-  cache/                # hot window, not Slack history
-  logs/listen.log
+    ├── hq-work-mesh-genesis.sh
+    ├── apply.sh                  # unload legacy listen; no isolated-bin install
+    └── lib/
 ```
 
 ## Dogfood vs hq-core
 
-This pack is the rollout vehicle. After Indigo field-test, promote the helper into hq-core `core/scripts/work-mesh.*` and either retire the pack or keep it as a thin install wrapper for older trees. Do not publish to npm until that promotion is an explicit decision.
+Promote genesis and docs into hq-core after field-test. The resident process is
+always `hq mesh daemon`, never a pack-owned Node listen.
