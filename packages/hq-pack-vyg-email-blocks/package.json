@@ -1,0 +1,32 @@
+{
+  "name": "@indigoai-us/hq-pack-vyg-email-blocks",
+  "version": "0.1.0",
+  "description": "HQ content pack: teach a brand agent to design, validate, preview, test-send, and publish interactive VYG email blocks.",
+  "files": [
+    "cover.jpg",
+    "knowledge",
+    "skills",
+    "package.yaml",
+    "README.md",
+    "SMOKE-RUN.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/indigoai-us/hq-packages.git",
+    "directory": "packages/hq-pack-vyg-email-blocks"
+  },
+  "keywords": [
+    "hq",
+    "hq-pack",
+    "email",
+    "interactive-email",
+    "vyg",
+    "amp",
+    "kinetic",
+    "cart"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
+}
