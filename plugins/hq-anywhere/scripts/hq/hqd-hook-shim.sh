@@ -82,12 +82,13 @@ if ! command -v perl >/dev/null 2>&1 \
 fi
 
 # shellcheck disable=SC2016 # the perl program is single-quoted on purpose
-out=$(HQD_SHIM_PAYLOAD="$payload" HQD_SHIM_EVENT="$event" HQD_SHIM_RUNTIME="$runtime" \
+out=$(printf '%s' "$payload" | HQD_SHIM_EVENT="$event" HQD_SHIM_RUNTIME="$runtime" \
   HQD_SHIM_SOCKET="$sock" HQD_SHIM_BUDGET_MS="$budget" perl -e '
 use strict; use warnings;
 use JSON::PP (); use IO::Socket::UNIX (); use Time::HiRes ();
 my $json = JSON::PP->new->canonical;
-my $p = eval { $json->decode($ENV{HQD_SHIM_PAYLOAD} // "") };
+my $payload = do { local $/; <STDIN> } // "";
+my $p = eval { $json->decode($payload) };
 $p = {} unless ref $p eq "HASH";
 my $event = $ENV{HQD_SHIM_EVENT} || $p->{hook_event_name} || "";
 my $runtime = $ENV{HQD_SHIM_RUNTIME} || "claude";
@@ -97,11 +98,43 @@ my $tool = $p->{tool_name} // "";
 my $input = ref $p->{tool_input} eq "HASH" ? $p->{tool_input} : {};
 
 # True when this tool call writes (or may write) a companies/ path.
+sub absolute_path {
+  my ($candidate, $base) = @_;
+  my $path = $candidate =~ m{^/} ? $candidate : ($base || "/") . "/" . $candidate;
+  my @parts;
+  for my $part (split m{/+}, $path) {
+    next if $part eq "" || $part eq ".";
+    if ($part eq "..") { pop @parts if @parts; next; }
+    push @parts, $part;
+  }
+  return "/" . join("/", @parts);
+}
 sub company_write {
   return 0 unless $tool =~ /^(?:Write|Edit|MultiEdit|NotebookEdit|apply_patch|Bash|shell|exec_command)$/;
   my @s = grep { defined && !ref } map { $input->{$_} } qw(file_path path notebook_path command cmd patch input);
   push @s, grep { defined && !ref } @{ $input->{command} } if ref $input->{command} eq "ARRAY";
-  for my $s (@s) { return 1 if $s =~ /(?:^|[\s\/"=])companies\//; }
+  my $cwd = $p->{cwd} // "/";
+  sub is_company_path {
+    my ($candidate, $base) = @_;
+    return 0 unless defined $candidate && !ref $candidate && length $candidate;
+    my $absolute = absolute_path($candidate, $base);
+    return $absolute =~ m{(?:^|/)companies/[^/]+(?:/|$)} ? 1 : 0;
+  }
+  for my $s (@s) {
+    return 1 if $s =~ /(?:^|[\s\/"=])companies\//;
+    return 1 if is_company_path($s, $cwd);
+    next unless $tool =~ /^(?:Bash|shell|exec_command)$/;
+    my $shell_cwd = $cwd;
+    for my $segment (split /(?:&&|\|\||;|\n)/, $s) {
+      if ($segment =~ /^\s*(?:builtin\s+)?cd\s+(?:--\s+)?(?:\x27([^\x27]*)\x27|"([^"]*)"|(\S+))/) {
+        my $target = defined $1 ? $1 : defined $2 ? $2 : $3;
+        $shell_cwd = absolute_path($target, $shell_cwd);
+        return 1 if $shell_cwd =~ m{(?:^|/)companies$};
+        return 1 if $shell_cwd =~ m{(?:^|/)companies/[^/]+(?:/|$)};
+      }
+    }
+  }
+  return 1 if $tool =~ /^(?:Bash|shell|exec_command)$/ && is_company_path($cwd, "/");
   return 0;
 }
 
