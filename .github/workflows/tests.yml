@@ -19,6 +19,8 @@ jobs:
       # defence in depth.
       - name: Release manifest integrity
         run: bash tests/manifest-integrity.test.sh
+      - name: HQ Anywhere generated package layout
+        run: bash tests/hq-anywhere-package-layout.test.sh
       - name: Run all pack test scripts
         run: |
           set -euo pipefail

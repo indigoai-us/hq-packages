@@ -1,0 +1,8 @@
+{
+  "type": "stdio",
+  "command": "hq",
+  "args": [
+    "mcp",
+    "serve"
+  ]
+}

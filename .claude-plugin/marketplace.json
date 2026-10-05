@@ -1,0 +1,15 @@
+{
+  "name": "hq-packages",
+  "owner": {
+    "name": "IndigoAI"
+  },
+  "metadata": {
+    "description": "HQ plugins and packs"
+  },
+  "plugins": [
+    {
+      "name": "hq",
+      "source": "./plugins/hq-anywhere"
+    }
+  ]
+}
