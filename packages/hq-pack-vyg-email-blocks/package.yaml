@@ -1,0 +1,36 @@
+name: hq-pack-vyg-email-blocks
+version: 0.1.0
+publisher: '@indigoai-us'
+access: public
+description: 'Teach a brand agent to author unconstrained interactive email against VYG''s block contract — interview, design, validate, preview all three tiers (links / kinetic / AMP), test-send, and publish into a flow or broadcast. Runtime connection details live in the pack README, not this manifest.'
+requires:
+  hqCore: '>=12.0.0'
+  # Runtime prerequisites (documented in README, not as a connections contract):
+  #   - VYG email channel enabled for the brand (beta:email-channel)
+  #   - A verified sending domain for test-send and publish
+contributes:
+  workers: []
+  knowledge:
+    - vyg-email-blocks
+  skills:
+    - email-block-design
+    - email-block-preview
+    - email-block-test-send
+    - email-block-publish
+  hooks: []
+  policies: []
+  commands: []
+initialization:
+  entrypoint: email-block-design
+  prompt: "Run /email-block-design to interview the brand, author a template with <vyg-block> tags, and validate it until clean. Then /email-block-preview, /email-block-test-send, and /email-block-publish. Connect MCP first — see the pack README."
+keywords:
+  - hq
+  - hq-pack
+  - email
+  - interactive-email
+  - vyg
+  - amp
+  - kinetic
+  - cart
+license: MIT
+repository: 'https://github.com/indigoai-us/hq-packages'
