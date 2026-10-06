@@ -68,15 +68,15 @@ FLAG_DIR=$SHIM_DIR
 hqd_hook_flag_enabled
 [ "$HQD_FLAG_ENABLED" = true ] || exit 0
 
-# No perl: the payload cannot be parsed and hqd cannot be reached. Fail closed
-# on any PreToolUse payload that names a companies/ path.
+# No perl: the payload cannot be parsed and hqd cannot be reached. A
+# PreToolUse event may contain a relative company write that a string search
+# cannot recognize, so fail closed for the whole event rather than guessing.
 if ! command -v perl >/dev/null 2>&1 \
   || ! perl -MJSON::PP -MIO::Socket::UNIX -e 1 >/dev/null 2>&1; then
   [ "${HQ_HQD_SHIM_REPORT_UNREACHABLE:-0}" != 1 ] || exit 75
   printf '%s\n' "$UNREACHABLE" >&2
   case "$event" in
-    ''|PreToolUse)
-      case "$payload" in *companies/*) exit 2 ;; esac ;;
+    PreToolUse) exit 2 ;;
   esac
   exit 0
 fi

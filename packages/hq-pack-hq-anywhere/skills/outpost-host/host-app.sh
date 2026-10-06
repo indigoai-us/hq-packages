@@ -168,6 +168,10 @@ cmd_deploy() {
     local previous="${WEBROOT_BASE}/.${name}.previous.$$"
     sudo rm -rf "$staging" "$previous" || die "could not clear stale staging paths"
     sudo mkdir -p "$staging" || die "could not create staging web root"
+    if ! sudo chmod a+rX "$WEBROOT_BASE"; then
+      sudo rm -rf "$staging"
+      die "could not make managed web root traversable; existing web root was left in place"
+    fi
     if ! sudo cp -aT "$root" "$staging"; then
       sudo rm -rf "$staging"
       die "could not copy static content; existing web root was left in place"
