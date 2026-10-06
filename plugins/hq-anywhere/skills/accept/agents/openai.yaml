@@ -1,0 +1,3 @@
+interface:
+  display_name: "accept"
+  short_description: "Accept an HQ membership invite with its token or link."

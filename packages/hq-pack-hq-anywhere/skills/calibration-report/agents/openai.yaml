@@ -1,0 +1,3 @@
+interface:
+  display_name: "calibration report"
+  short_description: "Compare estimated and actual task times by category."

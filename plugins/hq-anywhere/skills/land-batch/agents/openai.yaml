@@ -1,0 +1,3 @@
+interface:
+  display_name: "Land Batch"
+  short_description: "Review and merge a sequence of PRs with deploy checks."

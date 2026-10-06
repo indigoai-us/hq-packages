@@ -1,0 +1,3 @@
+interface:
+  display_name: "track estimate"
+  short_description: "Log a time estimate when automatic capture misses it."

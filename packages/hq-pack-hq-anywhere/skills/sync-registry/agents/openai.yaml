@@ -1,0 +1,3 @@
+interface:
+  display_name: "Sync Registry"
+  short_description: "Regenerate a company registry from its resource files."

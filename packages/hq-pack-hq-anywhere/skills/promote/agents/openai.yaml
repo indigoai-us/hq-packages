@@ -1,0 +1,3 @@
+interface:
+  display_name: "promote"
+  short_description: "Change an HQ member's role or guest path access."

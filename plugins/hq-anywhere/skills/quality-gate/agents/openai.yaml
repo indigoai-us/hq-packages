@@ -1,0 +1,3 @@
+interface:
+  display_name: "Quality Gate"
+  short_description: "Run typecheck, lint, tests, coverage, and dead-code checks."

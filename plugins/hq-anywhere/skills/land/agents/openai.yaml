@@ -1,0 +1,3 @@
+interface:
+  display_name: "Land PR"
+  short_description: "Monitor CI, merge a PR, then verify the production result."

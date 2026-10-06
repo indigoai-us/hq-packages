@@ -33,6 +33,28 @@ hq install ./packages/hq-pack-gemini                                         # l
 
 `hq-core`'s `core.yaml` lists the recommended packs that a fresh `npx create-hq` run prompts to install. `--full` installs everything unconditionally; `--minimal` skips the prompt.
 
+## HQ Anywhere plugin and Codex pack
+
+The Claude Code plugin is listed in `.claude-plugin/marketplace.json`. Add this
+repository as a Claude Code marketplace and install the `hq` plugin:
+
+```bash
+claude plugin marketplace add indigoai-us/hq-packages
+claude plugin install hq@hq-packages
+```
+
+The Codex pack is available at
+`packages/hq-pack-hq-anywhere/` and can be installed with:
+
+```bash
+hq install github:indigoai-us/hq-packages#packages/hq-pack-hq-anywhere
+```
+
+To refresh these generated directories, run
+`scripts/sync-hq-anywhere-from-core-staging.sh <hq-core-staging-checkout>`.
+The script invokes both hq-core-staging builders and stages their output; do
+not copy builder output by hand.
+
 ## Pack layout
 
 Each pack declares `package.yaml` at its root:

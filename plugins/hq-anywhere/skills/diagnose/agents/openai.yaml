@@ -1,0 +1,3 @@
+interface:
+  display_name: "diagnose"
+  short_description: "Find the cause of intermittent or hard-to-measure failures."

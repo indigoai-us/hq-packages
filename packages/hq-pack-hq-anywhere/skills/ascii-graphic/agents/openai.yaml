@@ -1,0 +1,3 @@
+interface:
+  display_name: "Ascii Graphic"
+  short_description: "Create ASCII banner art for social and OG images."
