@@ -74,6 +74,25 @@ hqd_hook_flag_enabled
 if ! command -v perl >/dev/null 2>&1 \
   || ! perl -MJSON::PP -MIO::Socket::UNIX -e 1 >/dev/null 2>&1; then
   [ "${HQ_HQD_SHIM_REPORT_UNREACHABLE:-0}" != 1 ] || exit 75
+  if [ -z "$event" ]; then
+    # Codex invokes one shim command for all events without passing the event
+    # as argv. Recover the event from the JSON text when Perl is unavailable.
+    # This is deliberately a string match: parsing JSON here would require the
+    # unavailable dependency we're handling.
+    case "$payload" in
+      *'"hook_event_name"'[[:space:]]*:[[:space:]]*'"PreToolUse"'*) event=PreToolUse ;;
+      *'"hook_event_name"'[[:space:]]*:[[:space:]]*'"SessionStart"'*) event=SessionStart ;;
+      *'"hook_event_name"'[[:space:]]*:[[:space:]]*'"UserPromptSubmit"'*) event=UserPromptSubmit ;;
+      *'"hook_event_name"'[[:space:]]*:[[:space:]]*'"PostToolUse"'*) event=PostToolUse ;;
+      *'"hook_event_name"'[[:space:]]*:[[:space:]]*'"Stop"'*) event=Stop ;;
+      *'"hook_event_name"'[[:space:]]*:[[:space:]]*'"SessionEnd"'*) event=SessionEnd ;;
+    esac
+  fi
+  if [ -z "$event" ]; then
+    case "$payload" in
+      *'"tool_name"'*|*companies/*) event=PreToolUse ;;
+    esac
+  fi
   printf '%s\n' "$UNREACHABLE" >&2
   case "$event" in
     PreToolUse) exit 2 ;;
