@@ -79,13 +79,22 @@ if ! command -v perl >/dev/null 2>&1 \
     # as argv. Recover the event from the JSON text when Perl is unavailable.
     # This is deliberately a string match: parsing JSON here would require the
     # unavailable dependency we're handling.
+    event_field=''
     case "$payload" in
-      *'"hook_event_name"'[[:space:]]*:[[:space:]]*'"PreToolUse"'*) event=PreToolUse ;;
-      *'"hook_event_name"'[[:space:]]*:[[:space:]]*'"SessionStart"'*) event=SessionStart ;;
-      *'"hook_event_name"'[[:space:]]*:[[:space:]]*'"UserPromptSubmit"'*) event=UserPromptSubmit ;;
-      *'"hook_event_name"'[[:space:]]*:[[:space:]]*'"PostToolUse"'*) event=PostToolUse ;;
-      *'"hook_event_name"'[[:space:]]*:[[:space:]]*'"Stop"'*) event=Stop ;;
-      *'"hook_event_name"'[[:space:]]*:[[:space:]]*'"SessionEnd"'*) event=SessionEnd ;;
+      *'"hook_event_name"'*)
+        event_field=${payload#*'"hook_event_name"'}
+        case "$event_field" in *:*) event_field=${event_field#*:} ;; *) event_field='' ;; esac
+        while [ -n "$event_field" ]; do
+          case "$event_field" in [[:space:]]*) event_field=${event_field#?} ;; *) break ;; esac
+        done
+        case "$event_field" in
+          '"PreToolUse"'*) event=PreToolUse ;;
+          '"SessionStart"'*) event=SessionStart ;;
+          '"UserPromptSubmit"'*) event=UserPromptSubmit ;;
+          '"PostToolUse"'*) event=PostToolUse ;;
+          '"Stop"'*) event=Stop ;;
+          '"SessionEnd"'*) event=SessionEnd ;;
+        esac ;;
     esac
   fi
   if [ -z "$event" ]; then
