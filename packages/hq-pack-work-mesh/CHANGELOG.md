@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Fixed
+
+- The two hard policies' `when:` triggers used multi-word phrases without an
+  operator between the words (`project view`, `mesh daemon`, `new project`,
+  `board upsert`). The policy trigger grammar rejects that shape outright, so
+  neither policy ever fired. They now use `(project && view)` and the same
+  form for the other three phrases.
+
 ### Changed
 
 - `progress` / `report` no longer posts a placeholder ("Project work is in

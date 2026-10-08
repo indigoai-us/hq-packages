@@ -1,13 +1,13 @@
 ---
 id: hq-work-mesh-source-of-truth
 title: Work mesh is the source of truth; MQTT is ids-only doorbells
-when: work-mesh || board || project view || mesh daemon || mqtt || cache
+when: work-mesh || board || (project && view) || (mesh && daemon) || mqtt || cache
 on: [UserPromptSubmit, AssistantIntent]
 enforcement: hard
 tier: 1
-version: 2
+version: 3
 created: 2026-08-16
-updated: 2026-09-04
+updated: 2026-10-08
 public: true
 ---
 
