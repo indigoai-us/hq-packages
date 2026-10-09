@@ -1,0 +1,79 @@
+# examples/firm-a.yaml — a FULLY BOUND firm
+#
+# Shape of the first validation firm (the one the lifecycle was proven on),
+# de-branded: every vendor name is replaced with a generic label, and no real
+# ids, URLs, template UUIDs or account references appear. All five slots are
+# bound. This is the easy case, and it is deliberately NOT the only case the
+# schema serves — see firm-b.yaml.
+#
+# Secrets are referenced by VAULT NAME ONLY. There are no secret values here.
+
+schema: hq.client-service.config
+schema_version: 1
+firm: firm-a
+description: Fully-bound firm — every adapter slot is wired to a tool.
+
+slots:
+  # CRM is a derived mirror, never the source of truth. This firm's CRM does
+  # have a pipeline, so it declares the optional mirror_stage capability.
+  # engagement.md still owns stage; mirroring is one-way and advisory.
+  crm:
+    binding:
+      tool_name: crm-platform
+      connector: mcp
+      mapping:
+        capabilities: [mirror_stage, read_back]
+        dedupe_field: external_ref
+        objects:
+          company: companies
+          deal: deals
+      secret_name: FIRM_A_CRM/API_KEY
+
+  billing:
+    binding:
+      tool_name: payments-platform
+      connector: api
+      mapping:
+        capabilities: [void_invoice]
+        defaults:
+          currency: USD
+          test_mode_first: true
+      secret_name: FIRM_A_BILLING/API_KEY
+
+  agreements:
+    binding:
+      tool_name: esign-service
+      connector: api
+      mapping:
+        # template_ref is opaque to the pack — a label the firm's own tool
+        # resolves. No UUIDs are pinned in this pack, ever.
+        defaults:
+          template_ref: msa-standard-v3
+        capabilities: [store_executed]
+      secret_name: FIRM_A_AGREEMENTS_CREDENTIAL
+
+  # This firm's client-facing surface IS a firm-owned static site. Note that
+  # nothing here says so at the contract layer: build and deploy live inside the
+  # CLI the binding names, behind publish_update. The contract stays
+  # operation-shaped so firm-b's project tool binds to the same three operations.
+  portal:
+    binding:
+      tool_name: portal-site-cli
+      connector: cli
+      mapping:
+        capabilities: [revoke_share]
+        defaults:
+          surface_label: Client portal
+      secret_name: FIRM_A_PORTAL_DEPLOY_CREDENTIAL
+
+  # Automated capture. `capabilities` is deliberately omitted: the transcripts
+  # slot has no optional operations, and an absent capabilities list means
+  # undeclared, not unsupported.
+  transcripts:
+    binding:
+      tool_name: call-capture-service
+      connector: mcp
+      mapping:
+        objects:
+          call: recordings
+      secret_name: FIRM_A_TRANSCRIPTS_CREDENTIAL

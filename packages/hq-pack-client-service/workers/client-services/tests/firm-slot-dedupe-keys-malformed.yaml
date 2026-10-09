@@ -1,0 +1,43 @@
+# firm-slot-dedupe-keys-malformed.yaml — D1 negative fixture.
+#
+# Two planted faults, both about `engagement_layout.dedupe_keys`, both expected
+# to be reported as NAMED errors rather than as a parse failure:
+#
+#   1. `.engagement_layout.dedupe_keys` is a list, not a map keyed by slot name
+#      -> E_LAYOUT_DEDUPE_KEYS_NOT_MAPPING
+#   2. an override entry's `dedupe_keys.crm` is a mapping, not a string or an
+#      explicit null -> E_LAYOUT_DEDUPE_KEY_NOT_SCALAR
+#
+# A join value is a scalar the pack can put in a single remote field. Anything
+# else has to be interpreted, and an interpreted join key is how duplicates get
+# created.
+
+schema: hq.client-service.config
+schema_version: 1
+firm: fixture-slotkeys-broken
+description: Fixture with two deliberately malformed dedupe_keys declarations.
+
+engagement_layout:
+  dedupe_key: '{slug}'
+  # FAULT 1 — a list where a slot-keyed map belongs.
+  dedupe_keys:
+    - crm
+    - billing
+  overrides:
+    nested-client:
+      dedupe_keys:
+        # FAULT 2 — a nested mapping where a scalar join value belongs.
+        crm:
+          value: something.example
+
+slots:
+  crm:
+    binding: null
+  billing:
+    binding: null
+  agreements:
+    binding: null
+  portal:
+    binding: null
+  transcripts:
+    binding: null

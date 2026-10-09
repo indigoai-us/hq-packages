@@ -1,0 +1,43 @@
+source: "marketplace:client-service@0.1.1"
+name: hq-pack-client-service
+version: 0.2.0
+publisher: '@indigoai-us'
+access: public
+description: 'Turn any HQ company into a client-service firm. Contributes the generic client-services lifecycle worker, the onboard-firm / new-client / client-pack skills, and the client-service knowledge corpus (adapter contracts + config schema). Tool-agnostic: every integration is an adapter slot a firm binds to its own tooling in its own client-service.yaml. Dual-home client model — firm-internal engagement truth plus an isolated, handover-ready client HQ company.'
+keywords:
+  - hq
+  - hq-pack
+  - agency
+  - consultancy
+  - client-service
+  - engagement-lifecycle
+capabilities:
+  - scripts
+  - fs
+requires:
+  hqCore: '>=15.0.0'
+contributes:
+  workers:
+    - client-services
+  skills:
+    - onboard-firm
+    - new-client
+    - client-pack
+    - handover-client
+  knowledge:
+    - client-service
+  policies:
+    - client-service-engagement-is-source-of-truth
+    - client-service-internal-external-split
+    - client-service-approval-gate-external-actions
+    - client-service-billing-signed-and-test-first
+    - client-service-materialize-not-mount
+  hooks: []
+  commands: []
+  scripts: []
+initialization:
+  entrypoint: /onboard-firm
+author:
+  uid: 54388428-90a1-7067-c2fe-75fd5c1c64c7
+  handle: Google_114624802466848837743
+  displayName: Corey Epstein

@@ -1,0 +1,56 @@
+# firm-layout-overrides.yaml — US-008 fixture.
+#
+# A firm whose engagements are NOT all filed the same way: one lives outside the
+# firm's client folder, one joins to its external records by an alias rather than
+# by its slug, and one is tracked somewhere this pack cannot read. Before the
+# first-install dogfood the pack could express none of these and quietly used the
+# wrong path for all three.
+#
+# It also carries a binding with `secret_name: null` — declared-none — for a
+# capability the host platform already authenticates, which is different from an
+# absent secret_name (undeclared, so the skill asks).
+#
+# No vendor is named except as a tool_name, and there is no credential value.
+
+schema: hq.client-service.config
+schema_version: 1
+firm: fixture-layout-firm
+description: Fixture firm with a declared engagement layout and per-engagement overrides.
+
+engagement_layout:
+  engagement_path: 'companies/{firm}/engagements/{slug}/record.md'
+  tracker_sources:
+    - 'companies/{firm}/work/{slug}-*/prd.json'
+  dedupe_key: '{slug}'
+  overrides:
+    elsewhere-client:
+      engagement_path: 'repos/private/knowledge-elsewhere/record.md'
+      note: canonical record lives outside the firm tree
+    alias-client:
+      dedupe_key: legacy-alias
+      note: external records were keyed before the slug existed
+    untracked-client:
+      tracker_sources: []
+      note: declared-none — this engagement is tracked outside the pack's reach
+
+slots:
+  crm:
+    binding: null
+
+  billing:
+    binding: null
+
+  agreements:
+    binding: null
+
+  portal:
+    binding: null
+
+  # Bound to a capability the host platform already authenticates: there is no
+  # vault secret to name, and `secret_name: null` says so explicitly so nothing
+  # asks for one.
+  transcripts:
+    binding:
+      tool_name: host-native-call-record
+      connector: cli
+      secret_name: null
