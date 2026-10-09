@@ -1,6 +1,6 @@
 ---
 name: client-pack
-description: Bundle a firm's own skills and knowledge into a firm pack and move it into client HQ companies by copy-with-provenance. Verbs — scaffold, apply, update, remove. Apply writes .hq-pack-manifest.json recording sourceFirm, packName, version, per-file sha256, and appliedAt; update rewrites only unforked manifest-owned files; remove deletes only unforked manifest-owned files. Client edits are detected as forks and always survive. All writes happen in a session bound to the CLIENT company.
+description: Bundle a firm's own skills and knowledge into a firm pack and move it into client HQ companies by copy-with-provenance. Verbs — scaffold, apply, update, remove. Apply writes .hq-pack-manifest.json recording sourceFirm, packName, version, per-file sha256, and appliedAt; update rewrites only unforked manifest-owned files; remove deletes only unforked manifest-owned files. Client edits are detected as forks and always survive. Client-side writes need a session that holds the CLIENT company (bound to it, or added with hq-session.sh add company).
 triggers:
   - client pack
   - create a firm pack
@@ -20,26 +20,32 @@ Fixture regression suite: `../../scripts/client-pack-verify.sh`.
 
 ## The operating requirement, first
 
-**Two sessions, never one.**
+**Each verb writes into one company, and the session must hold it.**
 
-| Phase | Session must be bound to | Reads | Writes |
+| Phase | Session must hold | Reads | Writes |
 |---|---|---|---|
 | `scaffold` (author + stage) | the **FIRM** | `companies/{firm}/packs/{name}/` | the firm pack dir, and a portable bundle in `workspace/pack-staging/{firm}/{name}/` |
 | `apply` / `update` / `remove` | the **CLIENT** | the staged bundle in `workspace/` + the client tree | `companies/{client}/` only |
 
-`workspace/` is company-neutral, which is why this works **with** the
-`mandatory-scope-authorizer` gate rather than around it: no verb ever needs a
-session that can see two companies at once. The manifest's `sourceFirm` is
+On hq-core with multi-company session locks, one firm session can do both:
+scaffold, then `bash core/scripts/hq-session.sh add company {client}` and apply.
+Otherwise use a firm-bound session for `scaffold` and a client-bound session for
+the rest.
+
+`workspace/` is company-neutral, so no verb ever reads across companies, even
+when one session holds both. The client-side verbs read only the staged bundle
+and the client tree, never `companies/{firm}/`. The manifest's `sourceFirm` is
 provenance metadata — a name, an audit fact, a revoke key. It is **never** used
 as a path to read at client runtime, and the tool never dereferences it.
 
-The script enforces the binding itself. If it cannot determine which company the
-session is bound to, it **refuses to write** — unknown is not authorization.
-Outside a session (CI, fixtures) state the binding explicitly with
-`--session-company <slug>`.
+The script enforces this itself by reading the session's lock set
+(`hq-session.sh get company_slugs`). If it cannot determine the lock set, it
+**refuses to write** — unknown is not authorization. Outside a session (CI,
+fixtures) state it explicitly with `--session-company <slug>` or a
+comma-separated set (`firm,client`).
 
 ```
-ERROR  E_SESSION_SCOPE  this session is bound to 'northgate-partners' but the
+ERROR  E_SESSION_SCOPE  this session is locked to 'northgate-partners' but the
        operation writes into client company 'atlas-widgets'.
 ```
 
@@ -74,7 +80,7 @@ Symlinks inside a pack are refused (`E_BUNDLE_SYMLINK`): a symlink can resolve
 back into the firm vault at client runtime, which is exactly the mount this
 mechanism exists to avoid.
 
-### `apply` — install into a client, in a CLIENT-bound session
+### `apply` — install into a client, in a session that holds the CLIENT
 
 ```bash
 client-pack.sh apply --client atlas-widgets --firm northgate-partners --pack service-kit

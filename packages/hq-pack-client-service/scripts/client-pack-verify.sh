@@ -324,6 +324,21 @@ scenario_6() {
   printf '%s\n' "$out"
   assert_eq "firm-bound session may not write into the client (exit 1)" "1" "$rc"
   assert_has "error explains materialize-not-mount" "$out" "E_SESSION_SCOPE"
+
+  hdr "Scenario 6d — a multi-company session that holds the client may apply"
+  rc=0
+  out="$("$CP" apply --hq-root "$root" --session-company "${FIRM},other-co" \
+        --client "$CLIENT" --firm "$FIRM" --pack "$PACKNAME" 2>&1)" || rc=$?
+  printf '%s\n' "$out"
+  assert_eq "firm+other session (client not in the lock set) is refused (exit 1)" "1" "$rc"
+  assert_has "  ... named error" "$out" "E_SESSION_SCOPE"
+  rc=0
+  out="$("$CP" apply --hq-root "$root" --session-company "${FIRM},${CLIENT}" \
+        --client "$CLIENT" --firm "$FIRM" --pack "$PACKNAME" 2>&1)" || rc=$?
+  printf '%s\n' "$out"
+  assert_eq "firm+client session may apply into the client (exit 0)" "0" "$rc"
+  assert_exists "  ... and the pack manifest was written in the client" \
+    "${root}/companies/${CLIENT}/.hq-packs/${PACKNAME}/.hq-pack-manifest.json"
 }
 
 # ---------------------------------------------------------------------------
@@ -332,6 +347,9 @@ scenario_6() {
 
 make_broken() { # prints path to a client-pack.sh with fork detection disabled
   local broken="${WORK}/broken-client-pack.sh"
+  # The engine sources lib/session-lock.sh next to itself; give the copy one too,
+  # so the copy fails only because of the injected break.
+  mkdir -p "${WORK}/lib" && cp "$(dirname "$CP")/lib/session-lock.sh" "${WORK}/lib/"
   sed 's|if \[ "$cur" = "$msha" \]; then printf .clean.; else printf .fork.; fi|printf '"'"'clean'"'"'|' \
     "$CP" > "$broken"
   chmod +x "$broken"

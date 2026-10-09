@@ -126,9 +126,10 @@ bash core/packages/hq-pack-client-service/workers/client-services/scripts/slot-s
 
 ### 3. First client
 
-An HQ session may be bound to exactly **one** company. This flow spans two — the
-firm and the client — so it runs in **two phases, in two sessions**. See
-[Two phases, two sessions](#two-phases-two-sessions) below.
+This flow spans two companies, the firm and the client, so it runs in **two
+phases**. On hq-core with multi-company session locks both phases can run in the
+firm's session; otherwise use two sessions. See
+[Two phases, one or two sessions](#two-phases-one-or-two-sessions) below.
 
 **Phase 1, in a FIRM-bound session:**
 
@@ -148,7 +149,9 @@ template, one pending adapter entry per **bound** slot, and a company-neutral
 handoff record under `workspace/`. A slug collision aborts and writes nothing.
 Add `--dry-run` to plan it first.
 
-**Phase 2, in a CLIENT-bound session.** Preferred: run `/newcompany {slug}` first
+**Phase 2, in a session that holds the CLIENT** (add it to the firm's session
+with `bash core/scripts/hq-session.sh add company {slug}`, or use a client-bound
+session). Preferred: run `/newcompany {slug}` first
 so the client company gets the proper discovery interview, brand packs and
 integrations, then verify rather than duplicate:
 
@@ -161,8 +164,8 @@ Without `/newcompany`, the default `--company-scaffold auto` writes the minimal
 equivalent company tree itself. Either way phase 2 stages
 `companies/{client}/handover-checklist.md` and is fully idempotent.
 
-For a cloud-backed client, run `/designate-team {slug}` in this same
-client-bound session — that is what flips `company.yaml` to `cloud: true` and
+For a cloud-backed client, run `/designate-team {slug}` in this same session,
+while it holds the client — that is what flips `company.yaml` to `cloud: true` and
 provisions the vault. The engine never runs it; it prints it.
 
 **Invites are gated.** Omitting `--invites` is UNDECIDED, not approval. Even on
@@ -192,7 +195,7 @@ and stages a portable bundle at `workspace/pack-staging/{firm}/{pack}/`. That
 bundle is the only thing the client side ever reads from the firm. After editing
 the pack, restage with `--stage-only`.
 
-**Apply / update / remove, in a CLIENT-bound session:**
+**Apply / update / remove, in a session that holds the CLIENT:**
 
 ```bash
 P=core/packages/hq-pack-client-service
@@ -229,7 +232,7 @@ and always survive.** Add `--dry-run` to any verb to see the plan.
 /handover-client
 ```
 
-or directly, in a CLIENT-bound session:
+or directly, in a session that holds the CLIENT:
 
 ```bash
 P=core/packages/hq-pack-client-service
@@ -279,12 +282,19 @@ into `core/scripts/`.
 
 ---
 
-## Two phases, two sessions
+## Two phases, one or two sessions
 
-This is not a style choice. HQ's scope authorizer binds a session to exactly one
-company, and both the client flow and the pack flow span two.
+Both the client flow and the pack flow span two companies. Every phase writes
+into exactly one company, and the session must hold that company in its lock
+set.
 
-| Flow | Phase | Session bound to | Writes |
+On hq-core with multi-company session locks, a firm session can hold the client
+too. Add it with `bash core/scripts/hq-session.sh add company {client}`, run the
+client-side phase, and remove it when done. The firm stays the primary company,
+and every company not added stays blocked. On older cores a session holds one
+company, so the client-side phases run in a session bound to the client.
+
+| Flow | Phase | Session must hold | Writes |
 |---|---|---|---|
 | `/new-client` | `engagement` | the **FIRM** | `companies/{firm}/clients/{slug}/` |
 | `/new-client` | `client-home` | the **CLIENT** | `companies/{client}/` |
@@ -292,21 +302,25 @@ company, and both the client flow and the pack flow span two.
 | `/client-pack` | `apply`/`update`/`remove` | the **CLIENT** | `companies/{client}/` only |
 | `/handover-client` | all verbs | the **CLIENT** | `companies/{client}/` only |
 
-`workspace/` is company-neutral, which is what makes the handoff work **with**
-the scope gate rather than around it. The firm reaches phase 2 only as a **name**
+`workspace/` is company-neutral, so the handoff never reads across companies,
+even when one session holds both. The firm reaches phase 2 only as a **name**
 — `sourceFirm` in the manifest, the firm slug in the handoff record. It is
 provenance and a revoke key, never a path, and no client-side verb ever
-dereferences it.
+dereferences it. Firm-internal content never lands in the client company
+(policies `client-service-materialize-not-mount` and
+`client-service-internal-external-split`).
 
-Each engine enforces the binding itself and refuses when it cannot determine
-one — unknown is not authorization:
+Each engine reads the session's lock set (`hq-session.sh get company_slugs`) and
+refuses when the target company is not in it, or when it cannot read it —
+unknown is not authorization:
 
 ```
-ERROR  E_SESSION_SCOPE  this session is bound to 'northgate-partners' but the
+ERROR  E_SESSION_SCOPE  this session is locked to 'northgate-partners' but the
        operation writes into client company 'atlas-widgets'.
 ```
 
-Outside a session (CI, fixtures) state it explicitly with `--session-company`.
+Outside a session (CI, fixtures) state it explicitly with `--session-company`,
+which takes one slug or a comma-separated lock set (`firm,client`).
 
 ---
 

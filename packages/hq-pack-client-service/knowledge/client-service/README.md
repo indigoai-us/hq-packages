@@ -28,8 +28,8 @@ Contents:
 The dual-home model — firm-internal engagement truth vs the isolated,
 handover-ready client company — is documented in the pack README ("The
 firm/client dual-home model") and in `skills/new-client/SKILL.md`, rather than
-as a separate knowledge file here, alongside the two-phase
-firm-bound/client-bound pattern it forces.
+as a separate knowledge file here, alongside the two-phase pattern it
+requires (each phase writes into one company the session holds).
 
 ## Contract rules for this corpus
 

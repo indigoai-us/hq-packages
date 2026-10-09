@@ -1,6 +1,6 @@
 source: "marketplace:client-service@0.1.1"
 name: hq-pack-client-service
-version: 0.1.1
+version: 0.2.0
 publisher: '@indigoai-us'
 access: public
 description: 'Turn any HQ company into a client-service firm. Contributes the generic client-services lifecycle worker, the onboard-firm / new-client / client-pack skills, and the client-service knowledge corpus (adapter contracts + config schema). Tool-agnostic: every integration is an adapter slot a firm binds to its own tooling in its own client-service.yaml. Dual-home client model — firm-internal engagement truth plus an isolated, handover-ready client HQ company.'

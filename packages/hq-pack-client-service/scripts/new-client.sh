@@ -185,17 +185,11 @@ resolve_hq_root() {
 # session binding — same contract as client-pack.sh (US-006)
 # ---------------------------------------------------------------------------
 
-resolve_session_company() { # prints the bound company slug, or empty
-  local out rc=0
-  if [ -n "$SESSION_COMPANY" ]; then printf '%s' "$SESSION_COMPANY"; return 0; fi
-  if [ -x "${HQ_ROOT}/core/scripts/hq-session.sh" ]; then
-    out="$("${HQ_ROOT}/core/scripts/hq-session.sh" get company_slug 2>/dev/null)" || rc=$?
-    [ "$rc" -eq 0 ] || out=""
-    [ "$out" = "null" ] && out=""
-    printf '%s' "$out"
-    return 0
-  fi
-  printf ''
+# shellcheck source=lib/session-lock.sh
+. "${SCRIPT_DIR}/lib/session-lock.sh"
+
+resolve_session_company() { # prints the session's lock set (comma list), or empty
+  session_lock_companies "$HQ_ROOT" "$SESSION_COMPANY"
 }
 
 require_session_bound_to() { # require_session_bound_to <slug> <what>
@@ -208,11 +202,13 @@ require_session_bound_to() { # require_session_bound_to <slug> <what>
        (core/scripts/hq-session.sh set company_slug ${want}) or state it
        explicitly with --session-company ${want} when running outside a session."
   fi
-  if [ "$got" != "$want" ]; then
+  if ! session_lock_includes "$got" "$want"; then
     die_op "E_SESSION_SCOPE" \
-"this session is bound to '${got}' but this phase writes into ${what} '${want}'.
-       /new-client is two phases in two sessions: 'engagement' in a FIRM-bound
-       session, 'client-home' in a CLIENT-bound session."
+"this session is locked to '${got}' but this phase writes into ${what} '${want}'.
+       Run 'engagement' in a session locked to the FIRM. For 'client-home', either
+       add the client to the firm's session:
+         core/scripts/hq-session.sh add company ${want}
+       or run it in a session bound to the CLIENT."
   fi
 }
 

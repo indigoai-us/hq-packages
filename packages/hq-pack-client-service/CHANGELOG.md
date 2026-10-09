@@ -8,6 +8,32 @@ something is unproven, this file says so.
 
 ---
 
+## 0.2.0 (2026-10-09)
+
+Multi-company sessions. A firm session can now hold the client it is serving,
+using hq-core's multi-company session lock, instead of switching sessions.
+
+- `new-client.sh`, `client-pack.sh` and `handover-client.sh` read the session's
+  lock set (`hq-session.sh get company_slugs`, falling back to `company_slug`)
+  through one shared helper, `scripts/lib/session-lock.sh`. A phase may write into
+  a company only if that company is in the lock set. Unknown is still refused.
+- `--session-company` accepts a comma-separated lock set (`firm,client`).
+- Policy `client-service-materialize-not-mount` v2: access to a client is
+  allowed only through an explicit `hq-session.sh add company`; content still
+  reaches a client only by materialization; firm-internal content never lands in
+  a client company.
+- Skills and README updated for "two phases, one or two sessions".
+- Older cores: the lock set is one company, so behaviour is unchanged.
+
+Verified: `new-client-verify.sh` (116 checks, 10 new for multi-company sessions,
+including a live lock set read from `hq-session.sh`), `client-pack-verify.sh`
+(new scenario 6d), `handover-client-verify.sh`, and `e2e-smoke.sh` (107
+assertions), all green. The discrimination checks in the verify suites now copy
+the shared helper next to the broken engine copy, so they fail only for the
+injected break.
+
+---
+
 ## 0.1.1
 
 - **Marketplace cover.** Added `cover.jpg` (1024×574) at the pack root so the

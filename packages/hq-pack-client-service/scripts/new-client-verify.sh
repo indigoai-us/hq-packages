@@ -286,6 +286,38 @@ assert_eq "an UNKNOWN binding is refused, not assumed (exit 1)" "1" "$RC"
 assert_has "  ... unknown is not authorization" "$OUT" "E_SESSION_UNKNOWN"
 
 # ===========================================================================
+hdr "7b multi-company session — the firm's session holds the client too"
+run "$NC" engagement --pack-dir "$PACK" --hq-root "$ROOT1" --session-company "$FIRM" \
+  --firm "$FIRM" --client golf --local-only
+assert_eq "phase 1 for golf exits 0" "0" "$RC"
+run "$NC" client-home --pack-dir "$PACK" --hq-root "$ROOT1" --session-company "${FIRM},golf" \
+  --client golf --invites declined --local-only
+assert_eq "a session locked to firm+client may run the client phase (exit 0)" "0" "$RC"
+assert_exists "  ... the client company was written" "$(CODIR "$ROOT1" golf)/handover-checklist.md"
+run "$NC" engagement --pack-dir "$PACK" --hq-root "$ROOT1" --session-company "$FIRM" \
+  --firm "$FIRM" --client hotel --local-only
+run "$NC" client-home --pack-dir "$PACK" --hq-root "$ROOT1" --session-company "${FIRM},india" \
+  --client hotel --invites declined --local-only
+assert_eq "a multi-company session WITHOUT this client is refused (exit 1)" "1" "$RC"
+assert_has "  ... named error" "$OUT" "E_SESSION_SCOPE"
+assert_has "  ... and it says how to add the client" "$OUT" "add company hotel"
+assert_absent "  ... and nothing was written" "$(CODIR "$ROOT1" hotel)"
+run "$NC" client-home --pack-dir "$PACK" --hq-root "$ROOT1" --session-company "${FIRM},hotelx" \
+  --client hotel --invites declined --local-only
+assert_eq "a slug that merely starts with the client's slug does not match (exit 1)" "1" "$RC"
+# The live lock set comes from hq-session.sh `get company_slugs`.
+mkdir -p "${ROOT1}/core/scripts"
+cat > "${ROOT1}/core/scripts/hq-session.sh" <<EOF
+#!/usr/bin/env bash
+case "\$2" in company_slugs) printf '%s\n' "${FIRM},hotel" ;; company_slug) printf '%s\n' "${FIRM}" ;; esac
+EOF
+run "$NC" client-home --pack-dir "$PACK" --hq-root "$ROOT1" \
+  --client hotel --invites declined --local-only
+assert_eq "the live session lock set (firm,hotel) authorizes the client phase (exit 0)" "0" "$RC"
+assert_exists "  ... the client company was written" "$(CODIR "$ROOT1" hotel)/handover-checklist.md"
+rm -f "${ROOT1}/core/scripts/hq-session.sh"
+
+# ===========================================================================
 hdr "8  cloud posture"
 : > "$EXTLOG"
 run "$NC" engagement --pack-dir "$PACK" --hq-root "$ROOT1" --session-company "$FIRM" \
@@ -459,6 +491,8 @@ make_broken() { # make_broken <name> <exact-old> <exact-new> -> path or BROKEN-F
   local new="$3"
   local out="${WORK}/broken-${name}.sh"
   local rc=0
+  # The engine sources lib/session-lock.sh next to itself; give the copy one too.
+  mkdir -p "${WORK}/lib" && cp "$(dirname "$NC")/lib/session-lock.sh" "${WORK}/lib/"
   BROKEN_OLD="$old" BROKEN_NEW="$new" python3 - "$NC" "$out" <<'PY' || rc=$?
 import os, sys
 src = open(sys.argv[1]).read()

@@ -619,6 +619,8 @@ make_broken() { # make_broken <name> <exact-old> <exact-new> -> path or BROKEN-F
   local new="$3"
   local out="${WORK}/broken-${name}.sh"
   local rc=0
+  # The engine sources lib/session-lock.sh next to itself; give the copy one too.
+  mkdir -p "${WORK}/lib" && cp "$(dirname "$HC")/lib/session-lock.sh" "${WORK}/lib/"
   BROKEN_OLD="$old" BROKEN_NEW="$new" python3 - "$HC" "$out" <<'PY' || rc=$?
 import os, sys
 src = open(sys.argv[1]).read()

@@ -152,17 +152,11 @@ require_jq() {
 # session binding — an unknown binding is NEVER treated as authorization
 # ---------------------------------------------------------------------------
 
-resolve_session_company() { # prints the bound company slug, or empty
-  local out rc=0
-  if [ -n "$SESSION_COMPANY" ]; then printf '%s' "$SESSION_COMPANY"; return 0; fi
-  if [ -x "${HQ_ROOT}/core/scripts/hq-session.sh" ]; then
-    out="$("${HQ_ROOT}/core/scripts/hq-session.sh" get company_slug 2>/dev/null)" || rc=$?
-    [ "$rc" -eq 0 ] || out=""
-    [ "$out" = "null" ] && out=""
-    printf '%s' "$out"
-    return 0
-  fi
-  printf ''
+# shellcheck source=lib/session-lock.sh
+. "${SCRIPT_DIR}/lib/session-lock.sh"
+
+resolve_session_company() { # prints the session's lock set (comma list), or empty
+  session_lock_companies "$HQ_ROOT" "$SESSION_COMPANY"
 }
 
 require_session_bound_to() { # require_session_bound_to <slug> <what>
@@ -175,11 +169,12 @@ require_session_bound_to() { # require_session_bound_to <slug> <what>
        (core/scripts/hq-session.sh set company_slug ${want}) or state it explicitly
        with --session-company ${want} when running outside a session."
   fi
-  if [ "$got" != "$want" ]; then
+  if ! session_lock_includes "$got" "$want"; then
     die_op "E_SESSION_SCOPE" \
-"this session is bound to '${got}' but the operation writes into ${what} '${want}'.
-       Firm packs are materialized, not mounted: scaffold in a firm-bound session,
-       apply/update/remove in a session bound to the CLIENT company."
+"this session is locked to '${got}' but the operation writes into ${what} '${want}'.
+       Firm packs are materialized, not mounted: scaffold in a session locked to the
+       firm; apply/update/remove in a session that holds the CLIENT company (bound
+       to it, or added with core/scripts/hq-session.sh add company ${want})."
   fi
 }
 

@@ -27,29 +27,47 @@ convention here, it is the reason the second home exists (policy
 Engine: `../../scripts/new-client.sh`. Fixture suite:
 `../../scripts/new-client-verify.sh`.
 
-## The operating requirement, first: two phases, two sessions
+## The operating requirement, first: two phases, one or two sessions
 
-An HQ session may be bound to exactly **one** company. This flow spans two — the
-firm and the client — so it is split the same way `/client-pack` is:
+This flow spans two companies, the firm and the client, so it runs in two
+phases. Each phase writes into exactly one company, and the session must hold
+that company in its lock set:
 
-| Phase | Session bound to | Reads | Writes |
+| Phase | Session must hold | Reads | Writes |
 |---|---|---|---|
 | `engagement` | the **FIRM** | `companies/{firm}/` | `companies/{firm}/clients/{slug}/` |
 | `client-home` | the **CLIENT** | a company-neutral handoff record under `workspace/` | `companies/{client}/` |
 
-The handoff record (`workspace/client-service/new-client/{firm}--{client}.yaml`)
-carries the firm's slug and display name as **provenance** — a name, an audit
-fact. Phase 2 never dereferences it as a path and never opens the firm tree. That
-is what makes this work *with* the scope gate rather than around it.
+**One session (hq-core with multi-company session locks).** Run `engagement` in
+the firm's session. Create the client company if needed, then add it to the same
+session and run `client-home`:
 
-The engine enforces the binding itself and refuses when it cannot determine one:
+```bash
+bash core/scripts/hq-session.sh add company {client}
+```
+
+The firm stays the primary company. Remove the client from the session when you
+are done with it (`hq-session.sh remove company {client}`).
+
+**Two sessions (older hq-core, or by preference).** Run `engagement` in a
+firm-bound session and `client-home` in a session bound to the client.
+
+Either way, the handoff record
+(`workspace/client-service/new-client/{firm}--{client}.yaml`) carries the firm's
+slug and display name as **provenance**: a name, an audit fact. Phase 2 never
+dereferences it as a path and never opens the firm tree, even when the firm is in
+the same session (policy `client-service-materialize-not-mount`).
+
+The engine reads the session's lock set (`hq-session.sh get company_slugs`) and
+refuses when the target company is not in it, or when it cannot read it:
 
 ```
-ERROR  E_SESSION_SCOPE  this session is bound to 'northgate-partners' but this
+ERROR  E_SESSION_SCOPE  this session is locked to 'northgate-partners' but this
        phase writes into client company 'atlas-widgets'.
 ```
 
-Outside a session (CI, fixtures) state it explicitly with `--session-company`.
+Outside a session (CI, fixtures) state it explicitly with `--session-company`,
+which takes one slug or a comma-separated lock set (`firm,client`).
 
 ## Step 1 — Settle the inputs before writing anything
 
@@ -123,7 +141,12 @@ If neither slot is bound, no `adapters/` directory is created at all. Nothing in
 this phase calls a CRM or a portal — the entries describe work that is still
 gated.
 
-## Step 3 — The client company (CLIENT-bound session)
+## Step 3 — The client company (session that holds the CLIENT)
+
+Either add the client to the firm's session
+(`bash core/scripts/hq-session.sh add company {slug}`, once the company exists)
+or switch to a session bound to the client. See "The operating requirement"
+above.
 
 Preferred path: run **`/newcompany {slug}`** — it does the discovery interview,
 brand packs and integrations properly. Then run phase 2 with
@@ -141,8 +164,8 @@ equivalent itself: `company.yaml` with `cloud: false`, `board.json`, `settings/`
 `people/`, `workspace/`, and a `companies/manifest.yaml` entry. `/newcompany` can
 still be run later; it is additive over that tree.
 
-With `--cloud`, run **`/designate-team {slug}`** in this same client-bound
-session. The engine never runs it — it prints it. `/designate-team` is what flips
+With `--cloud`, run **`/designate-team {slug}`** in this same session, while it
+holds the client. The engine never runs it — it prints it. `/designate-team` is what flips
 `company.yaml` to `cloud: true` and provisions the vault.
 
 Phase 2 also stages `handover-checklist.md` (below) and is fully idempotent: a
