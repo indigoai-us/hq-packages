@@ -1,0 +1,30 @@
+{
+  "name": "@indigoai-us/hq-pack-imessage",
+  "version": "1.0.0",
+  "description": "HQ content pack: read, search, and send iMessages and SMS from this Mac's Messages account, for interactive sessions and local HQ bots.",
+  "files": [
+    "skills",
+    "knowledge",
+    "scripts",
+    "package.yaml",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/indigoai-us/hq-packages.git",
+    "directory": "packages/hq-pack-imessage"
+  },
+  "keywords": [
+    "hq",
+    "hq-pack",
+    "imessage",
+    "sms",
+    "messages",
+    "macos",
+    "local-bot"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
+}

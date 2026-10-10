@@ -1,0 +1,35 @@
+name: hq-pack-imessage
+version: 1.0.0
+publisher: '@indigoai-us'
+access: public
+description: 'Local iMessage for HQ — read, search, and send iMessages and SMS from the Messages account signed in on this Mac, for interactive sessions and local HQ bots. Reads the Messages database read-only and sends through Messages.app; nothing goes through a cloud service. Includes a watch mode that streams new incoming texts to a bot, and a send allowlist that fences what unattended bots can text.'
+requires:
+  hqCore: '>=12.0.0'
+  # Runtime prerequisites:
+  #   - macOS with Messages signed in
+  #   - bash, python3 (stdlib only — no pip installs)
+  #   - Full Disk Access (reads) and Automation → Messages (sends) for the app
+  #     that runs the commands — see knowledge/hq-imessage/setup.md
+contributes:
+  workers: []
+  knowledge:
+    - hq-imessage
+  skills:
+    - hq-imessage
+  hooks: []
+  policies: []
+  commands: []
+  # scripts/ ships the self-contained hq-imessage CLI.
+  scripts:
+    - hq-imessage.sh
+    - hq_imessage.py
+keywords:
+  - hq
+  - hq-pack
+  - imessage
+  - sms
+  - messages
+  - macos
+  - local-bot
+license: MIT
+repository: 'https://github.com/indigoai-us/hq-packages'
