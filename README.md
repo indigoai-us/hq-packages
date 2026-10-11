@@ -17,7 +17,7 @@ Content packs for [HQ by Indigo](https://github.com/indigoai-us/hq-core) — the
 | [`hq-pack-imessage`](./packages/hq-pack-imessage) | Local iMessage read/search/send from this Mac's Messages account, for sessions and local `hq bot`s. Watch mode streams new texts to a bot; unattended sends are limited to an owner allowlist. macOS only. |
 | [`hq-pack-work-mesh`](./packages/hq-pack-work-mesh) | Live work mesh: listen cache, genesis on `/prd`, Board/Status helpers, isolated agent-box install. Git-only (`private` on npm until hq-core promotion). |
 | [`hq-pack-client-service`](./packages/hq-pack-client-service) | Turn any HQ company into a client-service firm: engagement lifecycle worker, `/onboard-firm`, `/new-client`, `/client-pack`, `/handover-client`, dual-home client model. |
-| [`hq-pack-agency-kit`](./packages/hq-pack-agency-kit) | AI Builders Agency Kit. Builds on client-service: agency playbook, `/client-workspace` (folder or own-company clients), `/client-onboarding` with approval gates, practice client, `/scope-check`, `/weekly-update`, `/proposal`. |
+| [`hq-pack-agency-kit`](./packages/hq-pack-agency-kit) | AI Builders Agency Kit. Builds on client-service. Ships the Agency Guide bot (`setup:` block): agency setup, practice client and client onboarding from the HQ app chat. Also as Claude Code commands: agency playbook, `/client-workspace` (folder or own-company clients), `/client-onboarding` with approval gates, practice client, `/scope-check`, `/weekly-update`, `/proposal`. |
 | [`hq-pack-vyg-email-blocks`](./packages/hq-pack-vyg-email-blocks) | Brand-agent pack for unconstrained interactive VYG email (cart / subscription / AMP): design, validate, three-tier preview, test-send, publish. |
 
 ## Retired packs

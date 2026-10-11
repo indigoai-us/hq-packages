@@ -58,10 +58,17 @@ looks wrong; that is the skill they are practising.
 
 ## Step 5: Grade the run
 
-When onboarding finishes, read the answer key in
+When onboarding finishes, run the grader:
+
+```bash
+bash core/packages/hq-pack-agency-kit/scripts/grade-practice.sh --firm {firm}
+```
+
+It checks the four output files against the answer key in
 `core/packages/hq-pack-agency-kit/examples/practice-client/inputs/README.md`
-(section "For instructors"). For each of the eight planted issues, say whether
-the run caught it, and where. For any it missed, show which playbook line would
+(section "For instructors") and prints which of the eight planted issues were
+found. Read the key yourself for the detail. For each issue, say whether the
+run caught it, and where. For any it missed, show which playbook line would
 have caught it and offer to add that line (this is Step 6 of `/client-onboarding`
 in action).
 
