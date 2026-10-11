@@ -1,5 +1,5 @@
 name: hq-pack-agency-kit
-version: 0.4.8
+version: 0.4.9
 publisher: '@indigoai-us'
 access: public
 displayName: AI Builders Agency Kit
@@ -106,7 +106,7 @@ setup:
       read: "your recent messages in client channels"
       informs: [services, voice]
       options:
-        - {name: Slack, tool: scripts/slack.mjs, connect: connect-link, status: status, usage: "channels | search <query> | history <channelId> | thread <channelId> <threadTs>"}
+        - {name: Slack, tool: scripts/slack.mjs, connect: "connect --company <company slug>", status: status, usage: "channels | search <query> | history <channelId> | thread <channelId> <threadTs>"}
         - {name: Teams, available: false, note: "Teams comes in a later update"}
     - kind: docs and SOPs
       read: "your SOPs, process docs, proposals and rate cards"

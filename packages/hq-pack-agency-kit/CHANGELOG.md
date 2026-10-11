@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.9 (2026-10-11)
+
+- Slack connects in one step: the Agency Guide opens Slack's own sign-in page
+  (`slack.mjs connect`, through `hq integrations slack connect`) instead of
+  sending people to the HQ console's Add Integration dialog, whose popup
+  browsers block. HQ still keeps the sign-in in their personal vault.
+- When a Slack connection cannot search yet, the guide falls back to the
+  channel list and a few channel histories.
+
 ## 0.4.8 (2026-10-11)
 
 - Setup learns their tools right after the agency name, asking by kind (docs,

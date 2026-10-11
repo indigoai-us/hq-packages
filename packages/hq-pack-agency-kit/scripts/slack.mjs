@@ -9,7 +9,8 @@
 //
 // Usage (prints one JSON object):
 //   node slack.mjs status
-//   node slack.mjs connect-link
+//   node slack.mjs connect [--company <slug>]       opens Slack's own sign-in page
+//   node slack.mjs connect-link [--company <slug>]  prints that link without opening it
 //   node slack.mjs channels [--limit N]
 //   node slack.mjs search <query...> [--limit N]
 //   node slack.mjs history <channelId> [--limit N]
@@ -31,6 +32,7 @@ const READ_METHODS = new Set([
 const TOKEN_NAME = /^SLACK_PERSONAL\/(T[A-Z0-9]+)\/(U[A-Z0-9]+)\/USER_TOKEN$/;
 const CONSOLE = process.env.HQ_CONSOLE_URL || "https://hq.computer";
 const CONNECT_PATH = process.env.HQ_SLACK_CONNECT_PATH || "/personal/integrations";
+const NOT_CONNECTED = { next: "connect Slack: node slack.mjs connect --company <company slug>" };
 
 function out(obj, code = 0) {
   process.stdout.write(`${JSON.stringify(obj, null, 2)}\n`);
@@ -70,7 +72,7 @@ function tokenFor(conn) {
   const text = hq(["secrets", "--personal", "get", "--reveal", conn.name]);
   const line = text.split("\n").find((l) => /^\s*Value:/.test(l));
   const token = line ? line.replace(/^\s*Value:\s*/, "").trim() : "";
-  if (!token.startsWith("xoxp-")) fail("not_connected", { next: "connect Slack: node slack.mjs connect-link" });
+  if (!token.startsWith("xoxp-")) fail("not_connected", NOT_CONNECTED);
   return token;
 }
 
@@ -78,7 +80,7 @@ function pick(args) {
   const i = args.indexOf("--team");
   const team = i === -1 ? null : args.splice(i, 2)[1];
   const all = connections();
-  if (!all.length) fail("not_connected", { next: "connect Slack: node slack.mjs connect-link" });
+  if (!all.length) fail("not_connected", NOT_CONNECTED);
   const conn = team ? all.find((c) => c.team === team) : all[0];
   if (!conn) fail("unknown_team", { teams: all.map((c) => c.team) });
   return { conn, teams: all.map((c) => c.team) };
@@ -111,7 +113,13 @@ async function slack(token, method, params = {}) {
     }
     const data = await res.json();
     if (!data.ok) {
-      if (data.error === "missing_scope") fail("missing_scope", { method, needed: data.needed, next: "reconnect Slack with search: node slack.mjs connect-link" });
+      if (data.error === "missing_scope") {
+        fail("missing_scope", {
+          method,
+          needed: data.needed,
+          next: method === "search.messages" ? "this Slack connection cannot search yet; use channels, then history on the few channels that matter" : "reconnect Slack: node slack.mjs connect --company <company slug>",
+        });
+      }
       fail("slack_error", { method, message: data.error });
     }
     return data;
@@ -130,8 +138,30 @@ async function main() {
   const args = process.argv.slice(2);
   const cmd = args.shift();
 
-  if (cmd === "connect-link") {
-    out({ ok: true, url: `${CONSOLE}${CONNECT_PATH}`, note: "Open this, click Add, choose Slack, pick the company, and allow access in Slack. Then run: node slack.mjs status" });
+  if (cmd === "connect" || cmd === "connect-link") {
+    // Slack's own sign-in page, minted by HQ for this person and company. HQ's
+    // callback stores the token in their personal vault; `status` confirms.
+    const i = args.indexOf("--company");
+    const company = i === -1 ? null : args[i + 1];
+    const cli = ["integrations", "slack", "connect", "--json", ...(company ? ["--company", company] : []), ...(cmd === "connect" ? ["--open"] : [])];
+    let res = null;
+    try {
+      res = JSON.parse(hq(cli).trim().split("\n").pop() || "{}");
+    } catch (err) {
+      const text = String(err?.stderr || err?.message || err);
+      // An older hq without `integrations slack`: fall back to the console page.
+      if (/unknown command|too many arguments/i.test(text)) {
+        out({ ok: true, url: `${CONSOLE}${CONNECT_PATH}`, note: "Open this, click Add, choose Slack, pick the company, and allow access in Slack. Then run: node slack.mjs status" });
+      }
+      fail("connect_failed", { message: text.split("\n").filter(Boolean).slice(-2).join(" ").slice(0, 300) });
+    }
+    if (!res?.url) fail("connect_failed", { message: "HQ did not return a Slack sign-in link" });
+    out({
+      ok: true,
+      started: Boolean(res.opened),
+      url: res.url,
+      note: `${res.opened ? "Slack's sign-in page opened in their browser" : "Send them this link"}; they pick the workspace and press Allow, and the page then says Connected. The link works for 10 minutes. Then run: node slack.mjs status`,
+    });
   }
 
   if (cmd === "status") {
@@ -186,7 +216,7 @@ async function main() {
     out({ ok: true, channel, threadTs: ts, messages: (data.messages || []).map(msg), more: Boolean(data.has_more) });
   }
 
-  out({ ok: false, error: "usage: slack.mjs status | connect-link | channels | search <query> | history <channelId> | thread <channelId> <threadTs> [--limit N] [--team T…]" }, 1);
+  out({ ok: false, error: "usage: slack.mjs status | connect [--company <slug>] | connect-link [--company <slug>] | channels | search <query> | history <channelId> | thread <channelId> <threadTs> [--limit N] [--team T…]" }, 1);
 }
 
 main().catch((err) => fail("unexpected", { message: String(err?.message || err).slice(0, 300) }));

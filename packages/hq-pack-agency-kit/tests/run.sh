@@ -213,8 +213,8 @@ done
 for w in $(awk '/^  workers:/{f=1;next} /^  [a-z]+:/{f=0} f && /- /{print $2}' "$PACK_DIR/package.yaml"); do
   check "worker $w has worker.yaml with matching id" 'grep -q "^  id: $w$" "$PACK_DIR/workers/$w/worker.yaml"'
 done
-check "package version is 0.4.8" 'grep -q "^version: 0.4.8$" "$PACK_DIR/package.yaml"'
-check "changelog has a 0.4.8 entry" 'grep -q "^## 0.4.8" "$PACK_DIR/CHANGELOG.md"'
+check "package version is 0.4.9" 'grep -q "^version: 0.4.9$" "$PACK_DIR/package.yaml"'
+check "changelog has a 0.4.9 entry" 'grep -q "^## 0.4.9" "$PACK_DIR/CHANGELOG.md"'
 check "setup skill learns tools by kind before the business topics" 'grep -q "learn their tools before asking about the business" "$WORKER/skills/setup.md"'
 check "worker caps buttons at four of one kind" 'grep -q "never answers mixed with actions" "$WORKER/worker.yaml"'
 check "requires client-service through requires.packs" 'grep -A2 "^  packs:" "$PACK_DIR/package.yaml" | grep -q "name: hq-pack-client-service"'
@@ -267,7 +267,22 @@ if command -v node >/dev/null 2>&1; then
   check "slack.mjs parses" 'node --check "$SLACKJS"'
   check "slack.mjs allows only Slack read methods" 'node -e "const s=require(\"fs\").readFileSync(process.argv[1],\"utf8\");const m=s.match(/READ_METHODS = new Set\(\[([^\]]*)\]/)[1];const bad=/(post|update|delete|join|invite|kick|react|archive|set|create|rename|leave|open|close|upload|add|remove)/i;process.exit(m.split(\",\").some(x=>bad.test(x))?1:0)" "$SLACKJS"'
   check "slack.mjs refuses an unknown command" '! node "$SLACKJS" nope >/dev/null 2>&1'
-  check "setup skill connects Slack with slack.mjs and reads search-first" 'grep -q "scripts/slack.mjs" "$WORKER/skills/setup.md" && grep -q "connect-link" "$WORKER/skills/setup.md" && grep -q "search first" "$WORKER/skills/setup.md"'
+  SLACKSTUB=$(mktemp -d)
+  cat > "$SLACKSTUB/hq" <<'STUB'
+#!/bin/bash
+echo "$*" > "$(dirname "$0")/args"
+if [ "$1 $2 $3" = "integrations slack connect" ]; then
+  case " $* " in *" --open "*) o=true;; *) o=false;; esac
+  echo "{\"url\":\"https://slack.com/oauth/v2/authorize?state=x\",\"opened\":$o}"
+  exit 0
+fi
+exit 1
+STUB
+  chmod +x "$SLACKSTUB/hq"
+  check "slack.mjs connect opens Slack's own sign-in via hq integrations slack connect" '( out=$(PATH="$SLACKSTUB:$PATH" node "$SLACKJS" connect --company acme) && grep -q "integrations slack connect --json --company acme --open" "$SLACKSTUB/args" && echo "$out" | grep -q "\"started\": true" && echo "$out" | grep -q "slack.com/oauth" )'
+  check "slack.mjs connect-link prints Slack's link without opening it" '( out=$(PATH="$SLACKSTUB:$PATH" node "$SLACKJS" connect-link --company acme) && ! grep -q -- "--open" "$SLACKSTUB/args" && echo "$out" | grep -q "\"started\": false" )'
+  check "package declares Slack connect with the company" 'grep -q "connect: \"connect --company <company slug>\"" "$PACK_DIR/package.yaml"'
+  check "setup skill connects Slack with slack.mjs and reads search-first" 'grep -q "scripts/slack.mjs" "$WORKER/skills/setup.md" && grep -q "connect --company {firm}" "$WORKER/skills/setup.md" && grep -q "search first" "$WORKER/skills/setup.md"'
   check "setup skill connects Drive with drive.mjs and reads with it" 'grep -q "scripts/drive.mjs" "$WORKER/skills/setup.md" && grep -q "Google sign-in page" "$WORKER/skills/setup.md" && grep -q "and .read. read Drive" "$WORKER/skills/setup.md"'
 else
   ok "drive.mjs (skipped: node not installed)"

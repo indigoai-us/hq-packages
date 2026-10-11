@@ -63,10 +63,12 @@ on it. Today that means:
   Google lists Drive alongside some Google Cloud permissions on that page;
   that is normal for this sign-in, and you only ever read.
 - **Slack** connects through HQ's Personal Slack account (`scripts/slack.mjs`):
-  `connect-link` gives the HQ page where they add Slack (Add, then Slack, pick
-  the company, allow in Slack), `status` confirms it, and `channels`, `search`,
-  `history` and `thread` read it. Slack only lets HQ read channel history
-  slowly for now, so search first and open only a few conversations.
+  `connect --company {firm}` opens Slack's own sign-in page in their browser
+  (they pick the workspace and press Allow; HQ keeps the sign-in in their
+  vault), `status` confirms it, and `channels`, `search`, `history` and
+  `thread` read it. Slack only lets HQ read channel history slowly for now,
+  so search first and open only a few conversations. If search says this
+  connection cannot search yet, use the channel list and a few histories.
 - **Email, HubSpot, Salesforce and Teams** are not available yet. Say so
   once if it comes up, plainly, and move on.
 - **Other tools** connect with an HQ sign-in link from
