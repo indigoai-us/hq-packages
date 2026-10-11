@@ -1,0 +1,40 @@
+name: hq-pack-agency-kit
+version: 0.2.0
+publisher: '@indigoai-us'
+access: public
+displayName: AI Builders Agency Kit
+description: 'The AI Builders agency operating kit for HQ. Builds on hq-pack-client-service. /agency-setup writes the agency playbook (profile, onboarding checklist, audit criteria, scope rules, example briefs and delivery plans) into the firm company. /client-workspace gives every client the same workspace layout, as a folder inside the agency or as the client''s own HQ company. /client-onboarding runs the onboarding system on a signed client: scope review, missing inputs, account audit and a kickoff package, each with sources and a human approval point, then feeds what the strategist caught back into the playbook. /practice-client loads a pre-filled practice client with planted gaps so students can try the whole flow on day one. Also ships /scope-check, /weekly-update and /proposal. AI Builders brand tokens in brand/.'
+keywords:
+  - hq
+  - hq-pack
+  - agency
+  - ai-builders
+  - client-onboarding
+capabilities:
+  - scripts
+  - fs
+requires:
+  hqCore: '>=16.0.0-beta.50'
+  packages:
+    - hq-pack-client-service
+contributes:
+  workers: []
+  skills:
+    - agency-setup
+    - client-workspace
+    - client-onboarding
+    - practice-client
+    - scope-check
+    - weekly-update
+    - proposal
+  knowledge:
+    - agency-kit
+  policies:
+    - agency-kit-evidence-before-commitment
+    - agency-kit-playbook-learns
+  hooks: []
+  commands: []
+  scripts: []
+initialization:
+  entrypoint: /agency-setup
+  welcome: 'Welcome to the AI Builders Agency Kit. Run /agency-setup to set up your agency in HQ, then /practice-client to try the onboarding system on a sample client. When a real client signs: /new-client, /client-workspace, /client-onboarding.'
