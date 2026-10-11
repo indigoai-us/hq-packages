@@ -1,13 +1,15 @@
 {
   "name": "@indigoai-us/hq-pack-imessage",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "HQ content pack: read, search, and send iMessages and SMS from this Mac's Messages account, for interactive sessions and local HQ bots.",
   "files": [
     "skills",
     "knowledge",
     "scripts",
     "package.yaml",
-    "README.md"
+    "README.md",
+    "cover.jpg",
+    "!**/__pycache__"
   ],
   "repository": {
     "type": "git",
