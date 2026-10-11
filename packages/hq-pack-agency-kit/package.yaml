@@ -1,9 +1,9 @@
 name: hq-pack-agency-kit
-version: 0.3.3
+version: 0.4.0
 publisher: '@indigoai-us'
 access: public
 displayName: AI Builders Agency Kit
-description: 'The AI Builders agency operating kit for HQ. Builds on hq-pack-client-service. Ships the Agency Guide, a personal bot that sets up the agency and runs client onboarding from the HQ app chat, with tap-to-answer questions and approval gates. The same flows are available as Claude Code commands: /agency-setup writes the agency playbook (profile, onboarding checklist, audit criteria, scope rules, example briefs and delivery plans) into the firm company. /client-workspace gives every client the same workspace layout, as a folder inside the agency or as the client''s own HQ company. /client-onboarding runs the onboarding system on a signed client: scope review, missing inputs, account audit and a kickoff package, each with sources and a human approval point, then feeds what the strategist caught back into the playbook. /practice-client loads a pre-filled practice client with planted gaps so students can try the whole flow on day one. Also ships /scope-check, /weekly-update and /proposal. AI Builders brand tokens in brand/.'
+description: 'The AI Builders agency operating kit for HQ. Builds on hq-pack-client-service. Ships the Agency Guide, a personal bot that sets up the agency (an agency brain, a brain per current client, and connected tools, learned from the agency''s apps) and runs client onboarding from the HQ app chat, with tap-to-answer questions and approval gates. The same flows are available as Claude Code commands: /agency-setup writes the agency playbook (profile, onboarding checklist, audit criteria, scope rules, example briefs and delivery plans) into the firm company. /client-workspace gives every client the same workspace layout, as a folder inside the agency or as the client''s own HQ company. /client-onboarding runs the onboarding system on a signed client: scope review, missing inputs, account audit and a kickoff package, each with sources and a human approval point, then feeds what the strategist caught back into the playbook. /practice-client loads a pre-filled practice client with planted gaps so students can try the whole flow on day one. Also ships /scope-check, /weekly-update and /proposal. AI Builders brand tokens in brand/.'
 keywords:
   - hq
   - hq-pack
@@ -39,12 +39,12 @@ contributes:
   scripts: []
 initialization:
   entrypoint: /agency-setup
-  welcome: 'Welcome to the AI Builders Agency Kit. In the HQ app, your Agency Guide bot sets up the agency and walks you through a practice client in chat. In Claude Code, run /agency-setup to set up your agency, then /practice-client to try the onboarding system on a sample client. When a real client signs: /new-client, /client-workspace, /client-onboarding.'
+  welcome: 'Welcome to the AI Builders Agency Kit. In the HQ app, your Agency Guide bot sets up your agency in chat: a brain for your agency, one for each current client, and your tools connected, learned from your apps. In Claude Code, run /agency-setup to set up your agency, then /practice-client to try the onboarding system on a sample client. When a real client signs: /new-client, /client-workspace, /client-onboarding.'
 setup:
   bot:
     name: agency-guide              # bot handle; also the worker id under contributes.workers
     display_name: Agency Guide
-    intro: "Hi, I'm your Agency Guide. I'll set up your agency in HQ and show you how it works on a practice client. Six quick questions."
+    intro: "Hi, I'm your Agency Guide. I'll set up your agency in HQ: a brain for your agency, one for each of your clients, and your tools connected. I'll learn as much as I can from your apps so you answer as little as possible."
   takeover_setup: true              # if HQ's setup bot has not finished, this bot finishes it first
   questions:
     - id: agency_name
@@ -87,8 +87,6 @@ setup:
       pricing: --pricing
       tools: --tools
       voice: --voice
-    then:                                 # run after `script`, in order, same --firm
-      - scripts/practice-setup.sh --agency-name {agency_name}
   sources:                              # connected apps the guide reads (with a yes) instead of asking
     - app: gmail
       read: "the last 30 emails you sent to clients"
@@ -99,10 +97,14 @@ setup:
     - app: hubspot
       read: "your recent deals and the companies on them"
       informs: [ideal_client, services, pricing]
+    - app: google-drive
+      read: "your SOPs, process docs, proposals and rate cards"
+      informs: [services, pricing, voice]
   documents:                            # asked for once, early; the bot reads them and asks less
     - a rate card or pricing sheet
     - a recent proposal or statement of work
     - a case study
+    - an SOP or process doc
   done:
-    message: "Your agency playbook is written. You'll find it in Files under Knowledge, Agency Playbook. To show you how client onboarding works, I've set up a practice client: Northwind Labs, a made-up company with a few problems hidden in its documents. Want to run its onboarding? It takes about 10 minutes."
-    suggestion: "Run the practice onboarding"
+    message: "Your agency is set up in HQ. Here's what I set up:"
+    suggestion: "Onboard a client"

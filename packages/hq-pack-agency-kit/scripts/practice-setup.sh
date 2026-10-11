@@ -54,7 +54,7 @@ else
     --empty crm --empty billing --empty agreements --empty portal --empty transcripts
 fi
 step "practice client record" "E_SLUG_COLLISION" -- bash "$CS/new-client.sh" engagement \
-  --firm "$FIRM" --client practice-northwind --client-name "Northwind Labs (practice)" --local-only
+  --firm "$FIRM" --client practice-northwind --client-name "Northwind Labs (practice)" --local-only --session-company "$FIRM"
 step "practice documents" "E_INPUTS_EXIST" -- bash "$PACK_DIR/scripts/practice-client.sh" \
   --firm "$FIRM" --agency-name "$AGENCY" --root "$ROOT"
 echo "practice-setup: firm=$FIRM ok"

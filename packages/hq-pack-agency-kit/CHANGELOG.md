@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.4.0 (2026-10-11)
+
+- Setup builds three things: an agency brain (playbook plus the agency's own
+  SOPs under `knowledge/agency-playbook/sops/`), a brain for each current
+  client, and the agency's systems connected. The Agency Guide learns from
+  connected apps and documents first (Gmail, Slack, HubSpot, Google Drive),
+  proposes answers with their sources, and asks only what is left open.
+- Current clients come in during setup: the guide proposes them from CRM
+  deals, client Slack channels and email, the person confirms, and
+  `scripts/import-clients.sh` creates every client home in one step. The
+  guide then fills each `client-profile.md` and `access-and-assets.md` from
+  what it read, with sources.
+- `scripts/firm-setup.sh` links the client-service slots to the tools the
+  agency uses (`--bind crm=HubSpot:cli`) and leaves the rest undecided
+  instead of forcing them empty.
+- Setup ends with a summary of what was set up and next steps ("Onboard a
+  client"). Northwind Labs is offered only when the agency has no clients in
+  HQ yet; `setup.run.then` no longer loads it.
+- `scripts/practice-setup.sh` and the new scripts pass `--session-company`, so
+  they work outside an HQ session.
+
 ## 0.3.3 (2026-10-11)
 
 - The Agency Guide learns from connected apps before asking. After the agency

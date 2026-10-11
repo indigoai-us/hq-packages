@@ -1,221 +1,232 @@
 ---
 name: setup
 title: Agency setup
-description: Set up the agency from the chat as a short interview. Six topics, one question at a time with suggested answers, a follow-up when an answer is vague, and the agency's own documents read instead of asked about. Then write the playbook, run the client-service firm setup with every slot empty, load Northwind Labs, and hand off to onboarding.
+description: Set up the agency in HQ from the chat. Build the agency brain (profile, pricing, voice, SOPs), a brain for each current client, and connect the agency's systems, learning from connected apps and documents first and asking only what the data leaves open. Ends with a summary of what was set up.
 ---
 
 # Agency setup
 
-This is the pack setup from `setup:` in the Agency Kit's package.yaml, done by
-you in the chat. Treat it as an interview with a sharp strategist, not a form:
-the playbook you write is only as good as what you learn here, and every
-agency-kit skill reads it first. Keep each message short. One question per
-message.
+The goal: when setup ends, the agency owner has
 
-Before you start, resolve `{firm}` as the worker instructions say, and read
-the company's display name from `companies/manifest.yaml`
-(`companies.{firm}.name`). Record both in your progress note. If the app already
-sent the first question (your turn starts with a `[Pack setup: ...]` note), do
-not repeat the checks or the question: the person's message is their answer.
+1. **An agency brain**: who they are, what they sell and how they price it,
+   how they sound, and their own SOPs, in
+   `companies/{firm}/knowledge/agency-playbook/`.
+2. **A brain for each current client**: one home per client under
+   `companies/{firm}/clients/{slug}/` with what the agency does for them, who
+   the contacts are, the contract terms, recent activity, and where their
+   things live.
+3. **Their systems connected**: the agency's tools linked to HQ (CRM, email,
+   Slack, project management, billing), and each client's systems noted in
+   that client's home.
+
+Do it fast. Learn from data before you ask. Every question you can answer from
+a connected app or a document is a question you do not ask. Keep each message
+short, one question or one decision per message, always with buttons.
+
+Before you start, resolve `{firm}` as the worker instructions say, and read the
+company's display name from `companies/manifest.yaml` (`companies.{firm}.name`).
+Record both in your progress note. If the app already sent the first question
+(your turn starts with a `[Pack setup: ...]` note), do not repeat the checks or
+the question: the person's message is their answer.
 
 If `companies/{firm}/knowledge/agency-playbook/` already exists, setup has run
-before. Say so in one line, offer ["Run the practice onboarding","Set up my agency again"],
-and on the second run the steps below anyway: the scripts only add what is
-missing and never overwrite a playbook file the agency has edited.
+before. Say so in one line, offer ["Add my clients","Set up my agency again"],
+and carry on from the first stage that is not done.
 
-## How to interview
+Record each stage in your progress note as it finishes.
 
-- **Each topic has a goal.** A topic is done when you know what its goal says,
-  not when they have replied. A tap on a suggestion is often enough; a vague or
-  surprising answer is not.
-- **Follow up when it matters, once or twice at most.** "Variable pricing", "a
-  mix", "depends on the client", "Something else" and similar always get one
-  short follow-up, with suggestions where you can guess the likely answers. Do
-  not follow up on a clear answer.
-- **Use what they already told you.** If an earlier answer or a document
-  covers a topic, propose what you know ("Sounds like retainer plus a share of
-  ad spend. Right?") instead of asking from scratch.
-- **Acknowledge in a few words** at the top of the next question ("Retainer
-  plus 10% of spend over $50k, got it."). Never read back the whole set.
-- **Record each topic in your progress note** as a full sentence the playbook
-  can use, before you send the next question. This sentence is what you pass
-  to the setup script, so write it the way the agency would describe itself.
+## Stage 1: the name
 
-## Learn from their apps first
+**1. agency_name** (not skippable). Goal: the name clients know them by.
+Propose the company's display name and ask to confirm it; do not ask from
+scratch. A name is required; if they try to skip, say one line about why (it
+goes on every brief and client update) and ask again.
 
-Answer topics from data before you ask them. Right after the agency name, run
-`hq integrations list --usable --json --company {firm}` and see what is
-connected. Then send one message that:
+## Stage 2: connect and learn
 
-- names the connected apps you could read and exactly what you would read
+Right after the name, run `hq integrations list --usable --json --company {firm}`.
+Then send one message that:
+
+- names the connected apps you could read, and exactly what you would read
   (the last 30 emails they sent to clients, their recent messages in client
-  Slack channels, their recent HubSpot deals),
-- offers to connect Gmail, Slack or HubSpot if none of them is connected,
-- says they can also drop in a rate card, a recent proposal or a case study.
+  Slack channels, their recent HubSpot deals and companies, their SOP or
+  process docs in Google Drive or Notion),
+- offers to connect the most useful app that is not connected (Gmail first,
+  then the CRM, then Slack),
+- says they can also drop in a rate card, a recent proposal, a case study or
+  an SOP.
 
 ```hq-block
 {"v":1,"blocks":[{"kind":"suggestions","items":["Read my apps","Connect Gmail","Just ask me"]}]}
 ```
 
-Adjust the buttons to what is true: "Read my apps" only when something useful
-is connected, "Connect <app>" for the most useful app that is not.
+Make the buttons true: "Read my apps" only when something useful is
+connected, "Connect <app>" for the most useful missing app.
 
 - **Connect:** run `hq integrations connect <app> --company {firm} --no-browser`,
   send the sign-in link as a plain link, and offer ["Done","Skip"]. After
-  "Done", list the apps again before reading.
+  "Done", list the apps again. Offer the next most useful app once; do not
+  push past two.
 - **Read:** with their yes, use `hq integrations tools` and
   `hq integrations call` with read-only tools only. Never send, post, label or
   change anything. Read only what you said you would.
 - **Documents:** read any file they drop in.
 
-Then send one message with a proposed answer for every topic the data covers,
-one line each, saying where it came from ("Pricing: retainer from $4k plus 10%
-of spend over $40k, from your proposals to Acme and Brightside"). Tools come
-straight from the apps they have connected. Ask them to confirm or correct it:
+While you read, collect three things at once: what the agency is (the five
+topics below), which tools it runs (Stage 4), and who its current clients are
+(Stage 5). One read, three uses.
+
+## Stage 3: the agency brain
+
+Send one message proposing an answer for every topic the data covers, one line
+each, saying where it came from ("Pricing: retainer from $4k plus 10% of spend
+over $40k, from your proposals to Acme and Brightside"). Ask them to confirm or
+correct it:
 
 ```hq-block
 {"v":1,"blocks":[{"kind":"suggestions","items":["Looks right","Some of it's off"]}]}
 ```
 
-After that, ask only the topics the data left open, in order. Never paste
-private message text back; describe what you found in your own words. If
-they say "Just ask me", go through the topics as written below.
+Then ask only the topics the data left open, in this order. A topic is done
+when you know what its goal says, not when they have replied. "Variable
+pricing", "a mix", "it depends" and "Something else" always get a follow-up,
+with likely answers as buttons. At most two follow-ups per topic. Never paste
+private message text back; describe what you found in your own words.
 
-## The six topics
+**2. services**. Goal: what they sell and, per service, what the client
+actually gets, enough to tell in-scope from out-of-scope work.
+Buttons: ["Paid ads","SEO and content","Web and design","Automations and AI","Something else","Skip"].
 
-**1. agency_name** (not skippable). Goal: the name clients know them by.
-Propose the company's display name and ask to confirm it; do not ask from
-scratch.
+**3. ideal_client**. Goal: who they do their best work for: industry, size or
+spend, stage. Buttons: ["Ecommerce brands","B2B SaaS","Local businesses","Professional services","Skip"].
 
-> Your agency is called {Company display name} in HQ. Is that what clients see, or do they know you by another name?
-
-```hq-block
-{"v":1,"blocks":[{"kind":"suggestions","items":["Yes, {Company display name}","It's a different name"]}]}
-```
-
-A name is required; if they try to skip, say one line about why (it goes on
-every brief and client update) and ask again.
-
-**2. services**. Goal: what they sell and, for each service, what the client
-actually gets, enough to tell in-scope work from out-of-scope work.
-
-> What do you sell?
-
-```hq-block
-{"v":1,"blocks":[{"kind":"suggestions","items":["Paid ads","SEO and content","Web and design","Automations and AI","Something else","Skip"]}]}
-```
-
-Follow up if the answer is a channel with no detail ("Google Ads": "Search
-only, or Shopping and Performance Max too? And do you make the creative?").
-
-**3. ideal_client**. Goal: who they do their best work for, sharp enough to
-spot a bad-fit lead: industry, size or spend, and stage.
-
-> Who do you sell to?
-
-```hq-block
-{"v":1,"blocks":[{"kind":"suggestions","items":["Ecommerce brands","B2B SaaS","Local businesses","Professional services","Skip"]}]}
-```
-
-Follow up once for size if they only name an industry ("What size, roughly?
-By revenue or monthly ad spend.").
-
-**4. pricing**. Goal: how a price is built, well enough to check a proposal
-or a scope change against it: the model (retainer, project, performance), what
-it varies with, and typical ranges or minimums.
-
-> How do you charge?
-
-```hq-block
-{"v":1,"blocks":[{"kind":"suggestions","items":["Monthly retainer","Per project","Performance based","A mix","Skip"]}]}
-```
-
-"Variable", "a mix" or "it depends" always gets a follow-up on what it
-depends on:
-
-```hq-block
-{"v":1,"blocks":[{"kind":"suggestions","items":["Ad spend","Scope of work","Results","Number of channels"]}]}
-```
-
-Then, if they have not said, ask for a typical range or minimum in one line
-("What's a typical monthly fee, or your minimum?"). If a rate card or proposal
-came in, take the numbers from it and ask them to confirm.
+**4. pricing**. Goal: how a price is built: the model, what it varies with,
+typical ranges or minimums. Buttons: ["Monthly retainer","Per project","Performance based","A mix","Skip"].
+A vague answer always gets a follow-up on what it depends on
+(["Ad spend","Scope of work","Results","Number of channels"]), then one line
+for a typical range or minimum.
 
 **5. tools**. Goal: the CRM, project management, reporting and ad platforms
-they use, so later steps know where data lives. Do not ask about connecting
-them; that comes later.
-
-> Which tools do you run? CRM, project management, reporting, ad platforms.
-
-```hq-block
-{"v":1,"blocks":[{"kind":"suggestions","items":["HubSpot and Asana","Notion and Slack","Google Sheets and email","Not sure yet","Skip"]}]}
-```
+they use. Take it from the apps they have connected and what you read; ask
+only to fill gaps.
 
 **6. voice**. Goal: how they sound with clients, specific enough to write in.
-A proposal or case study they shared is the best source; propose what you
-heard in it.
+Sent emails and proposals are the best source; propose what you heard.
 
-> How do you sound with clients, in a few words?
+Each topic goes into your note as a full sentence the playbook can use. Then
+write the agency brain, saying one line first ("Writing your agency playbook
+now."):
 
-```hq-block
-{"v":1,"blocks":[{"kind":"suggestions","items":["Direct and plain","Warm and friendly","Formal and precise","Skip"]}]}
+```bash
+bash core/packages/hq-pack-agency-kit/scripts/agency-setup.sh \
+  --firm {firm} --name "{agency_name}" \
+  --services "{services}" --ideal-client "{ideal_client}" \
+  --pricing "{pricing}" --tools "{tools}" --voice "{voice}"
 ```
 
-"Skip" on any topic but the name records it as empty, and the playbook gets a
-marked placeholder they can fill in later.
+Leave out the flag of a skipped topic; the script writes a marked placeholder.
+Then add what the six sentences cannot hold:
 
-## Then do the work
+- In `agency-profile.md`, a "From their apps and documents" section with the
+  specifics (price points, packages, minimums, contract terms), each with its
+  source.
+- Their SOPs: for each SOP or process doc you found or they dropped in, write
+  a short markdown copy to
+  `companies/{firm}/knowledge/agency-playbook/sops/{slug}.md` with a title, the
+  steps, and the source at the top. Fold anything that changes how they
+  onboard clients into `onboarding-checklist.md`, marked with its source.
 
-After the last topic, say one line ("Writing your playbook now.") and run
-these from the HQ root, in order. Pass each topic's sentence from your note;
-leave out the flag of a skipped topic, and the script writes the placeholder.
+## Stage 4: link the agency's systems
 
-1. The playbook:
+Link the client-service slots to the tools they use. For each slot you have
+evidence for, pass a `--bind`: `crm`, `billing`, `agreements`, `portal`,
+`transcripts`, as `<slot>=<Tool name>:cli` for a tool reached through HQ
+integrations, for example `--bind crm=HubSpot:cli`.
 
-   ```bash
-   bash core/packages/hq-pack-agency-kit/scripts/agency-setup.sh \
-     --firm {firm} --name "{agency_name}" \
-     --services "{services}" --ideal-client "{ideal_client}" \
-     --pricing "{pricing}" --tools "{tools}" --voice "{voice}"
-   ```
-
-   Check that `companies/{firm}/knowledge/agency-playbook/` has six files.
-   If documents came in, add a short "From their documents" section to
-   `agency-profile.md` with the specifics the six sentences could not hold
-   (price points, packages, minimums, contract terms), each with the file it
-   came from.
-
-2. The firm setup and the practice client (the client-service firm setup with
-   every slot empty, Northwind Labs recorded, and its documents loaded):
-
-   ```bash
-   bash core/packages/hq-pack-agency-kit/scripts/practice-setup.sh \
-     --firm {firm} --agency-name "{agency_name}"
-   ```
-
-   Check that `companies/{firm}/clients/practice-northwind/onboarding/inputs/`
-   has seven files.
-
-Record each step in your progress note as it finishes. Do not narrate the
-steps to the person; they get one message at the end.
-
-If a script fails, say in one plain sentence what you were doing and that it
-did not finish (for example "I couldn't write the playbook yet."), and offer
-["Retry","Skip this for now"]. Never show the error text. On Retry, run the
-same step again. On Skip, record it in your note and continue; say at the end
-what was skipped and that you can pick it up any time.
-
-## The done message
-
-When both steps have run, send exactly this, with the suggestion from
-`setup.done`:
-
-> Your agency playbook is written. You'll find it in Files under Knowledge, Agency Playbook. To show you how client onboarding works, I've set up a practice client: Northwind Labs, a made-up company with a few problems hidden in its documents. Want to run its onboarding? It takes about 10 minutes.
-
-```hq-block
-{"v":1,"blocks":[{"kind":"suggestions","items":["Run the practice onboarding"]}]}
+```bash
+bash core/packages/hq-pack-agency-kit/scripts/firm-setup.sh \
+  --firm {firm} --agency-name "{agency_name}" --bind crm=HubSpot:cli
 ```
 
-Write `Setup: finished` and the date in your progress note. When they tap the
-suggestion (or say anything that means yes), run `skills/onboarding.md` for
-`practice-northwind`.
+Slots you have no evidence for stay undecided; do not ask about them now. If
+the script says `E_ENV_YQ_MISSING`, record it and list it as not done in the
+summary; client homes cannot be created until it runs, so say that too.
+
+## Stage 5: a brain for each client
+
+Propose their current clients from what you read: companies on recent won or
+active HubSpot deals, client Slack channels, and the domains they email most
+as an agency. One line per client with where you saw them. Up to 15; say if
+there are more.
+
+```hq-block
+{"v":1,"blocks":[{"kind":"suggestions","items":["Add all of them","Let me edit the list","Not now"]}]}
+```
+
+If you found none, ask once: "Who are your current clients? Type their names,
+one per line." With no data and no names, go to the summary and offer the
+practice client at the end (see "No clients yet").
+
+Write the confirmed list to a file in your memory folder, one client per line,
+`{slug}<TAB>{Client Name}` (slug: lowercase letters, digits and hyphens), and
+create every client home in one go:
+
+```bash
+bash core/packages/hq-pack-agency-kit/scripts/import-clients.sh \
+  --firm {firm} --file <that file> --agency-name "{agency_name}"
+```
+
+Then fill each client's brain from what you already read, without asking the
+person anything: in `companies/{firm}/clients/{slug}/client-profile.md`, the
+"Who they are", "Why they hired us" and "How they want to work" lines you
+have evidence for, each with its source, and blank where you have none. In
+`access-and-assets.md`, the client's systems you saw (their ad accounts,
+analytics, site platform, shared drives, Slack channel), names only. Never
+copy credentials, and never paste message text. Do the clients one after
+another; do not message the person per client.
+
+## The done message and summary
+
+Send the done message from `setup.done`, then in the same message a short
+summary of what actually happened, for example:
+
+> Your agency is set up in HQ. Here's what I set up:
+>
+> - Agency brain: your playbook (profile, pricing, voice, scope rules, onboarding checklist) and 3 SOPs, in Files under Knowledge, Agency Playbook.
+> - 8 clients, each with a profile filled from HubSpot and Gmail, in Files under Clients.
+> - Linked: HubSpot as your CRM. Gmail and Slack are connected for reading.
+> - Not done: billing and contracts aren't linked yet.
+
+End with the done suggestion and up to two next steps that fit, for example
+the newest client: ["Onboard a client","Onboard {newest client}","Weekly update for {client}"].
+Write `Setup: finished` and the date in your progress note.
+
+"Onboard a client" means: ask which client (their names as buttons, newest
+first), then run `skills/onboarding.md` for that client, gathering its contract,
+proposal, call notes and exports from their apps first and asking for
+anything missing.
+
+## No clients yet
+
+Only when there is no client data and they named no clients: after the
+summary, offer a practice run.
+
+> No clients in HQ yet. Want to see how onboarding works on a practice client first? Northwind Labs is a made-up company with a few problems hidden in its documents; it takes about 10 minutes.
+
+```hq-block
+{"v":1,"blocks":[{"kind":"suggestions","items":["Try the practice client","Not now"]}]}
+```
+
+On yes, load it, then run `skills/onboarding.md` for `practice-northwind`:
+
+```bash
+bash core/packages/hq-pack-agency-kit/scripts/practice-setup.sh \
+  --firm {firm} --agency-name "{agency_name}"
+```
+
+## When a step fails
+
+Say in one plain sentence what you were doing and that it did not finish
+("I couldn't create the client homes yet."), and offer ["Retry","Skip this for now"].
+Never show the error text. On Retry, run the same step again. On Skip, record
+it and continue; the summary lists it under "Not done".
