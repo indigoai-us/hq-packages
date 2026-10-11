@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.12 (2026-10-11)
+
+- Fix: `slack.mjs channels` read only the first page of Slack's channel list
+  (38 of 268 channels in one workspace), so most client channels were never
+  seen. It now follows every page and reports `total` and `complete`.
+- The guide looks for the agency's client-channel naming pattern (a prefix
+  or suffix shared by many external channels, like `hqx-`) to find clients.
+
 ## 0.4.11 (2026-10-11)
 
 - The setup brief states its purpose: a fast setup with a workspace for each

@@ -173,16 +173,31 @@ async function main() {
   }
 
   if (cmd === "channels") {
-    const limit = flag(args, "--limit", 200, 1000);
+    // Slack pages this list and fills a page before filtering, so one call can
+    // return a small slice of the workspace with a cursor for the rest. Follow
+    // every page, up to --limit channels in total.
+    const limit = flag(args, "--limit", 2000, 5000);
     const { conn } = pick(args);
-    const data = await slack(tokenFor(conn), "conversations.list", {
-      types: "public_channel,private_channel",
-      exclude_archived: true,
-      limit,
-    });
+    const token = tokenFor(conn);
+    const all = [];
+    let cursor = "";
+    let pages = 0;
+    do {
+      const data = await slack(token, "conversations.list", {
+        types: "public_channel,private_channel",
+        exclude_archived: true,
+        limit: 200,
+        ...(cursor ? { cursor } : {}),
+      });
+      all.push(...(data.channels || []));
+      cursor = data.response_metadata?.next_cursor || "";
+      pages += 1;
+    } while (cursor && all.length < limit && pages < 100);
     out({
       ok: true,
-      channels: (data.channels || []).map((c) => ({
+      total: Math.min(all.length, limit),
+      complete: !cursor,
+      channels: all.slice(0, limit).map((c) => ({
         id: c.id,
         name: c.name,
         private: c.is_private,

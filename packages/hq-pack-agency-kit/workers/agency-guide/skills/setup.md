@@ -136,10 +136,13 @@ Work out their current clients from what you read (Slack channels, recent
 proposals and contracts in Drive, deals in a connected CRM) and let them
 confirm or edit the list.
 
-From Slack, the channel list is enough. A channel shared with another
-organization (`shared: true`) is almost always a client. Names often carry
-the client too: `client-acme`, `acme-ext`, `ext-acme`, `acme-ads`, or just a
-company name. Internal channels (general, random, team, eng, design, ops,
+From Slack, the channel list is enough. Use all of it: `channels` returns
+every channel (check `complete` is true), often hundreds. A channel shared
+with another organization (`shared: true`) is almost always a client. Look
+for the naming pattern the agency uses for client channels: a prefix or
+suffix many shared channels have in common (`hqx-acme`, `client-acme`,
+`acme-ext`) usually marks one channel per client, and the rest of the name is
+the client. Names without a pattern can still be a company name. Internal channels (general, random, team, eng, design, ops,
 alerts, sales, hiring and the like) are not clients. Group channels that
 belong to the same client (`acme`, `acme-ads`, `acme-seo`), and show the
 person each proposed client with its channels so they can confirm, rename or

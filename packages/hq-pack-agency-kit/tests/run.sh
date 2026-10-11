@@ -214,8 +214,8 @@ done
 for w in $(awk '/^  workers:/{f=1;next} /^  [a-z]+:/{f=0} f && /- /{print $2}' "$PACK_DIR/package.yaml"); do
   check "worker $w has worker.yaml with matching id" 'grep -q "^  id: $w$" "$PACK_DIR/workers/$w/worker.yaml"'
 done
-check "package version is 0.4.11" 'grep -q "^version: 0.4.11$" "$PACK_DIR/package.yaml"'
-check "changelog has a 0.4.11 entry" 'grep -q "^## 0.4.11" "$PACK_DIR/CHANGELOG.md"'
+check "package version is 0.4.12" 'grep -q "^version: 0.4.12$" "$PACK_DIR/package.yaml"'
+check "changelog has a 0.4.12 entry" 'grep -q "^## 0.4.12" "$PACK_DIR/CHANGELOG.md"'
 check "setup skill learns tools by kind before the business topics" 'grep -q "learn their tools before asking about the business" "$WORKER/skills/setup.md"'
 check "worker caps buttons at four of one kind" 'grep -q "never answers mixed with actions" "$WORKER/worker.yaml"'
 check "requires client-service through requires.packs" 'grep -A2 "^  packs:" "$PACK_DIR/package.yaml" | grep -q "name: hq-pack-client-service"'
@@ -294,15 +294,23 @@ case "$*" in
 esac
 STUB
   cat > "$SLACKSTUB/fetch.mjs" <<'STUB'
-globalThis.fetch = async (url) => {
+// Two pages, like Slack: the first page carries a cursor for the rest.
+globalThis.fetch = async (url, init) => {
   if (!String(url).endsWith("/conversations.list")) return new Response(JSON.stringify({ ok: false, error: "unexpected" }));
-  return new Response(JSON.stringify({ ok: true, channels: [
-    { id: "C1", name: "acme-ext", is_private: false, is_member: true, num_members: 6, is_ext_shared: true, purpose: { value: "Working with Acme" } },
-    { id: "C2", name: "general", is_private: false, is_member: true, num_members: 9, is_ext_shared: false },
+  if (!new URLSearchParams(String(init.body)).get("cursor")) {
+    return new Response(JSON.stringify({ ok: true, response_metadata: { next_cursor: "page2" }, channels: [
+      { id: "C1", name: "acme-ext", is_private: false, is_member: true, num_members: 6, is_ext_shared: true, purpose: { value: "Working with Acme" } },
+      { id: "C2", name: "general", is_private: false, is_member: true, num_members: 9, is_ext_shared: false },
+    ] }));
+  }
+  return new Response(JSON.stringify({ ok: true, response_metadata: { next_cursor: "" }, channels: [
+    { id: "C3", name: "hqx-globex", is_private: false, is_member: true, num_members: 4, is_ext_shared: true },
   ] }));
 };
 STUB
   check "slack.mjs channels flags channels shared with another organization and carries purposes" '( out=$(PATH="$SLACKSTUB:$PATH" node --import "$SLACKSTUB/fetch.mjs" "$SLACKJS" channels) && echo "$out" | node -e "let t=\"\";process.stdin.on(\"data\",d=>t+=d).on(\"end\",()=>{const c=JSON.parse(t).channels;process.exit(c[0].shared===true&&c[0].purpose===\"Working with Acme\"&&c[1].shared===false?0:1)})" )'
+  check "slack.mjs channels follows every page of the channel list" '( out=$(PATH="$SLACKSTUB:$PATH" node --import "$SLACKSTUB/fetch.mjs" "$SLACKJS" channels) && echo "$out" | node -e "let t=\"\";process.stdin.on(\"data\",d=>t+=d).on(\"end\",()=>{const d=JSON.parse(t);process.exit(d.total===3&&d.complete===true&&d.channels[2].name===\"hqx-globex\"?0:1)})" )'
+  check "setup skill uses the whole channel list and the client naming pattern" 'grep -q "check \`complete\` is true" "$WORKER/skills/setup.md" && grep -q "naming pattern the agency uses" "$WORKER/skills/setup.md"'
   check "setup skill connects Drive with drive.mjs and reads with it" 'grep -q "scripts/drive.mjs" "$WORKER/skills/setup.md" && grep -q "Google sign-in page" "$WORKER/skills/setup.md" && grep -q "and .read. read Drive" "$WORKER/skills/setup.md"'
 else
   ok "drive.mjs (skipped: node not installed)"
