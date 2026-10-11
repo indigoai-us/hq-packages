@@ -1,0 +1,98 @@
+# firm-slot-dedupe-keys.yaml — D1 fixture.
+#
+# A firm whose slots do NOT all join on the same value. Its ledger and its
+# agreements tool join on a short alias; its CRM joins on a differently shaped
+# value entirely. Before `engagement_layout.dedupe_keys` the pack resolved ONE
+# key per engagement and pushed it into whatever field each slot's
+# `mapping.dedupe_field` named, so this firm's CRM lookups were rejected on read
+# and — the part that matters — a search-then-create write could not match, fell
+# through to create, and DUPLICATED the record idempotency exists to protect.
+#
+# This fixture exercises every declaring level of the precedence order except the
+# pack default (which needs a config with no layout at all — see
+# firm-billing-only.yaml), plus declared-none at two different levels, plus the
+# one ambiguous combination the validator warns about by name.
+#
+# No vendor is named except as a tool_name, and there is no credential value.
+
+schema: hq.client-service.config
+schema_version: 1
+firm: fixture-slotkeys-firm
+description: Fixture firm whose slots join on different values, declared per slot.
+
+engagement_layout:
+  engagement_path: 'companies/{firm}/clients/{slug}/engagement.md'
+
+  # level 4 — this firm, every slot that does not name a key of its own
+  dedupe_key: '{slug}'
+
+  # level 3 — this firm, these slots specifically
+  dedupe_keys:
+    # A different SHAPE of value, still a template, still local and pure.
+    crm: '{slug}.example'
+    # Written explicitly as null: DECLARED-NONE. This surface has no join value
+    # derivable at the firm level, so a caller reports the key unresolved and
+    # makes no external write instead of sending something it cannot join on.
+    portal: null
+
+  overrides:
+    # An engagement that needs BOTH: an alias for everything, and its own CRM
+    # value. Declaring the slot key at level 1 is how an engagement says which
+    # value each slot joins on, unambiguously.
+    two-key-client:
+      dedupe_key: legacy-alias
+      dedupe_keys:
+        crm: two-key.example.org
+      note: external records were keyed by an alias before the slug existed
+
+    # The ambiguous shape, kept deliberately: a general engagement key and no
+    # slot key. Level 2 outranks level 3, so this alias reaches the CRM slot too.
+    # That is defined behaviour, and it is also exactly how D1 comes back, so the
+    # validator names it (W_LAYOUT_DEDUPE_KEY_SHADOWS_SLOT).
+    alias-only-client:
+      dedupe_key: another-alias
+      note: general key only — shadows the firm-level per-slot key
+
+    # A slot key with no general key: everything else still inherits.
+    slot-only-client:
+      dedupe_keys:
+        billing: billing-only-key
+
+    # Declared-none at the engagement level: this engagement's CRM record cannot
+    # be joined from anything local, so say so rather than guess.
+    unresolvable-crm-client:
+      dedupe_keys:
+        crm: null
+      note: declared-none — no local value joins this engagement's CRM record
+
+    # A slot name a newer pack version might add. Unknown slots WARN and are
+    # ignored; an older validator must still load a newer config.
+    forward-compat-client:
+      dedupe_keys:
+        some-future-slot: whatever
+
+slots:
+  crm:
+    binding:
+      tool_name: fixture-crm
+      connector: api
+      mapping:
+        dedupe_field: domains
+      secret_name: FIXTURE_CRM/API_KEY
+
+  billing:
+    binding:
+      tool_name: fixture-ledger
+      connector: api
+      mapping:
+        dedupe_field: metadata.engagement
+      secret_name: FIXTURE_LEDGER/API_KEY
+
+  agreements:
+    binding: null
+
+  portal:
+    binding: null
+
+  transcripts:
+    binding: null

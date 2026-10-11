@@ -1,0 +1,323 @@
+worker:
+  id: client-services
+  name: "Client Services Lifecycle"
+  type: OpsWorker
+  version: "1.0"
+  status: active
+  description: "Runs a firm's client-service lifecycle end to end — open an engagement, run the post-signature kickoff, track delivery, keep the deal pipeline honest, draft agreements, and invoice — sourcing every fact from the engagement record and driving every external tool through an adapter slot the firm binds in its own client-service.yaml. A slot the firm has not bound degrades to a clear 'slot not configured' report with zero writes; publishes, external sends, and live billing sit behind an approval gate."
+
+description: |
+  Generic client-service delivery operator. This is the de-vendored form of a
+  lifecycle proven on real paid engagements: the sequence is kept, every product
+  it originally named is gone. Each external system is reached through an ADAPTER
+  SLOT the firm declares in `companies/{firm}/client-service.yaml` and nothing
+  else, so a firm with three empty slots runs the same lifecycle as a firm with
+  five bound ones.
+
+    1. new-engagement    — open a client from nothing: engagement record seeded
+                           from the firm's template, optional client-facing
+                           surface entry, optional isolated client company
+    2. engagement-kickoff — post-signature kickoff: ingest what already happened,
+                           lay down the client knowledge base, action tracker and
+                           capability roadmap, plan phased invites
+    3. track-project      — roll up story pass/fail state across the client's
+                           projects, refresh the engagement record, draft a
+                           client-facing update, optionally publish it
+    4. deal-pipeline      — keep commercial stage honest in the engagement record
+                           and mirror it to the CRM slot when one is bound
+    5. build-agreement    — turn signed-track commercial terms into a rendered
+                           agreement and (gated) a signature request
+    6. invoicing          — bill a signed engagement: draft, status, and (gated,
+                           test-proved first) send
+
+  `companies/{firm}/clients/{client_slug}/engagement.md` is the canonical source
+  of truth. The CRM, the client-facing surface, the agreement tool and the
+  billing tool are DERIVED, optional mirrors of it. Full operating procedure:
+  the runbook.md next to this file.
+
+identity:
+  company_context: companies/{firm}/
+  persona: "Client-service delivery operator for the installing firm"
+
+execution:
+  mode: on-demand
+  model: opus
+  max_runtime: 30m
+  retry_attempts: 1
+
+# ── Hard rules (each is also a pack policy shipped in ../../policies/) ────────
+#  - engagement.md is the source of truth; every other surface is derived.
+#    (client-service-engagement-is-source-of-truth)
+#  - The internal/external split never leaks: firm-internal commercial and
+#    coordination state never crosses a client-facing operation.
+#    (client-service-internal-external-split)
+#  - Every publish, external send, signature request and live billing action
+#    waits behind an explicit approval gate.
+#    (client-service-approval-gate-external-actions)
+#  - Billing is signed-only and test-first.
+#    (client-service-billing-signed-and-test-first)
+#  - A slot that is not bound degrades to a named report and makes NO writes.
+#    Never an error, never invented data. (adapter-contracts.md)
+
+# ── Adapter slots ────────────────────────────────────────────────────────────
+# The contract layer is frozen in US-002. This block is an INDEX of it, not a
+# second source of truth: operations, signatures and degrade paths live in
+# core/knowledge/public/client-service/adapter-contracts.md and its schema.
+# No vendor is named here, ever. The only place a product name may appear is a
+# firm's own `binding.tool_name`, or a `recommended:` hint on an empty slot.
+adapters:
+  config: companies/{firm}/client-service.yaml
+  contract: core/knowledge/public/client-service/adapter-contracts.md
+  schema: core/knowledge/public/client-service/client-service.schema.yaml
+  resolver: scripts/slot-state.sh          # read-only tri-state resolver
+  layout_resolver: scripts/engagement-layout.sh   # read-only path/tracker/dedupe-key resolver
+  # The join key is resolved PER (engagement, slot): `--slot <name>`. A firm's
+  # slots may join on different shapes of value, and reusing one slot's key in
+  # another makes search-then-create fall through to create, which duplicates
+  # the record. `dedupe_keys.<slot>: null` is declared-none — unresolved, so the
+  # write is blocked and reported, never substituted.
+  states: [bound, empty, undeclared]       # empty is NEVER inferred from absence
+  slots:
+    crm:
+      operations: [resolve_dedupe_key, upsert_company, upsert_deal]
+      # resolve_dedupe_key takes (engagement, slot) — see layout_resolver above
+      optional_capabilities: [mirror_stage, read_back]
+      used_by: [deal-pipeline, new-engagement]
+      source_of_truth: false
+    billing:
+      operations: [ensure_customer, draft_invoice, send_invoice, billing_status]
+      optional_capabilities: [void_invoice, ensure_recurring_billing]
+      gated_operations: [send_invoice, ensure_recurring_billing]
+      used_by: [invoicing]
+    agreements:
+      operations: [render_agreement, request_signature, agreement_status]
+      optional_capabilities: [store_executed]
+      gated_operations: [request_signature]
+      used_by: [build-agreement, invoicing]
+    portal:
+      operations: [publish_update, share_artifact, portal_status]
+      optional_capabilities: [revoke_share]
+      gated_operations: [publish_update, share_artifact]
+      used_by: [new-engagement, track-project]
+    transcripts:
+      operations: [list_calls, fetch_transcript, transcripts_status]
+      pointer_binding_allowed: true
+      pointer_unsupported_operations: [list_calls]
+      used_by: [engagement-kickoff]
+
+# ── Deferred adapters — deliberately ABSENT from v1 ──────────────────────────
+# Both existed in the firm-specific original. Neither survives generalization as
+# a standalone skill, and both reasons are contract-level, not effort-level.
+deferred_adapters:
+  - name: portal-sync
+    status: deferred-from-v1
+    slot: portal
+    reason: >-
+      The original was repo-shaped: edit a config file inside a firm-owned site
+      repo, build it, deploy it. US-002 froze the portal contract as
+      operation-shaped — publish_update, share_artifact, portal_status — with the
+      build and the deploy hidden inside the binding, precisely because a firm
+      whose client-facing surface is a hosted project tool can implement the
+      operations and cannot implement build/deploy. There is therefore no
+      build/deploy operation for a sync skill to drive, and the publish itself is
+      one gated call that new-engagement and track-project already make inline. A
+      standalone skill would be a second writer competing for the same slot.
+    revisit_when: >-
+      A portal binding needs multi-step reconciliation (drift detection across
+      many engagements, bulk republish) that the three operations cannot express.
+  - name: call-monitor
+    status: deferred-from-v1
+    slot: transcripts
+    reason: >-
+      It needs two things v1 does not have. First, polling — list_calls is
+      explicitly UNSUPPORTED for pointer bindings, and a pointer to a document a
+      human maintains is how the second validation firm answers the transcripts
+      question, so a monitor would only ever run for firms with an automated
+      capture tool. Second, a messaging surface to post summaries into, which is
+      not one of the five v1 slots; adding one implicitly would have smuggled a
+      sixth contract in through a skill. engagement-kickoff instead reads
+      transcripts on demand, once, when a human asks.
+    revisit_when: >-
+      A v2 adds a messaging slot AND enough firms bind a polling-capable
+      transcripts tool that a scheduled monitor beats an on-demand read.
+
+context:
+  base:
+    - core/knowledge/public/client-service/adapter-contracts.md
+    - core/knowledge/public/client-service/client-service.schema.yaml
+    - companies/{firm}/client-service.yaml
+  dynamic:
+    - pattern: "core/workers/public/client-services/runbook.md"
+      when: "any client-service lifecycle skill is invoked"
+    - pattern: "companies/{firm}/clients/{client_slug}/engagement.md"
+      when: "any engagement, kickoff, status, agreement, invoicing, pipeline or client-facing work is requested"
+    - pattern: "companies/{firm}/clients/{client_slug}/projects/*/prd.json"
+      when: "project or task status rollup is requested"
+    - pattern: "companies/{firm}/clients/_templates/engagement.template.md"
+      when: "opening a brand-new engagement"
+    - pattern: "companies/{firm}/clients/_templates/*agreement*"
+      when: "drafting a client agreement"
+    - pattern: "core/policies/client-service-*.md"
+      when: "any client-service lifecycle skill is invoked"
+  exclude:
+    - "*.log"
+    - ".env*"
+    - "node_modules/"
+    - "dist/"
+
+skills:
+  - name: new-engagement
+    description: "Open a brand-new client engagement: guard against clobbering an existing one, create the client home under the firm, seed engagement.md from the firm's template with unknowns left as explicit TODOs, and (portal slot bound + approved) publish a first client-facing entry. Optionally provisions an isolated client company."
+    args:
+      - client_slug: "client key, lowercase, no spaces"
+      - display_name: "human display name for client-facing surfaces"
+      - client_co: "optional isolated HQ company for the client (default: none — the engagement record lives under the firm)"
+      - publish: "'false' (default) or 'true' to attempt a first portal publish behind the approval gate"
+
+  - name: engagement-kickoff
+    description: "Run the post-signature kickoff: read whatever call and channel record the transcripts slot can reach, lay down the client knowledge base (kickoff notes, systems-access inventory, action items), draft the capability roadmap as a decision queue, and plan phased invites and training. Never sends, invites or requests access without per-action approval."
+    args:
+      - client_slug: "client key"
+      - client_co: "optional isolated HQ company holding the client KB"
+      - since: "optional ISO date bounding the call/channel window"
+
+  - name: track-project
+    description: "Roll up story pass/fail state across the client's projects, refresh engagement.md, draft a plain client-facing status update, and (portal slot bound + approved) publish it. Never publishes firm-internal state."
+    args:
+      - client_slug: "client key"
+      - publish: "'false' (default) or 'true' to attempt publish_update behind the approval gate"
+
+  - name: deal-pipeline
+    description: "Keep commercial stage honest. Stage lives in engagement.md as free text and is written there first; the CRM slot, if bound, receives an idempotent mirror keyed by the engagement's dedupe key. With the CRM slot unbound the skill answers pipeline questions by reading engagement records and makes no external writes."
+    args:
+      - mode: "review | set-stage | mirror | dedupe-check"
+      - scope: "free-text target — one client slug, a segment, or 'all'"
+      - stage: "free-text stage label for set-stage (never an enum — the firm's own words)"
+
+  - name: invoicing
+    description: "Bill a signed engagement through the billing slot: ensure customer, draft invoice, read billing status, and (gated, and only after the same flow is proved in test mode) send. With the billing slot unbound, drafts a plain invoice into the engagement folder and stops."
+    args:
+      - action: "draft | status | ensure-customer | send"
+      - client_slug: "client key"
+      - mode: "test | live (default: test; live touches real money and is gated)"
+
+  - name: build-agreement
+    description: "Turn the engagement's commercial terms into a rendered agreement through the agreements slot, then stop. Attaching an external signer and requesting a signature are two separate approval gates. With the slot unbound, renders a draft from the firm's own template into the engagement folder; signature becomes a manual human step."
+    args:
+      - client_slug: "client key"
+      - template_ref: "opaque reference the firm's agreements tool understands (path, id, whatever it uses) — the pack never parses it and never ships one"
+
+verification:
+  post_execute:
+    - check: engagement_grounded
+      source: core/policies/client-service-engagement-is-source-of-truth.md
+      description: >-
+        Every fact this run asserted, wrote, mirrored or published traces to
+        companies/{firm}/clients/{client_slug}/engagement.md or to a prd.json
+        under that client. Nothing was invented, and nothing read back from a
+        derived surface (CRM record, client-facing surface, agreement tool,
+        billing tool) was written into the engagement record as if it were
+        source. Unknowns are left as explicit TODO lines, not filled in.
+      fails_when: >-
+        A number, date, contact, stage, fee or milestone appears in output with
+        no line in engagement.md or a prd.json behind it.
+    - check: approval_gate_passed
+      source: core/policies/client-service-approval-gate-external-actions.md
+      description: >-
+        No gated operation executed without an explicit in-session human
+        approval that named the exact action first. Gated operations are
+        publish_update, share_artifact, request_signature, send_invoice, any
+        live-mode billing write, any outbound message or invite, and any deploy
+        performed inside a binding. Test-mode billing writes are not gated but
+        still run the mode guard.
+      fails_when: >-
+        Any of those ran on inference, on a standing approval from earlier in the
+        session, or on an approval that did not name the target and consequence.
+    - check: slot_degradation_clean
+      source: core/knowledge/public/client-service/adapter-contracts.md
+      description: >-
+        Every slot the run touched was resolved to bound, empty or undeclared
+        before use; empty and undeclared were reported as DIFFERENT states; and
+        for each one the run made zero external writes and fabricated no data.
+        A recommendation on an empty slot was surfaced at most once.
+      fails_when: >-
+        A slot state was inferred from absence, an unbound slot produced a hard
+        error instead of a report, or a degraded path wrote anywhere but the
+        engagement folder.
+  approval_required: true
+
+output:
+  destination: workspace/reports/{firm}/client-services/
+  format: markdown
+  naming: "{date}-client-services-{skill}.md"
+
+audit:
+  log: workspace/reports/{firm}/client-services/client-services.log
+  progress: workspace/reports/{firm}/client-services/progress.md
+
+instructions: |
+  You run a firm's client-service lifecycle. You have no default tooling. Before
+  any step that would touch an external system, resolve that system's adapter
+  slot and behave according to its state.
+
+  Core principles:
+
+  1. engagement.md is the source of truth.
+     `companies/{firm}/clients/{client_slug}/engagement.md` holds canonical
+     engagement state: contacts, timeline, stage, commercial terms, awaiting
+     items, decisions, internal coordination. Every other surface is DERIVED. If
+     a fact is missing, ask or capture it in engagement.md first, then propagate.
+     Never write a fact you read back from a derived surface into the engagement
+     record as if it were source.
+
+  2. Resolve the slot before you use it. Run
+     `bash core/workers/public/client-services/scripts/slot-state.sh --firm {firm} --slot {slot}`
+     (or read the config the same way) and branch on three states, never two:
+       - bound      → call the contract operations
+       - empty      → the firm decided it runs nothing here. Take the documented
+                      degrade path, surface any `recommended:` hint ONCE, record
+                      the decline, make no external writes.
+       - undeclared → nobody ever answered this question. Report `slot not
+                      declared`, make no external writes, suggest /onboard-firm.
+                      Do NOT treat it as a decision, and do not collapse it into
+                      empty in your report.
+     An unbound slot is never an error and never a reason to invent data. Say
+     which slot, say which state, say what you did instead, and stop there.
+
+  3. The internal/external split never leaks. Firm-internal coordination notes,
+     margin, pipeline commentary, internal owner assignments and back-channel
+     context live in the internal section of engagement.md and never cross
+     publish_update, share_artifact, request_signature or any drafted client
+     message. Client-facing copy is assembled from the client-visible sections
+     only — never by redacting the whole file.
+
+  4. Approval gate. Every publish, share, signature request, outbound message,
+     invite, live billing write and binding-internal deploy is presented in full
+     — action, target, consequence — and waits for an explicit human yes. One
+     approval covers one action.
+
+  5. Billing is signed-only and test-first. A live billing write requires a
+     signed agreement on file, the same flow already proved in test mode, an
+     environment check that the credential in hand matches the mode you asked
+     for, and per-action approval. Print only TEST or LIVE, never a credential.
+
+  6. Idempotency. Every external write carries the join key resolved for THAT
+     SLOT, locally and purely, via engagement-layout.sh --slot <name>. Never
+     reuse one slot's key in another and never substitute a fallback for a key
+     that resolved to declared-none: an unresolved key blocks the write, a wrong
+     key makes search-then-create fall through and CREATE A DUPLICATE.
+     Search-then-create, always; a re-run must produce zero duplicates.
+
+  7. Tenant isolation. Resolve the firm and the client once. Touch only that
+     client's files and only that firm's configured services and secret names.
+     Never read or mix another client's engagement, credentials or knowledge.
+
+  8. Secrets by name only. A binding names a vault secret; you resolve it through
+     the HQ secret workflow at call time. A credential read out of the config, or
+     printed anywhere, is a bug.
+
+  9. Client-facing prose is short and human. Do not recap a transcript unless
+     asked. Say what shipped, what is in flight, what you need from them. One
+     concrete reference at most. External sends still require approval.
+
+  Each skill's full step order lives in skills/{skill}.md and in runbook.md.

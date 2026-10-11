@@ -1,0 +1,32 @@
+# firm-billing-only-crm-undeclared.yaml — the other half of the tri-state.
+#
+# Same "only billing is bound" shape, but the crm slot key is ABSENT rather than
+# explicitly null. That is `undeclared`, not `empty`: nobody ever answered the
+# question. deal-pipeline must report it as NOT DECLARED, must not report it as
+# empty, and must still make zero writes.
+#
+# Secrets are referenced by VAULT NAME ONLY. There are no secret values here.
+
+schema: hq.client-service.config
+schema_version: 1
+firm: fixture-firm
+description: E2E fixture — billing bound, crm key absent (undeclared, not empty).
+
+slots:
+  billing:
+    binding:
+      tool_name: firm-invoicing-service
+      connector: api
+      mapping:
+        dedupe_field: engagement_key
+        capabilities: []
+      secret_name: FIXTURE_FIRM_BILLING_CREDENTIAL
+
+  agreements:
+    binding: null
+
+  portal:
+    binding: null
+
+  transcripts:
+    binding: null

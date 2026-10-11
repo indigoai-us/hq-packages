@@ -1,0 +1,37 @@
+# firm-billing-only.yaml — E2E fixture for US-004.
+#
+# "Given a firm config with only the billing slot bound, when deal-pipeline is
+#  invoked, then it reports the crm slot as not configured and makes no writes."
+#
+# Exactly one slot is bound. The other four are EMPTY, written explicitly as
+# `binding: null` — a decision the firm made, not a gap in the file. See
+# firm-billing-only-crm-undeclared.yaml for the other half of the tri-state.
+#
+# Secrets are referenced by VAULT NAME ONLY. There are no secret values here.
+
+schema: hq.client-service.config
+schema_version: 1
+firm: fixture-firm
+description: E2E fixture — only the billing slot is bound; the other four are explicitly empty.
+
+slots:
+  crm:
+    binding: null
+
+  billing:
+    binding:
+      tool_name: firm-invoicing-service
+      connector: api
+      mapping:
+        dedupe_field: engagement_key
+        capabilities: []
+      secret_name: FIXTURE_FIRM_BILLING_CREDENTIAL
+
+  agreements:
+    binding: null
+
+  portal:
+    binding: null
+
+  transcripts:
+    binding: null
