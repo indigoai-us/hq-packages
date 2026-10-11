@@ -1,5 +1,5 @@
 name: hq-pack-agency-kit
-version: 0.4.10
+version: 0.4.11
 publisher: '@indigoai-us'
 access: public
 displayName: AI Builders Agency Kit
@@ -44,7 +44,7 @@ setup:
   bot:
     name: agency-guide              # bot handle; also the worker id under contributes.workers
     display_name: Agency Guide
-    intro: "Hi, I'm your Agency Guide. I'll set up your agency in HQ: a brain for your agency, one for each of your clients, and your tools connected. I'll learn as much as I can from your apps so you answer as little as possible."
+    intro: "Hi, I'm your Agency Guide. I'll get your agency set up in HQ in a few minutes: a brain for your agency and a workspace for each of your clients. If you connect your apps, I'll use them to find your clients and fill in the details, so you type as little as possible."
   takeover_setup: true              # if HQ's setup bot has not finished, this bot finishes it first
   questions:
     - id: agency_name
@@ -129,4 +129,4 @@ setup:
     - an SOP or process doc
   done:
     message: "Your agency is set up in HQ. Here's what I set up:"
-    suggestion: "Onboard a client"
+    suggestion: "Show me a client workspace"

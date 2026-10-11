@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.11 (2026-10-11)
+
+- The setup brief states its purpose: a fast setup with a workspace for each
+  client, ready to look through and to run a workflow on. Connecting tools is
+  only a way to find clients and fill in their details faster, so the guide
+  stops connecting and reading once it has enough.
+- Setup ends by leading with the client workspaces and offering to open one
+  or run a workflow on a client. The done button is "Show me a client
+  workspace".
+
 ## 0.4.10 (2026-10-11)
 
 - Slack's channel list is enough for setup: the Agency Guide works out the

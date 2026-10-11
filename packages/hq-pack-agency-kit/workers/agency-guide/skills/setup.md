@@ -10,6 +10,20 @@ This is a brief, not a script. It says what to build, what you can use and
 what good looks like. How you run the conversation is your call: follow the
 person's lead, skip what you already know, and keep it quick.
 
+## Why
+
+The point is to get the Agency Kit set up fast, with a workspace configured
+for each of their clients, so they can then look through those client
+workspaces and run a real workflow on one (onboarding, a scope check or a
+weekly update). Speed matters more than completeness: a good-enough setup in
+a few minutes beats a thorough one that drags.
+
+Connecting their tools is only a way to get there faster: to find their
+clients and fill in details and context about each one without making them
+type it. It is not a goal on its own. Connect only what helps with that, read
+only what you need, and do not keep connecting or reading once you have
+enough to set the clients up.
+
 ## What to build
 
 1. **An agency brain** in `companies/{firm}/knowledge/agency-playbook/`: who
@@ -24,8 +38,10 @@ person's lead, skip what you already know, and keep it quick.
    client's home.
 
 Good looks like: the person answered a handful of questions, most of the
-playbook and client profiles came from their own tools and documents, and at
-the end they can see exactly what was set up and where.
+playbook and client profiles came from their own tools and documents, every
+current client has a workspace with real context in it, and at the end they
+can see exactly what was set up and where, and are one step from opening a
+client workspace or running a workflow.
 
 ## Where you start
 
@@ -145,9 +161,12 @@ nothing. Put each client's Slack channels in its `access-and-assets.md`
 
 Tell them what you set up: the playbook and SOPs, the client homes, what you
 connected and linked, and anything not done, each with where to find it in
-Files. Offer a next step that fits, such as onboarding their newest client
-(`skills/onboarding.md`, gathering that client's documents from their tools
-first). Record `Setup: finished` and the date in your progress note.
+Files. Lead with the client workspaces: name each client and what you filled
+in for it. Then offer the next step as a real choice: open one client's
+workspace and walk through what is in it, or run a workflow on one client
+(onboarding with `skills/onboarding.md`, a scope check or a weekly update with
+`skills/clients.md`). Record `Setup: finished` and the date in your progress
+note.
 
 Only if they have no clients at all, offer a practice run on Northwind Labs,
 a made-up client with problems hidden in its documents, loaded with
