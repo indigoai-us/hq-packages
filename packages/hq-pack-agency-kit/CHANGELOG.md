@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.1 (2026-10-11)
+
+- Setup starts with a short interview about the agency's tools, one tap per
+  kind (email, CRM, team chat, docs, project management), then sends a
+  sign-in link for each tool picked, one at a time. `setup.sources` lists the
+  kinds with their likely tools and the domains HQ connects. Tools are named
+  by kind until the person says which one they use. The `tools` topic comes
+  from the interview and is no longer asked.
+
 ## 0.4.0 (2026-10-11)
 
 - Setup builds three things: an agency brain (playbook plus the agency's own

@@ -42,42 +42,66 @@ Propose the company's display name and ask to confirm it; do not ask from
 scratch. A name is required; if they try to skip, say one line about why (it
 goes on every brief and client update) and ask again.
 
-## Stage 2: connect and learn
+## Stage 2: your tools
 
-Right after the name, run `hq integrations list --usable --json --company {firm}`.
-Then send one message that:
+A short interview, then connect. Right after the name, run
+`hq integrations list --usable --json --company {firm}` and note what is
+already connected. Name tools by what they are for (your email, your CRM),
+never by a brand they have not told you they use.
 
-- names the connected apps you could read, and exactly what you would read
-  (the last 30 emails they sent to clients, their recent messages in client
-  Slack channels, their recent HubSpot deals and companies, their SOP or
-  process docs in Google Drive or Notion),
-- offers to connect the most useful app that is not connected (Gmail first,
-  then the CRM, then Slack),
-- says they can also drop in a rate card, a recent proposal, a case study or
-  an SOP.
+**The interview.** One line per message, one tap per answer, in this order,
+skipping any kind already connected:
+
+> What do you use for email?
 
 ```hq-block
-{"v":1,"blocks":[{"kind":"suggestions","items":["Read my apps","Connect Gmail","Just ask me"]}]}
+{"v":1,"blocks":[{"kind":"suggestions","items":["Gmail","Outlook","Something else","None"]}]}
 ```
 
-Make the buttons true: "Read my apps" only when something useful is
-connected, "Connect <app>" for the most useful missing app.
+Then the same for "your CRM" (["HubSpot","Salesforce","Pipedrive","Close","Something else","None"]),
+"team chat" (["Slack","Teams","Something else","None"]), "where your docs
+and SOPs live" (["Google Drive","Notion","Dropbox","Something else","None"])
+and "project management" (["Asana","ClickUp","Monday","Something else","None"]).
+For "Something else", ask its name in one line. Acknowledge each answer in a
+couple of words at the top of the next question. These answers are the
+`tools` topic; record them.
 
-- **Connect:** run `hq integrations connect <domain> --company {firm} --no-browser`
-  with the app's domain (Gmail `gmail.com`, Slack `slack.com`, HubSpot
-  `hubspot.com`, Google Drive `drive.google.com`, Notion `notion.so`), send
-  the sign-in link as a plain link, and offer ["Done","Skip"]. After "Done",
-  list the apps again. If the app shows an error instead of connected (Gmail
-  can refuse a sign-in), say so in one line and move on to the next app or to
-  documents. Offer the next most useful app once; do not push past two.
-- **Read:** with their yes, use `hq integrations tools` and
-  `hq integrations call` with read-only tools only. Never send, post, label or
-  change anything. Read only what you said you would.
-- **Documents:** read any file they drop in.
+**Connect.** Then connect what they picked, one tool per message, most useful
+first (email, then CRM, then docs, then chat, then project management):
 
-While you read, collect three things at once: what the agency is (the five
-topics below), which tools it runs (Stage 4), and who its current clients are
-(Stage 5). One read, three uses.
+> Let's connect your Gmail so I can read the emails you've sent clients. Sign in here: {link}
+
+```hq-block
+{"v":1,"blocks":[{"kind":"suggestions","items":["Done","Skip"]}]}
+```
+
+Get the link with `hq integrations connect <domain> --company {firm} --no-browser`,
+using the domain in package.yaml `setup.sources` (Gmail `gmail.com`, Outlook
+and Teams `graph.microsoft.com`, HubSpot `hubspot.com`, Salesforce
+`salesforce.com`, Pipedrive `pipedrive.com`, Close `close.com`, Slack
+`slack.com`, Google Drive `drive.google.com`, Notion `notion.so`, Dropbox
+`dropbox.com`, Asana `asana.com`, ClickUp `clickup.com`, Monday `monday.com`).
+For "Something else", look it up with `hq integrations catalog <name> --company {firm}`.
+After "Done", check the list again. If a tool shows an error instead of
+connected, or HQ cannot connect it yet, say so in one line and go to the next.
+
+**Read.** Once something useful is connected, say in one line what you will
+read and ask for a yes:
+
+```hq-block
+{"v":1,"blocks":[{"kind":"suggestions","items":["Go ahead","Just ask me"]}]}
+```
+
+Read with `hq integrations tools` and `hq integrations call`, using
+read-only tools only. Never send, post, label or change anything. Read only what you said:
+recent emails sent to clients, recent CRM deals and companies, recent
+messages in client channels, SOP and process docs, proposals, rate cards,
+active projects. They can also drop files into the chat at any point; read
+those too.
+
+While you read, collect three things at once: what the agency is (the topics
+below), how its tools should be linked (Stage 4), and who its current clients
+are (Stage 5). One read, three uses.
 
 ## Stage 3: the agency brain
 
@@ -109,9 +133,8 @@ A vague answer always gets a follow-up on what it depends on
 (["Ad spend","Scope of work","Results","Number of channels"]), then one line
 for a typical range or minimum.
 
-**5. tools**. Goal: the CRM, project management, reporting and ad platforms
-they use. Take it from the apps they have connected and what you read; ask
-only to fill gaps.
+**5. tools**. Goal: the tools they run, by kind. You already have this from
+the Stage 2 interview; do not ask again.
 
 **6. voice**. Goal: how they sound with clients, specific enough to write in.
 Sent emails and proposals are the best source; propose what you heard.

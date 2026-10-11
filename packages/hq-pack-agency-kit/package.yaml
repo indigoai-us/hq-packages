@@ -1,5 +1,5 @@
 name: hq-pack-agency-kit
-version: 0.4.0
+version: 0.4.1
 publisher: '@indigoai-us'
 access: public
 displayName: AI Builders Agency Kit
@@ -87,19 +87,41 @@ setup:
       pricing: --pricing
       tools: --tools
       voice: --voice
-  sources:                              # connected apps the guide reads (with a yes) instead of asking
-    - app: gmail.com
+  sources:                              # kinds of tools: asked about, connected, then read (with a yes) instead of asking
+    - kind: email
       read: "the last 30 emails you sent to clients"
       informs: [services, ideal_client, pricing, voice]
-    - app: slack.com
-      read: "your recent messages in client channels"
-      informs: [services, voice, tools]
-    - app: hubspot.com
+      options:
+        - {name: Gmail, domain: gmail.com}
+        - {name: Outlook, domain: graph.microsoft.com}
+    - kind: CRM
       read: "your recent deals and the companies on them"
       informs: [ideal_client, services, pricing]
-    - app: drive.google.com
+      options:
+        - {name: HubSpot, domain: hubspot.com}
+        - {name: Salesforce, domain: salesforce.com}
+        - {name: Pipedrive, domain: pipedrive.com}
+        - {name: Close, domain: close.com}
+    - kind: team chat
+      read: "your recent messages in client channels"
+      informs: [services, voice]
+      options:
+        - {name: Slack, domain: slack.com}
+        - {name: Teams, domain: graph.microsoft.com}
+    - kind: docs
       read: "your SOPs, process docs, proposals and rate cards"
       informs: [services, pricing, voice]
+      options:
+        - {name: Google Drive, domain: drive.google.com}
+        - {name: Notion, domain: notion.so}
+        - {name: Dropbox, domain: dropbox.com}
+    - kind: project management
+      read: "your active client projects"
+      informs: [services]
+      options:
+        - {name: Asana, domain: asana.com}
+        - {name: ClickUp, domain: clickup.com}
+        - {name: Monday, domain: monday.com}
   documents:                            # asked for once, early; the bot reads them and asks less
     - a rate card or pricing sheet
     - a recent proposal or statement of work
