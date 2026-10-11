@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.14 (2026-10-11)
+
+- The tool list is examples, not a limit: the Agency Guide works out how to
+  connect any tool the agency uses (HQ's catalog and a sign-in link, an access
+  key entered through an HQ secrets link, a docs page or MCP server, or a
+  workaround such as an export dropped into the chat).
+- HubSpot, Salesforce and Asana now have a route instead of "later": a
+  sign-in, then an access key or an export. Email and Teams offer a
+  workaround (a few forwarded emails, or the client channel names).
+
 ## 0.4.13 (2026-10-11)
 
 - Setup always asks about the agency's meeting notetaker and project

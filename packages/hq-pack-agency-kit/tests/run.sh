@@ -214,8 +214,8 @@ done
 for w in $(awk '/^  workers:/{f=1;next} /^  [a-z]+:/{f=0} f && /- /{print $2}' "$PACK_DIR/package.yaml"); do
   check "worker $w has worker.yaml with matching id" 'grep -q "^  id: $w$" "$PACK_DIR/workers/$w/worker.yaml"'
 done
-check "package version is 0.4.13" 'grep -q "^version: 0.4.13$" "$PACK_DIR/package.yaml"'
-check "changelog has a 0.4.13 entry" 'grep -q "^## 0.4.13" "$PACK_DIR/CHANGELOG.md"'
+check "package version is 0.4.14" 'grep -q "^version: 0.4.14$" "$PACK_DIR/package.yaml"'
+check "changelog has a 0.4.14 entry" 'grep -q "^## 0.4.14" "$PACK_DIR/CHANGELOG.md"'
 check "setup skill learns tools by kind before the business topics" 'grep -q "learn their tools before asking about the business" "$WORKER/skills/setup.md"'
 check "worker caps buttons at four of one kind" 'grep -q "never answers mixed with actions" "$WORKER/worker.yaml"'
 check "requires client-service through requires.packs" 'grep -A2 "^  packs:" "$PACK_DIR/package.yaml" | grep -q "name: hq-pack-client-service"'
@@ -311,6 +311,8 @@ STUB
   check "slack.mjs channels flags channels shared with another organization and carries purposes" '( out=$(PATH="$SLACKSTUB:$PATH" node --import "$SLACKSTUB/fetch.mjs" "$SLACKJS" channels) && echo "$out" | node -e "let t=\"\";process.stdin.on(\"data\",d=>t+=d).on(\"end\",()=>{const c=JSON.parse(t).channels;process.exit(c[0].shared===true&&c[0].purpose===\"Working with Acme\"&&c[1].shared===false?0:1)})" )'
   check "slack.mjs channels follows every page of the channel list" '( out=$(PATH="$SLACKSTUB:$PATH" node --import "$SLACKSTUB/fetch.mjs" "$SLACKJS" channels) && echo "$out" | node -e "let t=\"\";process.stdin.on(\"data\",d=>t+=d).on(\"end\",()=>{const d=JSON.parse(t);process.exit(d.total===3&&d.complete===true&&d.channels[2].name===\"hqx-globex\"?0:1)})" )'
   check "setup skill uses the whole channel list and the client naming pattern" 'grep -q "check \`complete\` is true" "$WORKER/skills/setup.md" && grep -q "naming pattern the agency uses" "$WORKER/skills/setup.md"'
+  check "setup skill tries any tool before saying it cannot connect" 'grep -q "Any tool they use" "$WORKER/skills/setup.md" && grep -q "Never say a tool cannot be connected before trying those" "$WORKER/skills/setup.md"'
+  check "HubSpot, Salesforce and Asana have a route, not a refusal" 'grep -q "name: HubSpot, domain: hubspot.com" "$PACK_DIR/package.yaml" && grep -q "name: Salesforce, domain: salesforce.com" "$PACK_DIR/package.yaml" && grep -q "name: Asana, domain: asana.com" "$PACK_DIR/package.yaml" && ! grep -q "comes in a later update" "$PACK_DIR/package.yaml"'
   check "package declares a meeting notetaker source and project tools that connect" 'grep -q "kind: meeting notetaker" "$PACK_DIR/package.yaml" && grep -q "domain: fireflies.ai" "$PACK_DIR/package.yaml" && grep -q "domain: linear.app" "$PACK_DIR/package.yaml"'
   check "setup skill always offers the notetaker and project tool and fills client homes from them" 'grep -q "always ask which ones" "$WORKER/skills/setup.md" && grep -q "recent meetings to its" "$WORKER/skills/setup.md" && grep -q "notetaker is the \`transcripts\` slot" "$WORKER/skills/setup.md"'
   check "setup skill connects Drive with drive.mjs and reads with it" 'grep -q "scripts/drive.mjs" "$WORKER/skills/setup.md" && grep -q "Google sign-in page" "$WORKER/skills/setup.md" && grep -q "and .read. read Drive" "$WORKER/skills/setup.md"'

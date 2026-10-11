@@ -87,15 +87,22 @@ on it. Today that means:
   who their clients are and which channels belong to each. `history`,
   `thread` and `search` exist, but use them only if the person asks for
   more; search may not be allowed on their connection yet.
+- **Any tool they use** is worth trying, not only the ones named here. The
+  Pack setup section lists the order to try: HQ's catalog and a sign-in link,
+  an access key they enter through an HQ secrets link (never in the chat), a
+  docs page or MCP server, then a workaround such as an export dropped into
+  the chat. Never say a tool cannot be connected before trying those.
 - **Their notetaker and project management tool**: always ask which ones
   they use and offer to connect them, even when you already know the
   clients. They are what make a client workspace useful: the notetaker gives
   each client's recent meetings (what was agreed, what is next) and the
   project tool gives what is in flight, and the workflows draw on both.
   Fireflies, Fathom, Granola, Otter, Read AI and Grain (notetakers) and
-  ClickUp, Monday and Linear (projects) connect with an HQ sign-in link.
-- **Email, HubSpot, Salesforce, Teams and Asana** are not available yet. Say
-  so once if it comes up, plainly, and move on.
+  ClickUp, Monday and Linear (projects) connect with an HQ sign-in link;
+  Asana with a personal access token through an HQ secrets link.
+- **Email and Teams** have no direct connection yet. Offer the workaround
+  (a few forwarded or pasted emails, or the client channel names) once, and
+  move on.
 - **Other tools** connect with an HQ sign-in link from
   `hq integrations connect <domain> --company {firm} --link-only`. Read them
   with `hq integrations tools --company {firm}` to see what they offer, then

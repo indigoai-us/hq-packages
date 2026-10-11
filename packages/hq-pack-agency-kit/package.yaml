@@ -1,5 +1,5 @@
 name: hq-pack-agency-kit
-version: 0.4.13
+version: 0.4.14
 publisher: '@indigoai-us'
 access: public
 displayName: AI Builders Agency Kit
@@ -92,14 +92,14 @@ setup:
       read: "the last 30 emails you sent to clients"
       informs: [services, ideal_client, pricing, voice]
       options:
-        - {name: Gmail, available: false, note: "reading email comes in a later update"}
-        - {name: Outlook, available: false, note: "reading email comes in a later update"}
+        - {name: Gmail, available: false, note: "they can forward or paste a few client emails, or drop exported ones into the chat"}
+        - {name: Outlook, available: false, note: "they can forward or paste a few client emails, or drop exported ones into the chat"}
     - kind: CRM
       read: "your recent deals and the companies on them"
       informs: [ideal_client, services, pricing]
       options:
-        - {name: HubSpot, available: false, note: "HubSpot comes in a later update"}
-        - {name: Salesforce, available: false, note: "Salesforce comes in a later update"}
+        - {name: HubSpot, domain: hubspot.com, note: "if the sign-in does not work, a HubSpot private app access key with read scopes does"}
+        - {name: Salesforce, domain: salesforce.com, note: "if the sign-in does not work, offer a report export instead"}
         - {name: Pipedrive, domain: pipedrive.com}
         - {name: Close, domain: close.com}
     - kind: team chat
@@ -107,7 +107,7 @@ setup:
       informs: [ideal_client]
       options:
         - {name: Slack, tool: scripts/slack.mjs, connect: "connect --company <company slug>", status: status, usage: "channels (enough for setup) | history <channelId> | thread <channelId> <threadTs> | search <query>"}
-        - {name: Teams, available: false, note: "Teams comes in a later update"}
+        - {name: Teams, available: false, note: "they can name their client channels or paste the list"}
     - kind: docs and SOPs
       read: "your SOPs, process docs, proposals and rate cards"
       informs: [services, pricing, voice]
@@ -122,7 +122,7 @@ setup:
         - {name: ClickUp, domain: clickup.com}
         - {name: Monday, domain: monday.com}
         - {name: Linear, domain: linear.app}
-        - {name: Asana, available: false, note: "Asana needs an access key, so connecting it from the chat comes in a later update"}
+        - {name: Asana, domain: asana.com, note: "it signs in with an Asana personal access token, entered through an HQ secrets link"}
     - kind: meeting notetaker
       read: "your recent client meetings: who you met, what was agreed and what is next"
       informs: [services, voice]
