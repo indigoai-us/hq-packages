@@ -52,6 +52,17 @@ refresh_cache() {
 
 
 hqd_hook_flag_enabled() {
+local failure_default=${1:-true}
+if [ "$failure_default" = true ]; then
+  case "${HQ_FLAG_HQ_ANYWHERE_RUNTIME:-}" in
+    false|0)
+      # The documented local override must win over a previously cached value.
+      # shellcheck disable=SC2034 # The sourcing hqd shim consumes this result.
+      HQD_FLAG_ENABLED=false
+      return 0
+      ;;
+  esac
+fi
 cached_value=''
 cached_at=''
 extra=''
@@ -86,9 +97,9 @@ if refresh_cache >/dev/null 2>&1; then
   # shellcheck disable=SC2034 # The sourcing hqd shim consumes this result.
   HQD_FLAG_ENABLED=$value
 else
-  # An unavailable flag reader follows the HQ Anywhere fail-safe default.
+  # Each caller supplies its own unavailable-reader default.
   # shellcheck disable=SC2034 # The sourcing hqd shim consumes this result.
-  HQD_FLAG_ENABLED=true
+  HQD_FLAG_ENABLED=$failure_default
 fi
 }
 
@@ -112,7 +123,7 @@ hqd_hook_flag_enabled_for() {
   HQD_FLAG_SCRIPT=$flag_script
   HQD_FLAG_KEY=$flag_key
   HQD_FLAG_ROOT=$root
-  hqd_hook_flag_enabled
+  hqd_hook_flag_enabled false
   HQD_FLAG_SCRIPT=$old_script
   HQD_FLAG_KEY=$old_key
   HQD_FLAG_ROOT=$old_root

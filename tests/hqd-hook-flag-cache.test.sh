@@ -46,6 +46,17 @@ printf 'true %s\n' "$NOW" >"$FLAG_CACHE"
 [ ! -e "$NODE_CALLS" ]
 printf '%s\n' 'ok   fresh cache returns true without Node'
 
+[ "$(HQ_FLAG_HQ_ANYWHERE_RUNTIME=false sh "$CACHE")" = false ]
+[ "$(HQ_FLAG_HQ_ANYWHERE_RUNTIME=0 sh "$CACHE")" = false ]
+[ ! -e "$NODE_CALLS" ]
+printf '%s\n' 'ok   local off override beats a fresh enabled cache without Node'
+
+rm -f "$FLAG_CACHE"
+NODE_FAIL=true HQ_FLAG_HQ_ANYWHERE_RUNTIME=false sh "$CACHE" >"$TMP/override.out"
+[ "$(cat "$TMP/override.out")" = false ]
+[ ! -e "$NODE_CALLS" ]
+printf '%s\n' 'ok   local off override works without a cache or Node'
+
 printf 'true %s\n' "$((NOW - 61))" >"$FLAG_CACHE"
 [ "$(sh "$CACHE")" = true ]
 [ "$(wc -l <"$NODE_CALLS" | tr -d ' ')" = 1 ]
@@ -100,6 +111,12 @@ hqd_hook_flag_enabled_for multi-company-test hooks.multi-company-session-lock \
 [ "$HQD_FLAG_ENABLED" = true ] || { echo 'not ok   cached multi-company flag value is used' >&2; exit 1; }
 [ "$(wc -l <"$NODE_CALLS" | tr -d ' ')" = "$calls_before" ] || { echo 'not ok   cached multi-company flag avoids Node' >&2; exit 1; }
 printf '%s\n' 'ok   fresh multi-company cache value is used without Node'
+
+printf 'malformed\n' >"$HOME/.hq/hook-flag.multi-company-fail.indigo"
+NODE_FAIL=true hqd_hook_flag_enabled_for multi-company-fail hooks.multi-company-session-lock \
+  "$TMP/multi-company-flag.cjs" "$TMP" indigo
+[ "$HQD_FLAG_ENABLED" = false ] || { echo 'not ok   additional flag reader failure defaults off' >&2; exit 1; }
+printf '%s\n' 'ok   additional flag reader failure keeps its default-off contract'
 
 # The tri-state reader exposes unknown only to the opted-in kill-switch caller.
 printf 'false %s\n' "$(now_seconds)" >"$HOME/.hq/hook-flag.multi-company-test.indigo"
