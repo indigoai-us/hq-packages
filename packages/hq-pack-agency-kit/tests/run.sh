@@ -213,8 +213,8 @@ done
 for w in $(awk '/^  workers:/{f=1;next} /^  [a-z]+:/{f=0} f && /- /{print $2}' "$PACK_DIR/package.yaml"); do
   check "worker $w has worker.yaml with matching id" 'grep -q "^  id: $w$" "$PACK_DIR/workers/$w/worker.yaml"'
 done
-check "package version is 0.4.9" 'grep -q "^version: 0.4.9$" "$PACK_DIR/package.yaml"'
-check "changelog has a 0.4.9 entry" 'grep -q "^## 0.4.9" "$PACK_DIR/CHANGELOG.md"'
+check "package version is 0.4.10" 'grep -q "^version: 0.4.10$" "$PACK_DIR/package.yaml"'
+check "changelog has a 0.4.10 entry" 'grep -q "^## 0.4.10" "$PACK_DIR/CHANGELOG.md"'
 check "setup skill learns tools by kind before the business topics" 'grep -q "learn their tools before asking about the business" "$WORKER/skills/setup.md"'
 check "worker caps buttons at four of one kind" 'grep -q "never answers mixed with actions" "$WORKER/worker.yaml"'
 check "requires client-service through requires.packs" 'grep -A2 "^  packs:" "$PACK_DIR/package.yaml" | grep -q "name: hq-pack-client-service"'
@@ -282,7 +282,26 @@ STUB
   check "slack.mjs connect opens Slack's own sign-in via hq integrations slack connect" '( out=$(PATH="$SLACKSTUB:$PATH" node "$SLACKJS" connect --company acme) && grep -q "integrations slack connect --json --company acme --open" "$SLACKSTUB/args" && echo "$out" | grep -q "\"started\": true" && echo "$out" | grep -q "slack.com/oauth" )'
   check "slack.mjs connect-link prints Slack's link without opening it" '( out=$(PATH="$SLACKSTUB:$PATH" node "$SLACKJS" connect-link --company acme) && ! grep -q -- "--open" "$SLACKSTUB/args" && echo "$out" | grep -q "\"started\": false" )'
   check "package declares Slack connect with the company" 'grep -q "connect: \"connect --company <company slug>\"" "$PACK_DIR/package.yaml"'
-  check "setup skill connects Slack with slack.mjs and reads search-first" 'grep -q "scripts/slack.mjs" "$WORKER/skills/setup.md" && grep -q "connect --company {firm}" "$WORKER/skills/setup.md" && grep -q "search first" "$WORKER/skills/setup.md"'
+  check "setup skill connects Slack with slack.mjs and finds clients from the channel list" 'grep -q "scripts/slack.mjs" "$WORKER/skills/setup.md" && grep -q "connect --company {firm}" "$WORKER/skills/setup.md" && grep -q "the channel list is enough" "$WORKER/skills/setup.md" && grep -q "shared: true" "$WORKER/skills/setup.md" && ! grep -q "search first" "$WORKER/skills/setup.md"'
+  check "setup skill records each client's Slack channels in its home" 'grep -q "Slack channels in its \`access-and-assets.md\`" "$WORKER/skills/setup.md"'
+  cat > "$SLACKSTUB/hq" <<'STUB'
+#!/bin/bash
+case "$*" in
+  "secrets --personal list") echo "SLACK_PERSONAL/T1/U1/USER_TOKEN  personal";;
+  "secrets --personal get --reveal SLACK_PERSONAL/T1/U1/USER_TOKEN") echo "Value: xoxp-test";;
+  *) exit 1;;
+esac
+STUB
+  cat > "$SLACKSTUB/fetch.mjs" <<'STUB'
+globalThis.fetch = async (url) => {
+  if (!String(url).endsWith("/conversations.list")) return new Response(JSON.stringify({ ok: false, error: "unexpected" }));
+  return new Response(JSON.stringify({ ok: true, channels: [
+    { id: "C1", name: "acme-ext", is_private: false, is_member: true, num_members: 6, is_ext_shared: true, purpose: { value: "Working with Acme" } },
+    { id: "C2", name: "general", is_private: false, is_member: true, num_members: 9, is_ext_shared: false },
+  ] }));
+};
+STUB
+  check "slack.mjs channels flags channels shared with another organization and carries purposes" '( out=$(PATH="$SLACKSTUB:$PATH" node --import "$SLACKSTUB/fetch.mjs" "$SLACKJS" channels) && echo "$out" | node -e "let t=\"\";process.stdin.on(\"data\",d=>t+=d).on(\"end\",()=>{const c=JSON.parse(t).channels;process.exit(c[0].shared===true&&c[0].purpose===\"Working with Acme\"&&c[1].shared===false?0:1)})" )'
   check "setup skill connects Drive with drive.mjs and reads with it" 'grep -q "scripts/drive.mjs" "$WORKER/skills/setup.md" && grep -q "Google sign-in page" "$WORKER/skills/setup.md" && grep -q "and .read. read Drive" "$WORKER/skills/setup.md"'
 else
   ok "drive.mjs (skipped: node not installed)"

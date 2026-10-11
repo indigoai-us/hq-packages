@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.10 (2026-10-11)
+
+- Slack's channel list is enough for setup: the Agency Guide works out the
+  clients from channel names, purposes and channels shared with other
+  organizations, groups each client's channels, and lets the person confirm.
+  Message history and search are only read if the person asks.
+- Each client's Slack channels are recorded in that client's home.
+- `slack.mjs channels` reports whether a channel is shared with another
+  organization, and its purpose.
+
 ## 0.4.9 (2026-10-11)
 
 - Slack connects in one step: the Agency Guide opens Slack's own sign-in page

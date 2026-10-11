@@ -182,7 +182,17 @@ async function main() {
     });
     out({
       ok: true,
-      channels: (data.channels || []).map((c) => ({ id: c.id, name: c.name, private: c.is_private, member: c.is_member, members: c.num_members, topic: c.topic?.value || undefined })),
+      channels: (data.channels || []).map((c) => ({
+        id: c.id,
+        name: c.name,
+        private: c.is_private,
+        member: c.is_member,
+        members: c.num_members,
+        // Shared with another organization (Slack Connect): almost always a client.
+        shared: Boolean(c.is_ext_shared || c.is_pending_ext_shared),
+        topic: c.topic?.value || undefined,
+        purpose: c.purpose?.value || undefined,
+      })),
     });
   }
 

@@ -65,10 +65,11 @@ on it. Today that means:
 - **Slack** connects through HQ's Personal Slack account (`scripts/slack.mjs`):
   `connect --company {firm}` opens Slack's own sign-in page in their browser
   (they pick the workspace and press Allow; HQ keeps the sign-in in their
-  vault), `status` confirms it, and `channels`, `search`, `history` and
-  `thread` read it. Slack only lets HQ read channel history slowly for now,
-  so search first and open only a few conversations. If search says this
-  connection cannot search yet, use the channel list and a few histories.
+  vault), and `status` confirms it. For setup, the channel list (`channels`)
+  is what you need: from the names, purposes and shared flags you can tell
+  who their clients are and which channels belong to each. `history`,
+  `thread` and `search` exist, but use them only if the person asks for
+  more; search may not be allowed on their connection yet.
 - **Email, HubSpot, Salesforce and Teams** are not available yet. Say so
   once if it comes up, plainly, and move on.
 - **Other tools** connect with an HQ sign-in link from
@@ -76,9 +77,8 @@ on it. Today that means:
 
 Ask before you read, and read only what you said you would, with read-only
 commands. Useful reads: Drive for proposals, SOPs, pricing, rate cards and
-onboarding docs (the best 5 to 10, not everything); Slack search for client
-conversations, and `from:me` for how they write to clients; client channel
-names to find who their clients are. They can also drop files into the chat.
+onboarding docs (the best 5 to 10, not everything); the Slack channel list
+to find who their clients are. They can also drop files into the chat.
 Describe what you found in your own words; never paste private messages back.
 
 ## Writing the agency brain
@@ -116,9 +116,18 @@ it for the summary; client homes cannot be created until it runs.
 
 ## A brain for each client
 
-Work out their current clients from what you read (client Slack channels,
-recent proposals and contracts in Drive, deals in a connected CRM) and let
-them confirm or edit the list. If you found none, ask them to name their
+Work out their current clients from what you read (Slack channels, recent
+proposals and contracts in Drive, deals in a connected CRM) and let them
+confirm or edit the list.
+
+From Slack, the channel list is enough. A channel shared with another
+organization (`shared: true`) is almost always a client. Names often carry
+the client too: `client-acme`, `acme-ext`, `ext-acme`, `acme-ads`, or just a
+company name. Internal channels (general, random, team, eng, design, ops,
+alerts, sales, hiring and the like) are not clients. Group channels that
+belong to the same client (`acme`, `acme-ads`, `acme-seo`), and show the
+person each proposed client with its channels so they can confirm, rename or
+drop it. If nothing in the list looks like a client, say so and ask. If you found none, ask them to name their
 clients. Write the confirmed list to a file in your memory folder, one per
 line as `{slug}<TAB>{Client Name}`, and create every home in one go:
 
@@ -129,7 +138,8 @@ bash core/packages/hq-pack-agency-kit/scripts/import-clients.sh \
 
 Then fill each client's `client-profile.md` and `access-and-assets.md` from
 what you already read, every fact with its source, blank where you have
-nothing. Systems are names only; never copy a credential.
+nothing. Put each client's Slack channels in its `access-and-assets.md`
+(channel name, whether it is shared with the client, and its purpose). Systems are names only; never copy a credential.
 
 ## Finishing
 

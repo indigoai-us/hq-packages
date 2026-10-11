@@ -1,5 +1,5 @@
 name: hq-pack-agency-kit
-version: 0.4.9
+version: 0.4.10
 publisher: '@indigoai-us'
 access: public
 displayName: AI Builders Agency Kit
@@ -103,10 +103,10 @@ setup:
         - {name: Pipedrive, domain: pipedrive.com}
         - {name: Close, domain: close.com}
     - kind: team chat
-      read: "your recent messages in client channels"
-      informs: [services, voice]
+      read: "your channel list, to find your clients and their channels"
+      informs: [ideal_client]
       options:
-        - {name: Slack, tool: scripts/slack.mjs, connect: "connect --company <company slug>", status: status, usage: "channels | search <query> | history <channelId> | thread <channelId> <threadTs>"}
+        - {name: Slack, tool: scripts/slack.mjs, connect: "connect --company <company slug>", status: status, usage: "channels (enough for setup) | history <channelId> | thread <channelId> <threadTs> | search <query>"}
         - {name: Teams, available: false, note: "Teams comes in a later update"}
     - kind: docs and SOPs
       read: "your SOPs, process docs, proposals and rate cards"
