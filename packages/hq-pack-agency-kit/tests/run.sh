@@ -131,22 +131,23 @@ for k in $arg_keys; do
 done
 then_entries="$(setup_block | awk '/^  run:/{f=1;next} f && /^  [a-z]/{f=0} f' | awk '/^    then:/{t=1;next} t && /^    [a-z]/{t=0} t && /^      - /{sub(/^      - /,""); print}')"
 check "run.then is empty: the guide runs the later stages itself" '[ -z "$then_entries" ]'
-check "setup skill summary names where things are in Files" 'grep -q "in Files under Knowledge, Agency Playbook" "$WORKER/skills/setup.md" && grep -q "in Files under Clients" "$WORKER/skills/setup.md"'
+check "setup skill is a brief: no scripted message lines and no preset buttons" '! grep -q "^ *> " "$WORKER/skills/setup.md" && ! grep -q "hq-block" "$WORKER/skills/setup.md" && grep -q "This is a brief, not a script" "$WORKER/skills/setup.md"'
+check "worker uses buttons only for real choices" 'grep -q "Buttons are for real choices" "$WORKER/worker.yaml" && ! grep -q "Every question and every approval ends with a suggestions block" "$WORKER/worker.yaml"'
 NW_SUGGESTION='Onboard a client'
 check "done.suggestion is Onboard a client" 'setup_block | grep -qF -- "    suggestion: \"$NW_SUGGESTION\""'
-check "done.suggestion is offered by the setup skill" 'grep -qF -- "$NW_SUGGESTION" "$WORKER/skills/setup.md"'
-check "setup skill asks every question with its id" 'for q in $qids; do grep -q "\*\*[0-9]\. $q\*\*" "$WORKER/skills/setup.md" || exit 1; done'
+check "setup skill ends with a summary of what was set up and a next step" 'grep -q "Tell them what you set up" "$WORKER/skills/setup.md" && grep -q "onboarding their newest client" "$WORKER/skills/setup.md"'
+check "setup skill writes every topic into the playbook" '( for f in --name --services --ideal-client --pricing --tools --voice; do grep -q -- "$f" "$WORKER/skills/setup.md" || exit 1; done )'
 check "practice-setup.sh runs onboard-firm.sh with every slot empty" 'grep -q -- "--empty crm --empty billing --empty agreements --empty portal --empty transcripts" "$PACK_DIR/scripts/practice-setup.sh"'
-check "setup skill imports clients, links tools, and keeps the practice client as a fallback" 'grep -q "scripts/import-clients.sh" "$WORKER/skills/setup.md" && grep -q "scripts/firm-setup.sh" "$WORKER/skills/setup.md" && grep -q "## No clients yet" "$WORKER/skills/setup.md" && grep -q "scripts/practice-setup.sh" "$WORKER/skills/setup.md"'
+check "setup skill imports clients, links tools, and keeps the practice client as a fallback" 'grep -q "scripts/import-clients.sh" "$WORKER/skills/setup.md" && grep -q "scripts/firm-setup.sh" "$WORKER/skills/setup.md" && grep -q "Only if they have no clients at all" "$WORKER/skills/setup.md" && grep -q "scripts/practice-setup.sh" "$WORKER/skills/setup.md"'
 check "every setup question has a goal" '[ "$(grep -c "^      goal: " "$PACK_DIR/package.yaml")" = 6 ]'
-check "setup skill interviews tools by kind, then connects each" 'grep -q "## Stage 2: your tools" "$WORKER/skills/setup.md" && grep -q "Which tools do you use for email" "$WORKER/skills/setup.md" && ! grep -q "For example: Gmail" "$WORKER/skills/setup.md" && grep -q "tool: scripts/drive.mjs" "$PACK_DIR/package.yaml" && grep -q "tool: scripts/slack.mjs" "$PACK_DIR/package.yaml" && grep -q -- "--link-only" "$WORKER/skills/setup.md" && ! grep -q -- "--no-browser" "$WORKER/skills/setup.md"'
-check "setup lists email, CRM, team chat, docs and project management as sources" 'for k in email CRM "team chat" "docs and SOPs" "project management"; do grep -A60 "^  sources:" "$PACK_DIR/package.yaml" | grep -q "kind: $k$" || exit 1; done'
-check "setup skill reads connected apps before asking, read-only" 'grep -q "hq integrations list --usable --json --company {firm}" "$WORKER/skills/setup.md" && grep -q "read-only tools only" "$WORKER/skills/setup.md"'
-check "the practice offer says Northwind is made up" 'grep -q "made-up company" "$WORKER/skills/setup.md"'
+check "setup skill states how Drive and Slack connect, and the package declares their tools" 'grep -q "scripts/drive.mjs" "$WORKER/skills/setup.md" && grep -q "scripts/slack.mjs" "$WORKER/skills/setup.md" && grep -q "tool: scripts/drive.mjs" "$PACK_DIR/package.yaml" && grep -q "tool: scripts/slack.mjs" "$PACK_DIR/package.yaml" && grep -q -- "--link-only" "$WORKER/skills/setup.md" && ! grep -q -- "--no-browser" "$WORKER/skills/setup.md"'
+check "setup lists email, CRM, team chat, docs and project management as sources" '( for k in email CRM "team chat" "docs and SOPs" "project management"; do grep -A60 "^  sources:" "$PACK_DIR/package.yaml" | grep -q "kind: $k$" || exit 1; done )'
+check "setup skill asks before reading and reads read-only" 'grep -q "Ask before you read" "$WORKER/skills/setup.md" && grep -q "read-only" "$WORKER/skills/setup.md"'
+check "the practice offer says Northwind is made up" 'grep -q "made-up client" "$WORKER/skills/setup.md"'
 check "firm-setup.sh never forces slots empty" '! grep -q -- "--empty" "$PACK_DIR/scripts/firm-setup.sh" && grep -q -- "--no-auto" "$PACK_DIR/scripts/firm-setup.sh"'
 check "setup skill writes SOPs into the agency brain" 'grep -q "agency-playbook/sops/" "$WORKER/skills/setup.md"'
 check "setup lists documents to ask for" 'grep -A1 "^  documents:" "$PACK_DIR/package.yaml" | grep -q "rate card"'
-check "setup skill follows up on variable pricing" 'grep -q "always gets a follow-up" "$WORKER/skills/setup.md"' 
+check "setup skill follows up on vague answers like variable pricing" 'grep -q "variable pricing" "$WORKER/skills/setup.md" && grep -q "needs a follow-up" "$WORKER/skills/setup.md"'
 
 # --- agency-guide worker ------------------------------------------------
 for f in worker.yaml skills/setup.md skills/onboarding.md skills/clients.md; do
@@ -171,7 +172,7 @@ check "worker files contain no em dashes" '! grep -rq -- "—" "$WORKER"'
 check "onboarding skill gates with Approve and Needs changes" 'grep -q "\[\"Approve\",\"Needs changes\"\]" "$WORKER/skills/onboarding.md"'
 check "onboarding skill records approver and date" 'grep -q "approved_by: {Display Name}" "$WORKER/skills/onboarding.md"'
 check "onboarding skill runs the grader" 'grep -q "scripts/grade-practice.sh --firm" "$WORKER/skills/onboarding.md"'
-check "clients skill covers the four triggers" 'for t in "new client" "onboard {client}" "is this in scope" "weekly update for"; do grep -q "\"$t" "$WORKER/skills/clients.md" || exit 1; done'
+check "clients skill covers the four triggers" '( for t in "new client" "onboard {client}" "is this in scope" "weekly update for"; do grep -q "\"$t" "$WORKER/skills/clients.md" || exit 1; done )'
 check "clients skill runs new-client.sh engagement --local-only then client-workspace.sh" 'grep -q "new-client.sh engagement" "$WORKER/skills/clients.md" && grep -q -- "--local-only" "$WORKER/skills/clients.md" && grep -q "client-workspace.sh" "$WORKER/skills/clients.md"'
 check "clients skill saves approved drafts under reports/" 'grep -q "reports/{YYYY-MM-DD}-scope-check.md" "$WORKER/skills/clients.md" && grep -q "reports/{YYYY-MM-DD}-weekly-update.md" "$WORKER/skills/clients.md"'
 check "worker skills never send" 'grep -qi "never send" "$WORKER/skills/clients.md" && grep -q "Nothing is sent to anyone" "$WORKER/skills/onboarding.md"'
@@ -212,8 +213,8 @@ done
 for w in $(awk '/^  workers:/{f=1;next} /^  [a-z]+:/{f=0} f && /- /{print $2}' "$PACK_DIR/package.yaml"); do
   check "worker $w has worker.yaml with matching id" 'grep -q "^  id: $w$" "$PACK_DIR/workers/$w/worker.yaml"'
 done
-check "package version is 0.4.6" 'grep -q "^version: 0.4.6$" "$PACK_DIR/package.yaml"'
-check "changelog has a 0.4.6 entry" 'grep -q "^## 0.4.6" "$PACK_DIR/CHANGELOG.md"'
+check "package version is 0.4.7" 'grep -q "^version: 0.4.7$" "$PACK_DIR/package.yaml"'
+check "changelog has a 0.4.7 entry" 'grep -q "^## 0.4.7" "$PACK_DIR/CHANGELOG.md"'
 check "requires client-service through requires.packs" 'grep -A2 "^  packs:" "$PACK_DIR/package.yaml" | grep -q "name: hq-pack-client-service"'
 check "no legacy requires.packages list" '! grep -q "^  packages:" "$PACK_DIR/package.yaml"'
 check "readme describes the chat door" 'grep -q "Agency Guide" "$PACK_DIR/README.md"'
@@ -264,8 +265,8 @@ if command -v node >/dev/null 2>&1; then
   check "slack.mjs parses" 'node --check "$SLACKJS"'
   check "slack.mjs allows only Slack read methods" 'node -e "const s=require(\"fs\").readFileSync(process.argv[1],\"utf8\");const m=s.match(/READ_METHODS = new Set\(\[([^\]]*)\]/)[1];const bad=/(post|update|delete|join|invite|kick|react|archive|set|create|rename|leave|open|close|upload|add|remove)/i;process.exit(m.split(\",\").some(x=>bad.test(x))?1:0)" "$SLACKJS"'
   check "slack.mjs refuses an unknown command" '! node "$SLACKJS" nope >/dev/null 2>&1'
-  check "setup skill connects Slack with slack.mjs and reads search-first" 'grep -q "slack.mjs connect-link" "$WORKER/skills/setup.md" && grep -q "slack.mjs search" "$WORKER/skills/setup.md"'
-  check "setup skill connects Drive with drive.mjs and reads with it" 'grep -q "drive.mjs connect" "$WORKER/skills/setup.md" && grep -q "drive.mjs status" "$WORKER/skills/setup.md" && grep -q "drive.mjs search" "$WORKER/skills/setup.md"'
+  check "setup skill connects Slack with slack.mjs and reads search-first" 'grep -q "scripts/slack.mjs" "$WORKER/skills/setup.md" && grep -q "connect-link" "$WORKER/skills/setup.md" && grep -q "search first" "$WORKER/skills/setup.md"'
+  check "setup skill connects Drive with drive.mjs and reads with it" 'grep -q "scripts/drive.mjs" "$WORKER/skills/setup.md" && grep -q "Google sign-in page" "$WORKER/skills/setup.md" && grep -q "and .read. read Drive" "$WORKER/skills/setup.md"'
 else
   ok "drive.mjs (skipped: node not installed)"
 fi

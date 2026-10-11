@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.7 (2026-10-11)
+
+- The Agency Guide works from a brief, like HQ's own setup bot: what to build
+  (agency brain, client brains, connected systems), what good looks like, the
+  facts about each tool, and the scripts to run. No scripted messages, fixed
+  question order or preset buttons; it adapts to the person.
+- Worker rules: buttons only for real choices, never on typed answers or with
+  guessed answers; the outdated practice-client job and exact phrasings are
+  gone.
+
 ## 0.4.6 (2026-10-11)
 
 - `setup.sources` says how each tool connects: Google Drive and Slack through

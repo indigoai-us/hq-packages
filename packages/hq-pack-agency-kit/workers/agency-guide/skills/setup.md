@@ -1,209 +1,83 @@
 ---
 name: setup
 title: Agency setup
-description: Set up the agency in HQ from the chat. Build the agency brain (profile, pricing, voice, SOPs), a brain for each current client, and connect the agency's systems, learning from connected apps and documents first and asking only what the data leaves open. Ends with a summary of what was set up.
+description: Set up the agency in HQ from the chat. Build an agency brain, a brain for each current client, and connect the agency's tools, learning from their tools and documents first and asking only what is left open. Ends with a summary of what was set up.
 ---
 
 # Agency setup
 
-The goal: when setup ends, the agency owner has
+This is a brief, not a script. It says what to build, what you can use and
+what good looks like. How you run the conversation is your call: follow the
+person's lead, skip what you already know, and keep it quick.
 
-1. **An agency brain**: who they are, what they sell and how they price it,
-   how they sound, and their own SOPs, in
-   `companies/{firm}/knowledge/agency-playbook/`.
-2. **A brain for each current client**: one home per client under
-   `companies/{firm}/clients/{slug}/` with what the agency does for them, who
-   the contacts are, the contract terms, recent activity, and where their
-   things live.
-3. **Their systems connected**: the agency's tools linked to HQ (CRM, email,
-   Slack, project management, billing), and each client's systems noted in
-   that client's home.
+## What to build
 
-Do it fast. Learn from data before you ask. Every question you can answer from
-a connected app or a document is a question you do not ask. Keep each message
-short, one question or one decision per message, always with buttons.
+1. **An agency brain** in `companies/{firm}/knowledge/agency-playbook/`: who
+   they are, what they sell and how they price it, who they sell to, how they
+   sound, the tools they run, and their own SOPs.
+2. **A brain for each current client**, one home per client under
+   `companies/{firm}/clients/{slug}/`: who the client is, what the agency does
+   for them, contacts, contract terms, recent activity and where their things
+   live, each fact with its source.
+3. **Their systems connected**: the agency's tools connected to HQ and linked
+   to the client-service slots, and each client's systems noted in that
+   client's home.
 
-Before you start, resolve `{firm}` as the worker instructions say, and read the
-company's display name from `companies/manifest.yaml` (`companies.{firm}.name`).
-Record both in your progress note. If the app already sent the first question
-(your turn starts with a `[Pack setup: ...]` note), do not repeat the checks or
-the question: the person's message is their answer.
+Good looks like: the person answered a handful of questions, most of the
+playbook and client profiles came from their own tools and documents, and at
+the end they can see exactly what was set up and where.
 
-If `companies/{firm}/knowledge/agency-playbook/` already exists, setup has run
-before. Say so in one line, offer ["Add my clients","Set up my agency again"],
-and carry on from the first stage that is not done.
+## Where you start
 
-Record each stage in your progress note as it finishes. Everything you write
-is sent to the person, including text between commands: never write notes to
-yourself or narrate your next step.
+Resolve `{firm}` as your worker instructions say, and read the company's
+display name from `companies/manifest.yaml`. The app may already have asked
+for the agency name; if your turn starts with a `[Pack setup: ...]` note, the
+person's message answers it. If the playbook already exists, setup ran before:
+say so, and carry on with whatever is missing (often the clients).
 
-## Stage 1: the name
+## What you need to know about the agency
 
-**1. agency_name** (not skippable). Goal: the name clients know them by.
-Propose the company's display name and ask to confirm it; do not ask from
-scratch. A name is required; if they try to skip, say one line about why (it
-goes on every brief and client update) and ask again.
+The topics in the Pack setup section of your instructions (name, services,
+ideal client, pricing, tools, voice) each have a goal. A topic is done when
+you know what its goal asks for, from the data or from them. A vague answer
+("variable pricing", "a mix", "it depends") needs a follow-up on what it
+depends on and a typical range; a clear one does not. Propose what you found
+in their tools and documents and let them correct it, instead of asking what
+the data already says.
 
-## Stage 2: your tools
+## Their tools
 
-A short interview, then connect. Right after the name, run
-`hq integrations list --usable --json --company {firm}` and note what is
-already connected. Name tools by what they are for (your email, your CRM),
-never by a brand they have not told you they use.
+How each tool connects and is read is listed in the Pack setup section; rely
+on it. Today that means:
 
-**The question.** One message, answered by typing, with no buttons and no
-example answer, skipping any kind already connected:
+- **Google Drive** connects through Google's own sign-in on this Mac
+  (`scripts/drive.mjs`): `connect` opens a Google sign-in page in their browser
+  (and installs Google's sign-in tool the first time, which takes about a
+  minute), `status` confirms it, and `search`, `recent` and `read` read Drive.
+  Google lists Drive alongside some Google Cloud permissions on that page;
+  that is normal for this sign-in, and you only ever read.
+- **Slack** connects through HQ's Personal Slack account (`scripts/slack.mjs`):
+  `connect-link` gives the HQ page where they add Slack (Add, then Slack, pick
+  the company, allow in Slack), `status` confirms it, and `channels`, `search`,
+  `history` and `thread` read it. Slack only lets HQ read channel history
+  slowly for now, so search first and open only a few conversations.
+- **Email, HubSpot, Salesforce and Teams** are not available yet. Say so
+  once if it comes up, plainly, and move on.
+- **Other tools** connect with an HQ sign-in link from
+  `hq integrations connect <domain> --company {firm} --link-only`.
 
-> Which tools do you use for email, your CRM, team chat, docs and SOPs, and projects?
+Ask before you read, and read only what you said you would, with read-only
+commands. Useful reads: Drive for proposals, SOPs, pricing, rate cards and
+onboarding docs (the best 5 to 10, not everything); Slack search for client
+conversations, and `from:me` for how they write to clients; client channel
+names to find who their clients are. They can also drop files into the chat.
+Describe what you found in your own words; never paste private messages back.
 
-Take whatever they type; a kind they leave out is none. If an answer is
-unclear ("we use the Google stuff"), propose your reading in one line and
-move on. Their answer is the `tools` topic; record it.
+## Writing the agency brain
 
-**Connect.** Then connect what they named, one tool per message, most useful
-first: Google Drive, then Slack, then the CRM, then project management. How
-each tool connects is listed in the Pack setup section of your instructions
-(from package.yaml `setup.sources`); follow it. For a tool marked not
-available yet (email, HubSpot, Teams today), say once in plain words that it
-comes in a later update; never list what you cannot do as a set of bullets.
-
-**Google Drive** connects through Google's own sign-in on this Mac, not a
-link you send:
-
-1. Run `node core/packages/hq-pack-agency-kit/scripts/drive.mjs connect`. It
-   installs Google's sign-in tool if needed (a minute the first time), opens a
-   Google sign-in page in their browser, and returns at once.
-2. Send one message:
-
-> I've opened a Google sign-in page in your browser. Pick the account with your agency's docs and allow access. Google will list Drive along with some Google Cloud permissions; that's normal for this sign-in. I only read Drive, and I never change, share or delete anything.
-
-```hq-block
-{"v":1,"blocks":[{"kind":"suggestions","items":["Done","Skip"]}]}
-```
-
-3. After "Done", run `node core/packages/hq-pack-agency-kit/scripts/drive.mjs status`.
-   `"connected": true` means Drive is ready; record the account in your note.
-   If it is still false, say so in one line and offer ["Try again","Skip"]; on
-   "Try again" run `connect` again.
-
-**Slack** connects through HQ's Personal Slack account, with their own Slack
-sign-in:
-
-1. Run `node core/packages/hq-pack-agency-kit/scripts/slack.mjs status`. If
-   `"connected": true`, Slack is already connected; say so and move on.
-2. Otherwise run `node core/packages/hq-pack-agency-kit/scripts/slack.mjs connect-link`
-   and send its `url` as a plain link:
-
-> Let's connect your Slack so I can find your client conversations. Open this, click Add, choose Slack, pick your company, and allow access in Slack: {url}
-
-```hq-block
-{"v":1,"blocks":[{"kind":"suggestions","items":["Done","Skip"]}]}
-```
-
-3. After "Done", run `slack.mjs status` again. If it is still not connected,
-   say so in one line and offer ["Try again","Skip"].
-
-**Every other tool** connects with a sign-in link:
-
-> Let's connect your HubSpot so I can see your clients and deals. Sign in here: {link}
-
-```hq-block
-{"v":1,"blocks":[{"kind":"suggestions","items":["Done","Skip"]}]}
-```
-
-Get the link with `hq integrations connect <domain> --company {firm} --link-only`
-(it prints the link and returns at once; never run connect without
-`--link-only`, it waits for a sign-in the person has not been sent yet),
-using the domain in package.yaml `setup.sources` (Gmail `gmail.com`, Outlook
-and Teams `graph.microsoft.com`, HubSpot `hubspot.com`, Salesforce
-`salesforce.com`, Pipedrive `pipedrive.com`, Close `close.com`, Slack
-`slack.com`, Google Drive `drive.google.com`, Notion `notion.so`, Dropbox
-`dropbox.com`, Asana `asana.com`, ClickUp `clickup.com`, Monday `monday.com`).
-For "Something else", look it up with `hq integrations catalog <name> --company {firm}`.
-After "Done", check the list again. If a tool shows an error instead of
-connected, or HQ cannot connect it yet, say so in one line and go to the next.
-
-**Read.** Once something useful is connected, say in one line what you will
-read and ask for a yes:
-
-```hq-block
-{"v":1,"blocks":[{"kind":"suggestions","items":["Go ahead","Just ask me"]}]}
-```
-
-Read Google Drive with the read-only Drive tool, which prints JSON:
-
-- `node core/packages/hq-pack-agency-kit/scripts/drive.mjs search proposal SOP process pricing "rate card" onboarding --limit 25`
-  finds candidate docs (search again with client names once you know them);
-- `node core/packages/hq-pack-agency-kit/scripts/drive.mjs recent --limit 30`
-  shows what they work on now;
-- `node core/packages/hq-pack-agency-kit/scripts/drive.mjs read <id>`
-  returns a Doc, Sheet, Slides or text file as text (other files come back
-  with a link only).
-
-Read the most useful 5 to 10 files, not everything.
-
-Read Slack with the read-only Slack tool, which prints JSON. Search first:
-reading a channel's history is slow (Slack allows HQ about 15 messages a
-minute there), so use history and threads only for a few key conversations.
-
-- `node core/packages/hq-pack-agency-kit/scripts/slack.mjs channels` lists
-  their channels (client channels are usually named after the client);
-- `node core/packages/hq-pack-agency-kit/scripts/slack.mjs search <query> --limit 20`
-  searches everything they can see, with Slack search syntax (`from:me`,
-  `in:#channel`, `after:2026-08-01`); `from:me` shows how they write to
-  clients;
-- `slack.mjs history <channelId> --limit 15` and
-  `slack.mjs thread <channelId> <threadTs>` read one conversation. Read other tools with
-`hq integrations tools` and `hq integrations call`, using
-read-only tools only. Never send, post, label or change anything. Read only what you said:
-recent emails sent to clients, recent CRM deals and companies, recent
-messages in client channels, SOP and process docs, proposals, rate cards,
-active projects. They can also drop files into the chat at any point; read
-those too.
-
-While you read, collect three things at once: what the agency is (the topics
-below), how its tools should be linked (Stage 4), and who its current clients
-are (Stage 5). One read, three uses.
-
-## Stage 3: the agency brain
-
-Send one message proposing an answer for every topic the data covers, one line
-each, saying where it came from ("Pricing: retainer from $4k plus 10% of spend
-over $40k, from your proposals to Acme and Brightside"). Ask them to confirm or
-correct it:
-
-```hq-block
-{"v":1,"blocks":[{"kind":"suggestions","items":["Looks right","Some of it's off"]}]}
-```
-
-Then ask only the topics the data left open, in this order. A topic is done
-when you know what its goal says, not when they have replied. "Variable
-pricing", "a mix", "it depends" and "Something else" always get a follow-up,
-with likely answers as buttons. At most two follow-ups per topic. Never paste
-private message text back; describe what you found in your own words.
-
-**2. services**. Goal: what they sell and, per service, what the client
-actually gets, enough to tell in-scope from out-of-scope work.
-Buttons: ["Paid ads","SEO and content","Web and design","Automations and AI","Something else","Skip"].
-
-**3. ideal_client**. Goal: who they do their best work for: industry, size or
-spend, stage. Buttons: ["Ecommerce brands","B2B SaaS","Local businesses","Professional services","Skip"].
-
-**4. pricing**. Goal: how a price is built: the model, what it varies with,
-typical ranges or minimums. Buttons: ["Monthly retainer","Per project","Performance based","A mix","Skip"].
-A vague answer always gets a follow-up on what it depends on
-(["Ad spend","Scope of work","Results","Number of channels"]), then one line
-for a typical range or minimum.
-
-**5. tools**. Goal: the tools they run, by kind. You already have this from
-the Stage 2 interview; do not ask again.
-
-**6. voice**. Goal: how they sound with clients, specific enough to write in.
-Sent emails and proposals are the best source; propose what you heard.
-
-Each topic goes into your note as a full sentence the playbook can use. Then
-write the agency brain, saying one line first ("Writing your agency playbook
-now."):
+When you know enough, write the playbook with each topic as a full sentence
+the playbook can use (leave out the flag of a topic they skipped; the script
+writes a marked placeholder):
 
 ```bash
 bash core/packages/hq-pack-agency-kit/scripts/agency-setup.sh \
@@ -212,109 +86,54 @@ bash core/packages/hq-pack-agency-kit/scripts/agency-setup.sh \
   --pricing "{pricing}" --tools "{tools}" --voice "{voice}"
 ```
 
-Leave out the flag of a skipped topic; the script writes a marked placeholder.
-Then add what the six sentences cannot hold:
+Then add what those sentences cannot hold: a "From their tools and documents"
+section in `agency-profile.md` with specifics (price points, packages,
+minimums, contract terms) and their sources, and a short markdown copy of
+each SOP you found in `knowledge/agency-playbook/sops/{slug}.md`, with its
+source at the top.
 
-- In `agency-profile.md`, a "From their apps and documents" section with the
-  specifics (price points, packages, minimums, contract terms), each with its
-  source.
-- Their SOPs: for each SOP or process doc you found or they dropped in, write
-  a short markdown copy to
-  `companies/{firm}/knowledge/agency-playbook/sops/{slug}.md` with a title, the
-  steps, and the source at the top. Fold anything that changes how they
-  onboard clients into `onboarding-checklist.md`, marked with its source.
+## Linking their systems
 
-## Stage 4: link the agency's systems
-
-Link the client-service slots to the tools they use. For each slot you have
-evidence for, pass a `--bind`: `crm`, `billing`, `agreements`, `portal`,
-`transcripts`, as `<slot>=<Tool name>:cli` for a tool reached through HQ
-integrations, for example `--bind crm=HubSpot:cli`.
+Link the client-service slots to the tools they use (crm, billing,
+agreements, portal, transcripts), only where you have evidence, as
+`<slot>=<Tool name>:cli`:
 
 ```bash
 bash core/packages/hq-pack-agency-kit/scripts/firm-setup.sh \
-  --firm {firm} --agency-name "{agency_name}" --bind crm=HubSpot:cli
+  --firm {firm} --agency-name "{agency_name}" --bind crm=Pipedrive:cli
 ```
 
-Slots you have no evidence for stay undecided; do not ask about them now. If
-the script says `E_ENV_YQ_MISSING`, record it and list it as not done in the
-summary; client homes cannot be created until it runs, so say that too.
+Slots without evidence stay undecided. If it reports `E_ENV_YQ_MISSING`, note
+it for the summary; client homes cannot be created until it runs.
 
-## Stage 5: a brain for each client
+## A brain for each client
 
-Propose their current clients from what you read: companies on recent won or
-active HubSpot deals, client Slack channels, and the domains they email most
-as an agency. One line per client with where you saw them. Up to 15; say if
-there are more.
-
-```hq-block
-{"v":1,"blocks":[{"kind":"suggestions","items":["Add all of them","Let me edit the list","Not now"]}]}
-```
-
-If you found none, ask once: "Who are your current clients? Type their names,
-one per line." With no data and no names, go to the summary and offer the
-practice client at the end (see "No clients yet").
-
-Write the confirmed list to a file in your memory folder, one client per line,
-`{slug}<TAB>{Client Name}` (slug: lowercase letters, digits and hyphens), and
-create every client home in one go:
+Work out their current clients from what you read (client Slack channels,
+recent proposals and contracts in Drive, deals in a connected CRM) and let
+them confirm or edit the list. If you found none, ask them to name their
+clients. Write the confirmed list to a file in your memory folder, one per
+line as `{slug}<TAB>{Client Name}`, and create every home in one go:
 
 ```bash
 bash core/packages/hq-pack-agency-kit/scripts/import-clients.sh \
   --firm {firm} --file <that file> --agency-name "{agency_name}"
 ```
 
-Then fill each client's brain from what you already read, without asking the
-person anything: in `companies/{firm}/clients/{slug}/client-profile.md`, the
-"Who they are", "Why they hired us" and "How they want to work" lines you
-have evidence for, each with its source, and blank where you have none. In
-`access-and-assets.md`, the client's systems you saw (their ad accounts,
-analytics, site platform, shared drives, Slack channel), names only. Never
-copy credentials, and never paste message text. Do the clients one after
-another; do not message the person per client.
+Then fill each client's `client-profile.md` and `access-and-assets.md` from
+what you already read, every fact with its source, blank where you have
+nothing. Systems are names only; never copy a credential.
 
-## The done message and summary
+## Finishing
 
-Send the done message from `setup.done`, then in the same message a short
-summary of what actually happened, for example:
+Tell them what you set up: the playbook and SOPs, the client homes, what you
+connected and linked, and anything not done, each with where to find it in
+Files. Offer a next step that fits, such as onboarding their newest client
+(`skills/onboarding.md`, gathering that client's documents from their tools
+first). Record `Setup: finished` and the date in your progress note.
 
-> Your agency is set up in HQ. Here's what I set up:
->
-> - Agency brain: your playbook (profile, pricing, voice, scope rules, onboarding checklist) and 3 SOPs, in Files under Knowledge, Agency Playbook.
-> - 8 clients, each with a profile filled from HubSpot and Gmail, in Files under Clients.
-> - Linked: HubSpot as your CRM. Gmail and Slack are connected for reading.
-> - Not done: billing and contracts aren't linked yet.
+Only if they have no clients at all, offer a practice run on Northwind Labs,
+a made-up client with problems hidden in its documents, loaded with
+`scripts/practice-setup.sh --firm {firm} --agency-name "{agency_name}"`.
 
-End with the done suggestion and up to two next steps that fit, for example
-the newest client: ["Onboard a client","Onboard {newest client}","Weekly update for {client}"].
-Write `Setup: finished` and the date in your progress note.
-
-"Onboard a client" means: ask which client (their names as buttons, newest
-first), then run `skills/onboarding.md` for that client, gathering its contract,
-proposal, call notes and exports from their apps first and asking for
-anything missing.
-
-## No clients yet
-
-Only when there is no client data and they named no clients: after the
-summary, offer a practice run.
-
-> No clients in HQ yet. Want to see how onboarding works on a practice client first? Northwind Labs is a made-up company with a few problems hidden in its documents; it takes about 10 minutes.
-
-```hq-block
-{"v":1,"blocks":[{"kind":"suggestions","items":["Try the practice client","Not now"]}]}
-```
-
-On yes, load it, then run `skills/onboarding.md` for `practice-northwind`:
-
-```bash
-bash core/packages/hq-pack-agency-kit/scripts/practice-setup.sh \
-  --firm {firm} --agency-name "{agency_name}"
-```
-
-## When a step fails
-
-Say in one plain sentence what you were doing and that it did not finish
-("I couldn't create the client homes yet."), and offer ["Retry","Skip this for now"].
-Never show the error text. On Retry, run the same step again. On Skip, record
-it and continue; the summary lists it under "Not done".
+When something fails, say plainly what did not work and offer to try again
+or move on; list anything skipped in the summary.
