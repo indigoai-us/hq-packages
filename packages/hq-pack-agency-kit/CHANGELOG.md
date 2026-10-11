@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.6 (2026-10-11)
+
+- `setup.sources` says how each tool connects: Google Drive and Slack through
+  the pack's `drive.mjs` and `slack.mjs`; Notion, ClickUp, Monday, Asana,
+  Pipedrive, Close and Dropbox through HQ integrations; email, HubSpot,
+  Salesforce and Teams marked not available yet. The guide no longer tells
+  people Drive or Slack cannot be connected.
+- The tools question is answered by typing, with no buttons and no example.
+
 ## 0.4.5 (2026-10-11)
 
 - The Slack connect message says where to click (Add, then Slack), since the

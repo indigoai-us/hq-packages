@@ -1,5 +1,5 @@
 name: hq-pack-agency-kit
-version: 0.4.5
+version: 0.4.6
 publisher: '@indigoai-us'
 access: public
 displayName: AI Builders Agency Kit
@@ -87,41 +87,41 @@ setup:
       pricing: --pricing
       tools: --tools
       voice: --voice
-  sources:                              # kinds of tools: asked about, connected, then read (with a yes) instead of asking
+  sources:                              # kinds of tools: asked about (typed answer), connected, then read (with a yes)
     - kind: email
       read: "the last 30 emails you sent to clients"
       informs: [services, ideal_client, pricing, voice]
       options:
-        - {name: Gmail, domain: gmail.com}
-        - {name: Outlook, domain: graph.microsoft.com}
+        - {name: Gmail, available: false, note: "reading email comes in a later update"}
+        - {name: Outlook, available: false, note: "reading email comes in a later update"}
     - kind: CRM
       read: "your recent deals and the companies on them"
       informs: [ideal_client, services, pricing]
       options:
-        - {name: HubSpot, domain: hubspot.com}
-        - {name: Salesforce, domain: salesforce.com}
+        - {name: HubSpot, available: false, note: "HubSpot comes in a later update"}
+        - {name: Salesforce, available: false, note: "Salesforce comes in a later update"}
         - {name: Pipedrive, domain: pipedrive.com}
         - {name: Close, domain: close.com}
     - kind: team chat
       read: "your recent messages in client channels"
       informs: [services, voice]
       options:
-        - {name: Slack, domain: slack.com}
-        - {name: Teams, domain: graph.microsoft.com}
-    - kind: docs
+        - {name: Slack, tool: scripts/slack.mjs, connect: connect-link, status: status, usage: "channels | search <query> | history <channelId> | thread <channelId> <threadTs>"}
+        - {name: Teams, available: false, note: "Teams comes in a later update"}
+    - kind: docs and SOPs
       read: "your SOPs, process docs, proposals and rate cards"
       informs: [services, pricing, voice]
       options:
-        - {name: Google Drive, domain: drive.google.com}
+        - {name: Google Drive, tool: scripts/drive.mjs, connect: connect, status: status, usage: "search <terms> | recent | read <fileId>"}
         - {name: Notion, domain: notion.so}
         - {name: Dropbox, domain: dropbox.com}
     - kind: project management
       read: "your active client projects"
       informs: [services]
       options:
-        - {name: Asana, domain: asana.com}
         - {name: ClickUp, domain: clickup.com}
         - {name: Monday, domain: monday.com}
+        - {name: Asana, domain: asana.com}
   documents:                            # asked for once, early; the bot reads them and asks less
     - a rate card or pricing sheet
     - a recent proposal or statement of work

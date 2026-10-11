@@ -51,19 +51,21 @@ A short interview, then connect. Right after the name, run
 already connected. Name tools by what they are for (your email, your CRM),
 never by a brand they have not told you they use.
 
-**The question.** One message, one answer, skipping any kind already
-connected:
+**The question.** One message, answered by typing, with no buttons and no
+example answer, skipping any kind already connected:
 
-> Which tools do you use for email, your CRM, team chat, docs and SOPs, and projects? For example: Gmail, HubSpot, Slack, Google Drive, ClickUp.
+> Which tools do you use for email, your CRM, team chat, docs and SOPs, and projects?
 
 Take whatever they type; a kind they leave out is none. If an answer is
 unclear ("we use the Google stuff"), propose your reading in one line and
 move on. Their answer is the `tools` topic; record it.
 
 **Connect.** Then connect what they named, one tool per message, most useful
-first: Google Drive, then the CRM, then project management, then chat. Do not
-try to connect email for now: record which email they use, and say in one
-line that reading email comes in a later update.
+first: Google Drive, then Slack, then the CRM, then project management. How
+each tool connects is listed in the Pack setup section of your instructions
+(from package.yaml `setup.sources`); follow it. For a tool marked not
+available yet (email, HubSpot, Teams today), say once in plain words that it
+comes in a later update; never list what you cannot do as a set of bullets.
 
 **Google Drive** connects through Google's own sign-in on this Mac, not a
 link you send:
