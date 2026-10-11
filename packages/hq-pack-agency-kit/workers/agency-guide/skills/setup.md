@@ -61,9 +61,32 @@ unclear ("we use the Google stuff"), propose your reading in one line and
 move on. Their answer is the `tools` topic; record it.
 
 **Connect.** Then connect what they named, one tool per message, most useful
-first (email, then CRM, then docs, then chat, then project management):
+first: Google Drive, then the CRM, then project management, then chat. Do not
+try to connect email for now: record which email they use, and say in one
+line that reading email comes in a later update.
 
-> Let's connect your Gmail so I can read the emails you've sent clients. Sign in here: {link}
+**Google Drive** connects through Google's own sign-in on this Mac, not a
+link you send:
+
+1. Run `node core/packages/hq-pack-agency-kit/scripts/drive.mjs connect`. It
+   installs Google's sign-in tool if needed (a minute the first time), opens a
+   Google sign-in page in their browser, and returns at once.
+2. Send one message:
+
+> I've opened a Google sign-in page in your browser. Pick the account with your agency's docs and allow access. Google will list Drive along with some Google Cloud permissions; that's normal for this sign-in. I only read Drive, and I never change, share or delete anything.
+
+```hq-block
+{"v":1,"blocks":[{"kind":"suggestions","items":["Done","Skip"]}]}
+```
+
+3. After "Done", run `node core/packages/hq-pack-agency-kit/scripts/drive.mjs status`.
+   `"connected": true` means Drive is ready; record the account in your note.
+   If it is still false, say so in one line and offer ["Try again","Skip"]; on
+   "Try again" run `connect` again.
+
+**Every other tool** connects with a sign-in link:
+
+> Let's connect your HubSpot so I can see your clients and deals. Sign in here: {link}
 
 ```hq-block
 {"v":1,"blocks":[{"kind":"suggestions","items":["Done","Skip"]}]}
@@ -88,7 +111,18 @@ read and ask for a yes:
 {"v":1,"blocks":[{"kind":"suggestions","items":["Go ahead","Just ask me"]}]}
 ```
 
-Read with `hq integrations tools` and `hq integrations call`, using
+Read Google Drive with the read-only Drive tool, which prints JSON:
+
+- `node core/packages/hq-pack-agency-kit/scripts/drive.mjs search proposal SOP process pricing "rate card" onboarding --limit 25`
+  finds candidate docs (search again with client names once you know them);
+- `node core/packages/hq-pack-agency-kit/scripts/drive.mjs recent --limit 30`
+  shows what they work on now;
+- `node core/packages/hq-pack-agency-kit/scripts/drive.mjs read <id>`
+  returns a Doc, Sheet, Slides or text file as text (other files come back
+  with a link only).
+
+Read the most useful 5 to 10 files, not everything. Read other tools with
+`hq integrations tools` and `hq integrations call`, using
 read-only tools only. Never send, post, label or change anything. Read only what you said:
 recent emails sent to clients, recent CRM deals and companies, recent
 messages in client channels, SOP and process docs, proposals, rate cards,

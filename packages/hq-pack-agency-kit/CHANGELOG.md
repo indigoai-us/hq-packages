@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.3 (2026-10-11)
+
+- Google Drive connects through Google's own sign-in on the person's Mac
+  (`gcloud auth login --enable-gdrive-access`), with no HQ app review needed.
+  `scripts/drive.mjs` installs Google's sign-in tool when missing, starts the
+  sign-in without blocking the chat, and reads Drive read-only: `status`,
+  `recent`, `search` (full text across the whole Drive) and `read` (Docs,
+  Sheets, Slides and text as text). It mints a fresh token from the local
+  sign-in on every call and only ever sends GET requests.
+- Setup connects Google Drive first and does not try to connect email yet.
+
 ## 0.4.2 (2026-10-11)
 
 - The tool interview is one question ("Which tools do you use for email, your

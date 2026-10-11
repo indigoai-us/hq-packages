@@ -212,8 +212,8 @@ done
 for w in $(awk '/^  workers:/{f=1;next} /^  [a-z]+:/{f=0} f && /- /{print $2}' "$PACK_DIR/package.yaml"); do
   check "worker $w has worker.yaml with matching id" 'grep -q "^  id: $w$" "$PACK_DIR/workers/$w/worker.yaml"'
 done
-check "package version is 0.4.2" 'grep -q "^version: 0.4.2$" "$PACK_DIR/package.yaml"'
-check "changelog has a 0.4.2 entry" 'grep -q "^## 0.4.2" "$PACK_DIR/CHANGELOG.md"'
+check "package version is 0.4.3" 'grep -q "^version: 0.4.3$" "$PACK_DIR/package.yaml"'
+check "changelog has a 0.4.3 entry" 'grep -q "^## 0.4.3" "$PACK_DIR/CHANGELOG.md"'
 check "requires client-service through requires.packs" 'grep -A2 "^  packs:" "$PACK_DIR/package.yaml" | grep -q "name: hq-pack-client-service"'
 check "no legacy requires.packages list" '! grep -q "^  packages:" "$PACK_DIR/package.yaml"'
 check "readme describes the chat door" 'grep -q "Agency Guide" "$PACK_DIR/README.md"'
@@ -251,6 +251,18 @@ if [ -d "$CS_PACK/scripts" ]; then
   rm -rf "$R3"
 else
   ok "import-clients (skipped: client-service pack not next to this one)"
+fi
+
+# --- drive.mjs (read-only Google Drive) ------------------------------------
+DRIVE="$PACK_DIR/scripts/drive.mjs"
+if command -v node >/dev/null 2>&1; then
+  check "drive.mjs parses" 'node --check "$DRIVE"'
+  check "drive.mjs only sends GET requests to Drive" '! grep -E -q "method: *\"(POST|PUT|PATCH|DELETE)\"" "$DRIVE" && [ "$(grep -c "method: \"GET\"" "$DRIVE")" -ge 1 ]'
+  check "drive.mjs refuses an unknown command" '! node "$DRIVE" nope >/dev/null 2>&1'
+  check "drive.mjs refuses a malformed file id" '! node "$DRIVE" read "../x" >/dev/null 2>&1'
+  check "setup skill connects Drive with drive.mjs and reads with it" 'grep -q "drive.mjs connect" "$WORKER/skills/setup.md" && grep -q "drive.mjs status" "$WORKER/skills/setup.md" && grep -q "drive.mjs search" "$WORKER/skills/setup.md"'
+else
+  ok "drive.mjs (skipped: node not installed)"
 fi
 
 rm -rf "$R" "$R2"
