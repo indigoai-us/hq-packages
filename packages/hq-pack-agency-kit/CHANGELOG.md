@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.2 (2026-10-11)
+
+- The tool interview is one question ("Which tools do you use for email, your
+  CRM, team chat, docs and SOPs, and projects? For example: ..."), answered in
+  one line.
+- Sign-in links come from `hq integrations connect --link-only`, which returns
+  the link at once; plain `--no-browser` waited for a sign-in the person had
+  not been sent and stalled the chat.
+- The guide does not narrate its steps; everything it writes is posted.
+
 ## 0.4.1 (2026-10-11)
 
 - Setup starts with a short interview about the agency's tools, one tap per

@@ -33,7 +33,9 @@ If `companies/{firm}/knowledge/agency-playbook/` already exists, setup has run
 before. Say so in one line, offer ["Add my clients","Set up my agency again"],
 and carry on from the first stage that is not done.
 
-Record each stage in your progress note as it finishes.
+Record each stage in your progress note as it finishes. Everything you write
+is sent to the person, including text between commands: never write notes to
+yourself or narrate your next step.
 
 ## Stage 1: the name
 
@@ -49,24 +51,16 @@ A short interview, then connect. Right after the name, run
 already connected. Name tools by what they are for (your email, your CRM),
 never by a brand they have not told you they use.
 
-**The interview.** One line per message, one tap per answer, in this order,
-skipping any kind already connected:
+**The question.** One message, one answer, skipping any kind already
+connected:
 
-> What do you use for email?
+> Which tools do you use for email, your CRM, team chat, docs and SOPs, and projects? For example: Gmail, HubSpot, Slack, Google Drive, ClickUp.
 
-```hq-block
-{"v":1,"blocks":[{"kind":"suggestions","items":["Gmail","Outlook","Something else","None"]}]}
-```
+Take whatever they type; a kind they leave out is none. If an answer is
+unclear ("we use the Google stuff"), propose your reading in one line and
+move on. Their answer is the `tools` topic; record it.
 
-Then the same for "your CRM" (["HubSpot","Salesforce","Pipedrive","Close","Something else","None"]),
-"team chat" (["Slack","Teams","Something else","None"]), "where your docs
-and SOPs live" (["Google Drive","Notion","Dropbox","Something else","None"])
-and "project management" (["Asana","ClickUp","Monday","Something else","None"]).
-For "Something else", ask its name in one line. Acknowledge each answer in a
-couple of words at the top of the next question. These answers are the
-`tools` topic; record them.
-
-**Connect.** Then connect what they picked, one tool per message, most useful
+**Connect.** Then connect what they named, one tool per message, most useful
 first (email, then CRM, then docs, then chat, then project management):
 
 > Let's connect your Gmail so I can read the emails you've sent clients. Sign in here: {link}
@@ -75,7 +69,9 @@ first (email, then CRM, then docs, then chat, then project management):
 {"v":1,"blocks":[{"kind":"suggestions","items":["Done","Skip"]}]}
 ```
 
-Get the link with `hq integrations connect <domain> --company {firm} --no-browser`,
+Get the link with `hq integrations connect <domain> --company {firm} --link-only`
+(it prints the link and returns at once; never run connect without
+`--link-only`, it waits for a sign-in the person has not been sent yet),
 using the domain in package.yaml `setup.sources` (Gmail `gmail.com`, Outlook
 and Teams `graph.microsoft.com`, HubSpot `hubspot.com`, Salesforce
 `salesforce.com`, Pipedrive `pipedrive.com`, Close `close.com`, Slack

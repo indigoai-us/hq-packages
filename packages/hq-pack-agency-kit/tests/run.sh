@@ -139,7 +139,7 @@ check "setup skill asks every question with its id" 'for q in $qids; do grep -q 
 check "practice-setup.sh runs onboard-firm.sh with every slot empty" 'grep -q -- "--empty crm --empty billing --empty agreements --empty portal --empty transcripts" "$PACK_DIR/scripts/practice-setup.sh"'
 check "setup skill imports clients, links tools, and keeps the practice client as a fallback" 'grep -q "scripts/import-clients.sh" "$WORKER/skills/setup.md" && grep -q "scripts/firm-setup.sh" "$WORKER/skills/setup.md" && grep -q "## No clients yet" "$WORKER/skills/setup.md" && grep -q "scripts/practice-setup.sh" "$WORKER/skills/setup.md"'
 check "every setup question has a goal" '[ "$(grep -c "^      goal: " "$PACK_DIR/package.yaml")" = 6 ]'
-check "setup skill interviews tools by kind, then connects each" 'grep -q "## Stage 2: your tools" "$WORKER/skills/setup.md" && grep -q "What do you use for email?" "$WORKER/skills/setup.md" && grep -q -- "--no-browser" "$WORKER/skills/setup.md"'
+check "setup skill interviews tools by kind, then connects each" 'grep -q "## Stage 2: your tools" "$WORKER/skills/setup.md" && grep -q "Which tools do you use for email" "$WORKER/skills/setup.md" && grep -q -- "--link-only" "$WORKER/skills/setup.md" && ! grep -q -- "--no-browser" "$WORKER/skills/setup.md"'
 check "setup lists email, CRM, team chat, docs and project management as sources" 'for k in email CRM "team chat" docs "project management"; do grep -A60 "^  sources:" "$PACK_DIR/package.yaml" | grep -q "kind: $k$" || exit 1; done'
 check "setup skill reads connected apps before asking, read-only" 'grep -q "hq integrations list --usable --json --company {firm}" "$WORKER/skills/setup.md" && grep -q "read-only tools only" "$WORKER/skills/setup.md"'
 check "the practice offer says Northwind is made up" 'grep -q "made-up company" "$WORKER/skills/setup.md"'
@@ -212,8 +212,8 @@ done
 for w in $(awk '/^  workers:/{f=1;next} /^  [a-z]+:/{f=0} f && /- /{print $2}' "$PACK_DIR/package.yaml"); do
   check "worker $w has worker.yaml with matching id" 'grep -q "^  id: $w$" "$PACK_DIR/workers/$w/worker.yaml"'
 done
-check "package version is 0.4.1" 'grep -q "^version: 0.4.1$" "$PACK_DIR/package.yaml"'
-check "changelog has a 0.4.1 entry" 'grep -q "^## 0.4.1" "$PACK_DIR/CHANGELOG.md"'
+check "package version is 0.4.2" 'grep -q "^version: 0.4.2$" "$PACK_DIR/package.yaml"'
+check "changelog has a 0.4.2 entry" 'grep -q "^## 0.4.2" "$PACK_DIR/CHANGELOG.md"'
 check "requires client-service through requires.packs" 'grep -A2 "^  packs:" "$PACK_DIR/package.yaml" | grep -q "name: hq-pack-client-service"'
 check "no legacy requires.packages list" '! grep -q "^  packages:" "$PACK_DIR/package.yaml"'
 check "readme describes the chat door" 'grep -q "Agency Guide" "$PACK_DIR/README.md"'
