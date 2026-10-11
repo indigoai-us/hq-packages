@@ -92,7 +92,7 @@ sign-in:
 2. Otherwise run `node core/packages/hq-pack-agency-kit/scripts/slack.mjs connect-link`
    and send its `url` as a plain link:
 
-> Let's connect your Slack so I can find your client conversations. Open this, pick your company, and allow access in Slack: {url}
+> Let's connect your Slack so I can find your client conversations. Open this, click Add, choose Slack, pick your company, and allow access in Slack: {url}
 
 ```hq-block
 {"v":1,"blocks":[{"kind":"suggestions","items":["Done","Skip"]}]}

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.5 (2026-10-11)
+
+- The Slack connect message says where to click (Add, then Slack), since the
+  console's Personal Integrations page does not open the Slack form from a link.
+
 ## 0.4.4 (2026-10-11)
 
 - Slack connects through HQ's Personal Slack account (the person's own Slack

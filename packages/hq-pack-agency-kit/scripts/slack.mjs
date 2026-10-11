@@ -30,7 +30,7 @@ const READ_METHODS = new Set([
 ]);
 const TOKEN_NAME = /^SLACK_PERSONAL\/(T[A-Z0-9]+)\/(U[A-Z0-9]+)\/USER_TOKEN$/;
 const CONSOLE = process.env.HQ_CONSOLE_URL || "https://hq.computer";
-const CONNECT_PATH = process.env.HQ_SLACK_CONNECT_PATH || "/personal/integrations?add=slack";
+const CONNECT_PATH = process.env.HQ_SLACK_CONNECT_PATH || "/personal/integrations";
 
 function out(obj, code = 0) {
   process.stdout.write(`${JSON.stringify(obj, null, 2)}\n`);
@@ -131,7 +131,7 @@ async function main() {
   const cmd = args.shift();
 
   if (cmd === "connect-link") {
-    out({ ok: true, url: `${CONSOLE}${CONNECT_PATH}`, note: "Open this, pick the company, and allow access in Slack. Then run: node slack.mjs status" });
+    out({ ok: true, url: `${CONSOLE}${CONNECT_PATH}`, note: "Open this, click Add, choose Slack, pick the company, and allow access in Slack. Then run: node slack.mjs status" });
   }
 
   if (cmd === "status") {

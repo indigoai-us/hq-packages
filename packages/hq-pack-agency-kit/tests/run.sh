@@ -212,8 +212,8 @@ done
 for w in $(awk '/^  workers:/{f=1;next} /^  [a-z]+:/{f=0} f && /- /{print $2}' "$PACK_DIR/package.yaml"); do
   check "worker $w has worker.yaml with matching id" 'grep -q "^  id: $w$" "$PACK_DIR/workers/$w/worker.yaml"'
 done
-check "package version is 0.4.4" 'grep -q "^version: 0.4.4$" "$PACK_DIR/package.yaml"'
-check "changelog has a 0.4.4 entry" 'grep -q "^## 0.4.4" "$PACK_DIR/CHANGELOG.md"'
+check "package version is 0.4.5" 'grep -q "^version: 0.4.5$" "$PACK_DIR/package.yaml"'
+check "changelog has a 0.4.5 entry" 'grep -q "^## 0.4.5" "$PACK_DIR/CHANGELOG.md"'
 check "requires client-service through requires.packs" 'grep -A2 "^  packs:" "$PACK_DIR/package.yaml" | grep -q "name: hq-pack-client-service"'
 check "no legacy requires.packages list" '! grep -q "^  packages:" "$PACK_DIR/package.yaml"'
 check "readme describes the chat door" 'grep -q "Agency Guide" "$PACK_DIR/README.md"'
