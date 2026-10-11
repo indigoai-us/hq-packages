@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.2 (2026-10-11)
+
+- Setup is an interview. Each `setup:` question has a `goal`, and the block
+  lists `documents` (rate card, recent proposal, case study). The Agency Guide
+  follows up once on a vague answer ("variable pricing": what does it vary
+  with?), asks early for those documents, reads them, and adds what it found
+  to the agency profile. Answers reach the playbook as full sentences.
+- `scripts/practice-setup.sh` runs the steps after the playbook in one
+  command: the client-service firm setup with every slot empty, Northwind Labs
+  recorded, and its documents loaded. Safe to re-run. `setup.run.then` calls
+  it, so every step the setup needs is declared in package.yaml.
+
 ## 0.3.1 (2026-10-11)
 
 - Declare the client-service dependency as `requires.packs` (name and

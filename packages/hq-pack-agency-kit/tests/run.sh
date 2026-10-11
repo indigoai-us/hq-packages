@@ -118,7 +118,7 @@ qids="$(setup_block | awk '/^  questions:/{f=1;next} f && /^  [a-z]/{f=0} f && $
 check "setup has six questions" '[ "$(printf "%s\n" "$qids" | wc -l | tr -d " ")" = 6 ]'
 check "question ids are unique" '[ "$(printf "%s\n" "$qids" | sort | uniq -d | wc -l | tr -d " ")" = 0 ]'
 check "question ids match ^[a-z_]+$" '! printf "%s\n" "$qids" | grep -qvE "^[a-z_]+$"'
-check "first question is agency_name with default_from company_display_name" 'setup_block | awk "/^  questions:/{f=1;next} f" | grep -m1 -A2 "id: agency_name" | grep -q "default_from: company_display_name"'
+check "first question is agency_name with default_from company_display_name" 'setup_block | awk "/^  questions:/{f=1;next} f" | grep -m1 -A4 "id: agency_name" | grep -q "default_from: company_display_name"'
 check "every question has an options list" '[ "$(setup_block | awk "/^  questions:/{f=1;next} f && /^  [a-z]/{f=0} f" | grep -c "^      options: \[")" = 6 ]'
 check "agency_name is not skippable" 'setup_block | awk "/id: agency_name/{f=1} f && /skippable/{print; exit}" | grep -q "skippable: false"'
 run_script="$(setup_block | awk '/^  run:/{f=1;next} f && /^  [a-z]/{f=0} f && $1=="script:"{print $2; exit}')"
@@ -141,7 +141,11 @@ NW_SUGGESTION=$'Run Northwind\'s onboarding'
 check "done.suggestion is the Northwind suggestion" 'setup_block | grep -qF -- "    suggestion: \"$NW_SUGGESTION\""'
 check "done.suggestion is offered by the setup skill" 'grep -qF -- "$NW_SUGGESTION" "$WORKER/skills/setup.md"'
 check "setup skill asks every question with its id" 'for q in $qids; do grep -q "\*\*[0-9]\. $q\*\*" "$WORKER/skills/setup.md" || exit 1; done'
-check "setup skill runs onboard-firm.sh with every slot empty" 'grep -q -- "--empty crm --empty billing --empty agreements --empty portal --empty transcripts" "$WORKER/skills/setup.md"'
+check "practice-setup.sh runs onboard-firm.sh with every slot empty" 'grep -q -- "--empty crm --empty billing --empty agreements --empty portal --empty transcripts" "$PACK_DIR/scripts/practice-setup.sh"'
+check "setup skill and setup.run.then both call practice-setup.sh" 'grep -q "scripts/practice-setup.sh" "$WORKER/skills/setup.md" && grep -q "scripts/practice-setup.sh --agency-name {agency_name}" "$PACK_DIR/package.yaml"'
+check "every setup question has a goal" '[ "$(grep -c "^      goal: " "$PACK_DIR/package.yaml")" = 6 ]'
+check "setup lists documents to ask for" 'grep -A1 "^  documents:" "$PACK_DIR/package.yaml" | grep -q "rate card"'
+check "setup skill follows up on variable pricing" 'grep -q "always gets a follow-up" "$WORKER/skills/setup.md"' 
 
 # --- agency-guide worker ------------------------------------------------
 for f in worker.yaml skills/setup.md skills/onboarding.md skills/clients.md; do
@@ -207,8 +211,8 @@ done
 for w in $(awk '/^  workers:/{f=1;next} /^  [a-z]+:/{f=0} f && /- /{print $2}' "$PACK_DIR/package.yaml"); do
   check "worker $w has worker.yaml with matching id" 'grep -q "^  id: $w$" "$PACK_DIR/workers/$w/worker.yaml"'
 done
-check "package version is 0.3.1" 'grep -q "^version: 0.3.1$" "$PACK_DIR/package.yaml"'
-check "changelog has a 0.3.1 entry" 'grep -q "^## 0.3.1" "$PACK_DIR/CHANGELOG.md"'
+check "package version is 0.3.2" 'grep -q "^version: 0.3.2$" "$PACK_DIR/package.yaml"'
+check "changelog has a 0.3.2 entry" 'grep -q "^## 0.3.2" "$PACK_DIR/CHANGELOG.md"'
 check "requires client-service through requires.packs" 'grep -A2 "^  packs:" "$PACK_DIR/package.yaml" | grep -q "name: hq-pack-client-service"'
 check "no legacy requires.packages list" '! grep -q "^  packages:" "$PACK_DIR/package.yaml"'
 check "readme describes the chat door" 'grep -q "Agency Guide" "$PACK_DIR/README.md"'

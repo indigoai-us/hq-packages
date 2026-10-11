@@ -1,5 +1,5 @@
 name: hq-pack-agency-kit
-version: 0.3.1
+version: 0.3.2
 publisher: '@indigoai-us'
 access: public
 displayName: AI Builders Agency Kit
@@ -49,27 +49,33 @@ setup:
   questions:
     - id: agency_name
       text: "What's your agency called, as clients see it?"
+      goal: "The name clients know them by."
       default_from: company_display_name   # optional; the bot proposes it and asks to confirm
       options: []                          # free text only
       skippable: false
     - id: services
       text: "What do you sell?"
+      goal: "What they sell and, per service, what the client actually gets, enough to tell in-scope work from out-of-scope work."
       options: ["Paid ads", "SEO and content", "Web and design", "Automations and AI", "Something else"]
       skippable: true
     - id: ideal_client
       text: "Who do you sell to?"
+      goal: "Who they do their best work for, sharp enough to spot a bad-fit lead: industry, size or spend, stage."
       options: ["Ecommerce brands", "B2B SaaS", "Local businesses", "Professional services"]
       skippable: true
     - id: pricing
       text: "How do you charge?"
+      goal: "How a price is built, well enough to check a proposal or scope change against it: the model, what it varies with, typical ranges or minimums."
       options: ["Monthly retainer", "Per project", "Performance based", "A mix"]
       skippable: true
     - id: tools
       text: "Which tools do you run? CRM, project management, reporting, ad platforms."
+      goal: "The CRM, project management, reporting and ad platforms they use (not how to connect them)."
       options: ["HubSpot and Asana", "Notion and Slack", "Google Sheets and email", "Not sure yet"]
       skippable: true
     - id: voice
       text: "How do you sound with clients, in a few words?"
+      goal: "How they sound with clients, specific enough to write in."
       options: ["Direct and plain", "Warm and friendly", "Formal and precise"]
       skippable: true
   run:
@@ -82,7 +88,11 @@ setup:
       tools: --tools
       voice: --voice
     then:                                 # run after `script`, in order, same --firm
-      - scripts/practice-client.sh --agency-name {agency_name}
+      - scripts/practice-setup.sh --agency-name {agency_name}
+  documents:                            # asked for once, early; the bot reads them and asks less
+    - a rate card or pricing sheet
+    - a recent proposal or statement of work
+    - a case study
   done:
     message: "Your agency playbook is written. You'll find it in Files under Knowledge, Agency Playbook. Northwind Labs just signed with you."
     suggestion: "Run Northwind's onboarding"
