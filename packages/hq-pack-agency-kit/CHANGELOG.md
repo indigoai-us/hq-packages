@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.8 (2026-10-11)
+
+- Setup learns their tools right after the agency name, asking by kind (docs,
+  team chat, CRM) rather than by brand, and reads them before asking about
+  the business.
+- Buttons: at most four, all of the same kind; never answers mixed with
+  connect actions.
+
 ## 0.4.7 (2026-10-11)
 
 - The Agency Guide works from a brief, like HQ's own setup bot: what to build

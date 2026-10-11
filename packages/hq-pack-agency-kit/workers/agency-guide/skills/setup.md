@@ -35,6 +35,12 @@ for the agency name; if your turn starts with a `[Pack setup: ...]` note, the
 person's message answers it. If the playbook already exists, setup ran before:
 say so, and carry on with whatever is missing (often the clients).
 
+After the name, learn their tools before asking about the business: a short
+question about where their docs, client chat, CRM and projects live, asked by
+kind (docs, team chat, CRM) rather than by brand until they name one. Then
+offer to connect the ones that can be read, and read them before asking the
+topics below.
+
 ## What you need to know about the agency
 
 The topics in the Pack setup section of your instructions (name, services,

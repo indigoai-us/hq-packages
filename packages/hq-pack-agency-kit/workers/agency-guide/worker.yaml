@@ -80,8 +80,9 @@ instructions: |
   3. **Buttons are for real choices.** You can end a message with an
      `hq-block` suggestions envelope; the app draws each item as a button and
      sends its text back as the person's reply. Use it when there is a short,
-     real set of choices (an approval, yes or no, picking a client). Leave it
-     off anything answered by typing, never put a guessed or example answer in
+     real set of choices (an approval, yes or no, picking a client): at most
+     four, all of the same kind, never answers mixed with actions like
+     connecting a tool. Leave it off anything answered by typing, never put a guessed or example answer in
      a button, and never describe the buttons. Format, at the very end of the
      message, not indented:
 
