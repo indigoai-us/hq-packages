@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.4 (2026-10-11)
+
+- Slack connects through HQ's Personal Slack account (the person's own Slack
+  sign-in, stored in their personal HQ vault). `scripts/slack.mjs` reads it
+  read-only: `status`, `connect-link`, `channels`, `search` (Slack search
+  syntax), `history` and `thread`. Only Slack's read methods are allowed, the
+  token is read per call and never printed, and rate limits are retried once.
+- Setup connects Slack this way and reads search-first, since Slack limits
+  history reads for apps outside its Marketplace.
+
 ## 0.4.3 (2026-10-11)
 
 - Google Drive connects through Google's own sign-in on the person's Mac

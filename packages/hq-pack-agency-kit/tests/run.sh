@@ -212,8 +212,8 @@ done
 for w in $(awk '/^  workers:/{f=1;next} /^  [a-z]+:/{f=0} f && /- /{print $2}' "$PACK_DIR/package.yaml"); do
   check "worker $w has worker.yaml with matching id" 'grep -q "^  id: $w$" "$PACK_DIR/workers/$w/worker.yaml"'
 done
-check "package version is 0.4.3" 'grep -q "^version: 0.4.3$" "$PACK_DIR/package.yaml"'
-check "changelog has a 0.4.3 entry" 'grep -q "^## 0.4.3" "$PACK_DIR/CHANGELOG.md"'
+check "package version is 0.4.4" 'grep -q "^version: 0.4.4$" "$PACK_DIR/package.yaml"'
+check "changelog has a 0.4.4 entry" 'grep -q "^## 0.4.4" "$PACK_DIR/CHANGELOG.md"'
 check "requires client-service through requires.packs" 'grep -A2 "^  packs:" "$PACK_DIR/package.yaml" | grep -q "name: hq-pack-client-service"'
 check "no legacy requires.packages list" '! grep -q "^  packages:" "$PACK_DIR/package.yaml"'
 check "readme describes the chat door" 'grep -q "Agency Guide" "$PACK_DIR/README.md"'
@@ -260,6 +260,11 @@ if command -v node >/dev/null 2>&1; then
   check "drive.mjs only sends GET requests to Drive" '! grep -E -q "method: *\"(POST|PUT|PATCH|DELETE)\"" "$DRIVE" && [ "$(grep -c "method: \"GET\"" "$DRIVE")" -ge 1 ]'
   check "drive.mjs refuses an unknown command" '! node "$DRIVE" nope >/dev/null 2>&1'
   check "drive.mjs refuses a malformed file id" '! node "$DRIVE" read "../x" >/dev/null 2>&1'
+  SLACKJS="$PACK_DIR/scripts/slack.mjs"
+  check "slack.mjs parses" 'node --check "$SLACKJS"'
+  check "slack.mjs allows only Slack read methods" 'node -e "const s=require(\"fs\").readFileSync(process.argv[1],\"utf8\");const m=s.match(/READ_METHODS = new Set\(\[([^\]]*)\]/)[1];const bad=/(post|update|delete|join|invite|kick|react|archive|set|create|rename|leave|open|close|upload|add|remove)/i;process.exit(m.split(\",\").some(x=>bad.test(x))?1:0)" "$SLACKJS"'
+  check "slack.mjs refuses an unknown command" '! node "$SLACKJS" nope >/dev/null 2>&1'
+  check "setup skill connects Slack with slack.mjs and reads search-first" 'grep -q "slack.mjs connect-link" "$WORKER/skills/setup.md" && grep -q "slack.mjs search" "$WORKER/skills/setup.md"'
   check "setup skill connects Drive with drive.mjs and reads with it" 'grep -q "drive.mjs connect" "$WORKER/skills/setup.md" && grep -q "drive.mjs status" "$WORKER/skills/setup.md" && grep -q "drive.mjs search" "$WORKER/skills/setup.md"'
 else
   ok "drive.mjs (skipped: node not installed)"

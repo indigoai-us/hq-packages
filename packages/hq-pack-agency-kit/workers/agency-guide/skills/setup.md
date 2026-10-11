@@ -84,6 +84,23 @@ link you send:
    If it is still false, say so in one line and offer ["Try again","Skip"]; on
    "Try again" run `connect` again.
 
+**Slack** connects through HQ's Personal Slack account, with their own Slack
+sign-in:
+
+1. Run `node core/packages/hq-pack-agency-kit/scripts/slack.mjs status`. If
+   `"connected": true`, Slack is already connected; say so and move on.
+2. Otherwise run `node core/packages/hq-pack-agency-kit/scripts/slack.mjs connect-link`
+   and send its `url` as a plain link:
+
+> Let's connect your Slack so I can find your client conversations. Open this, pick your company, and allow access in Slack: {url}
+
+```hq-block
+{"v":1,"blocks":[{"kind":"suggestions","items":["Done","Skip"]}]}
+```
+
+3. After "Done", run `slack.mjs status` again. If it is still not connected,
+   say so in one line and offer ["Try again","Skip"].
+
 **Every other tool** connects with a sign-in link:
 
 > Let's connect your HubSpot so I can see your clients and deals. Sign in here: {link}
@@ -121,7 +138,20 @@ Read Google Drive with the read-only Drive tool, which prints JSON:
   returns a Doc, Sheet, Slides or text file as text (other files come back
   with a link only).
 
-Read the most useful 5 to 10 files, not everything. Read other tools with
+Read the most useful 5 to 10 files, not everything.
+
+Read Slack with the read-only Slack tool, which prints JSON. Search first:
+reading a channel's history is slow (Slack allows HQ about 15 messages a
+minute there), so use history and threads only for a few key conversations.
+
+- `node core/packages/hq-pack-agency-kit/scripts/slack.mjs channels` lists
+  their channels (client channels are usually named after the client);
+- `node core/packages/hq-pack-agency-kit/scripts/slack.mjs search <query> --limit 20`
+  searches everything they can see, with Slack search syntax (`from:me`,
+  `in:#channel`, `after:2026-08-01`); `from:me` shows how they write to
+  clients;
+- `slack.mjs history <channelId> --limit 15` and
+  `slack.mjs thread <channelId> <threadTs>` read one conversation. Read other tools with
 `hq integrations tools` and `hq integrations call`, using
 read-only tools only. Never send, post, label or change anything. Read only what you said:
 recent emails sent to clients, recent CRM deals and companies, recent
