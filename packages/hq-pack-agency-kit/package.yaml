@@ -1,5 +1,5 @@
 name: hq-pack-agency-kit
-version: 0.3.0
+version: 0.3.1
 publisher: '@indigoai-us'
 access: public
 displayName: AI Builders Agency Kit
@@ -15,8 +15,9 @@ capabilities:
   - fs
 requires:
   hqCore: '>=16.0.0-beta.50'
-  packages:
-    - hq-pack-client-service
+  packs:
+    - name: hq-pack-client-service
+      version: '>=0.2.0'
 contributes:
   workers:
     - agency-guide

@@ -207,8 +207,10 @@ done
 for w in $(awk '/^  workers:/{f=1;next} /^  [a-z]+:/{f=0} f && /- /{print $2}' "$PACK_DIR/package.yaml"); do
   check "worker $w has worker.yaml with matching id" 'grep -q "^  id: $w$" "$PACK_DIR/workers/$w/worker.yaml"'
 done
-check "package version is 0.3.0" 'grep -q "^version: 0.3.0$" "$PACK_DIR/package.yaml"'
-check "changelog has a 0.3.0 entry" 'grep -q "^## 0.3.0" "$PACK_DIR/CHANGELOG.md"'
+check "package version is 0.3.1" 'grep -q "^version: 0.3.1$" "$PACK_DIR/package.yaml"'
+check "changelog has a 0.3.1 entry" 'grep -q "^## 0.3.1" "$PACK_DIR/CHANGELOG.md"'
+check "requires client-service through requires.packs" 'grep -A2 "^  packs:" "$PACK_DIR/package.yaml" | grep -q "name: hq-pack-client-service"'
+check "no legacy requires.packages list" '! grep -q "^  packages:" "$PACK_DIR/package.yaml"'
 check "readme describes the chat door" 'grep -q "Agency Guide" "$PACK_DIR/README.md"'
 check "package.yaml parses as YAML when python3 has yaml" 'python3 -c "import yaml,sys; yaml.safe_load(open(sys.argv[1]))" "$PACK_DIR/package.yaml" 2>/dev/null || ! python3 -c "import yaml" 2>/dev/null'
 check "worker.yaml parses as YAML when python3 has yaml" 'python3 -c "import yaml,sys; yaml.safe_load(open(sys.argv[1]))" "$WORKER/worker.yaml" 2>/dev/null || ! python3 -c "import yaml" 2>/dev/null'

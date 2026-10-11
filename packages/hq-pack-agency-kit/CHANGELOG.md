@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.1 (2026-10-11)
+
+- Declare the client-service dependency as `requires.packs` (name and
+  version range), the field hq-cli reads. A marketplace install of the kit
+  now installs hq-pack-client-service 0.2.0 or later first; before, the old
+  `requires.packages` list was ignored and a slug install skipped it.
+
 ## 0.3.0 (2026-10-11)
 
 - The chat door. `package.yaml` gets a `setup:` block (bot `agency-guide`,
