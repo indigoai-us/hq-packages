@@ -1,0 +1,6 @@
+period,campaign,product,channel,spend_usd,clicks,form_submissions,optimization_goal
+2026-Q3,Cloud - Free Trial - Search,Northwind Cloud,google_search,18400,9200,520,any_form_submission
+2026-Q3,Cloud - Brand - Search,Northwind Cloud,google_search,3100,2900,140,any_form_submission
+2026-Q3,Cloud - Enterprise - Search,Northwind Cloud,google_search,6200,1100,22,any_form_submission
+2026-Q3,Cloud - Lead Gen Form - LinkedIn,Northwind Cloud,linkedin,9800,1400,95,any_form_submission
+2026-Q3,Edge - Search,Northwind Edge,google_search,2500,600,31,any_form_submission
