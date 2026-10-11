@@ -1,5 +1,5 @@
 name: hq-pack-agency-kit
-version: 0.3.2
+version: 0.3.3
 publisher: '@indigoai-us'
 access: public
 displayName: AI Builders Agency Kit
@@ -89,10 +89,20 @@ setup:
       voice: --voice
     then:                                 # run after `script`, in order, same --firm
       - scripts/practice-setup.sh --agency-name {agency_name}
+  sources:                              # connected apps the guide reads (with a yes) instead of asking
+    - app: gmail
+      read: "the last 30 emails you sent to clients"
+      informs: [services, ideal_client, pricing, voice]
+    - app: slack
+      read: "your recent messages in client channels"
+      informs: [services, voice, tools]
+    - app: hubspot
+      read: "your recent deals and the companies on them"
+      informs: [ideal_client, services, pricing]
   documents:                            # asked for once, early; the bot reads them and asks less
     - a rate card or pricing sheet
     - a recent proposal or statement of work
     - a case study
   done:
-    message: "Your agency playbook is written. You'll find it in Files under Knowledge, Agency Playbook. Northwind Labs just signed with you."
-    suggestion: "Run Northwind's onboarding"
+    message: "Your agency playbook is written. You'll find it in Files under Knowledge, Agency Playbook. To show you how client onboarding works, I've set up a practice client: Northwind Labs, a made-up company with a few problems hidden in its documents. Want to run its onboarding? It takes about 10 minutes."
+    suggestion: "Run the practice onboarding"

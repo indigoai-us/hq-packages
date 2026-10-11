@@ -137,13 +137,16 @@ while IFS= read -r entry; do
   check "then entry placeholders are question ids" '! printf "%s" "$entry" | grep -oE "\{[a-z_]+\}" | tr -d "{}" | grep -qvxF -f <(printf "%s\n" "$qids")'
 done <<< "$then_entries"
 check "done.message names the Files location of the playbook" 'setup_block | grep -q "^    message: .*Files under Knowledge, Agency Playbook"'
-NW_SUGGESTION=$'Run Northwind\'s onboarding'
+NW_SUGGESTION=$'Run the practice onboarding'
 check "done.suggestion is the Northwind suggestion" 'setup_block | grep -qF -- "    suggestion: \"$NW_SUGGESTION\""'
 check "done.suggestion is offered by the setup skill" 'grep -qF -- "$NW_SUGGESTION" "$WORKER/skills/setup.md"'
 check "setup skill asks every question with its id" 'for q in $qids; do grep -q "\*\*[0-9]\. $q\*\*" "$WORKER/skills/setup.md" || exit 1; done'
 check "practice-setup.sh runs onboard-firm.sh with every slot empty" 'grep -q -- "--empty crm --empty billing --empty agreements --empty portal --empty transcripts" "$PACK_DIR/scripts/practice-setup.sh"'
 check "setup skill and setup.run.then both call practice-setup.sh" 'grep -q "scripts/practice-setup.sh" "$WORKER/skills/setup.md" && grep -q "scripts/practice-setup.sh --agency-name {agency_name}" "$PACK_DIR/package.yaml"'
 check "every setup question has a goal" '[ "$(grep -c "^      goal: " "$PACK_DIR/package.yaml")" = 6 ]'
+check "setup lists gmail, slack and hubspot as sources" 'for a in gmail slack hubspot; do grep -A30 "^  sources:" "$PACK_DIR/package.yaml" | grep -q "app: $a" || exit 1; done'
+check "setup skill reads connected apps before asking, read-only" 'grep -q "hq integrations list --usable --json --company {firm}" "$WORKER/skills/setup.md" && grep -q "read-only tools only" "$WORKER/skills/setup.md"'
+check "done message says Northwind is a made-up practice client" 'setup_block | grep -q "made-up company"'
 check "setup lists documents to ask for" 'grep -A1 "^  documents:" "$PACK_DIR/package.yaml" | grep -q "rate card"'
 check "setup skill follows up on variable pricing" 'grep -q "always gets a follow-up" "$WORKER/skills/setup.md"' 
 
@@ -211,8 +214,8 @@ done
 for w in $(awk '/^  workers:/{f=1;next} /^  [a-z]+:/{f=0} f && /- /{print $2}' "$PACK_DIR/package.yaml"); do
   check "worker $w has worker.yaml with matching id" 'grep -q "^  id: $w$" "$PACK_DIR/workers/$w/worker.yaml"'
 done
-check "package version is 0.3.2" 'grep -q "^version: 0.3.2$" "$PACK_DIR/package.yaml"'
-check "changelog has a 0.3.2 entry" 'grep -q "^## 0.3.2" "$PACK_DIR/CHANGELOG.md"'
+check "package version is 0.3.3" 'grep -q "^version: 0.3.3$" "$PACK_DIR/package.yaml"'
+check "changelog has a 0.3.3 entry" 'grep -q "^## 0.3.3" "$PACK_DIR/CHANGELOG.md"'
 check "requires client-service through requires.packs" 'grep -A2 "^  packs:" "$PACK_DIR/package.yaml" | grep -q "name: hq-pack-client-service"'
 check "no legacy requires.packages list" '! grep -q "^  packages:" "$PACK_DIR/package.yaml"'
 check "readme describes the chat door" 'grep -q "Agency Guide" "$PACK_DIR/README.md"'

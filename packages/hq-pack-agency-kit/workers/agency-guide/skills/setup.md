@@ -19,7 +19,7 @@ sent the first question (your turn starts with a `[Pack setup: ...]` note), do
 not repeat the checks or the question: the person's message is their answer.
 
 If `companies/{firm}/knowledge/agency-playbook/` already exists, setup has run
-before. Say so in one line, offer ["Run Northwind's onboarding","Set up my agency again"],
+before. Say so in one line, offer ["Run the practice onboarding","Set up my agency again"],
 and on the second run the steps below anyway: the scripts only add what is
 missing and never overwrite a playbook file the agency has edited.
 
@@ -41,21 +41,45 @@ missing and never overwrite a playbook file the agency has edited.
   can use, before you send the next question. This sentence is what you pass
   to the setup script, so write it the way the agency would describe itself.
 
-## Documents first
+## Learn from their apps first
 
-Right after the agency name, ask once:
+Answer topics from data before you ask them. Right after the agency name, run
+`hq integrations list --usable --json --company {firm}` and see what is
+connected. Then send one message that:
 
-> Do you have any of these you can drop in here? A rate card or pricing sheet, a recent proposal or statement of work, or a case study. I'll read them and skip the questions they answer.
+- names the connected apps you could read and exactly what you would read
+  (the last 30 emails they sent to clients, their recent messages in client
+  Slack channels, their recent HubSpot deals),
+- offers to connect Gmail, Slack or HubSpot if none of them is connected,
+- says they can also drop in a rate card, a recent proposal or a case study.
 
 ```hq-block
-{"v":1,"blocks":[{"kind":"suggestions","items":["I'll add some","Not now"]}]}
+{"v":1,"blocks":[{"kind":"suggestions","items":["Read my apps","Connect Gmail","Just ask me"]}]}
 ```
 
-When files arrive, read them. Tell them in two or three lines what you took
-from them (services, prices and how pricing is built, typical clients, tone),
-then carry on with the topics they did not cover, proposing what you found for
-the ones they did. Note in your progress note which files you read. "Not now"
-means carry on; do not ask again.
+Adjust the buttons to what is true: "Read my apps" only when something useful
+is connected, "Connect <app>" for the most useful app that is not.
+
+- **Connect:** run `hq integrations connect <app> --company {firm} --no-browser`,
+  send the sign-in link as a plain link, and offer ["Done","Skip"]. After
+  "Done", list the apps again before reading.
+- **Read:** with their yes, use `hq integrations tools` and
+  `hq integrations call` with read-only tools only. Never send, post, label or
+  change anything. Read only what you said you would.
+- **Documents:** read any file they drop in.
+
+Then send one message with a proposed answer for every topic the data covers,
+one line each, saying where it came from ("Pricing: retainer from $4k plus 10%
+of spend over $40k, from your proposals to Acme and Brightside"). Tools come
+straight from the apps they have connected. Ask them to confirm or correct it:
+
+```hq-block
+{"v":1,"blocks":[{"kind":"suggestions","items":["Looks right","Some of it's off"]}]}
+```
+
+After that, ask only the topics the data left open, in order. Never paste
+private message text back; describe what you found in your own words. If
+they say "Just ask me", go through the topics as written below.
 
 ## The six topics
 
@@ -186,10 +210,10 @@ what was skipped and that you can pick it up any time.
 When both steps have run, send exactly this, with the suggestion from
 `setup.done`:
 
-> Your agency playbook is written. You'll find it in Files under Knowledge, Agency Playbook. Northwind Labs just signed with you.
+> Your agency playbook is written. You'll find it in Files under Knowledge, Agency Playbook. To show you how client onboarding works, I've set up a practice client: Northwind Labs, a made-up company with a few problems hidden in its documents. Want to run its onboarding? It takes about 10 minutes.
 
 ```hq-block
-{"v":1,"blocks":[{"kind":"suggestions","items":["Run Northwind's onboarding"]}]}
+{"v":1,"blocks":[{"kind":"suggestions","items":["Run the practice onboarding"]}]}
 ```
 
 Write `Setup: finished` and the date in your progress note. When they tap the

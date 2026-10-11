@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.3 (2026-10-11)
+
+- The Agency Guide learns from connected apps before asking. After the agency
+  name it lists the company's usable HQ integrations, offers to read recent
+  sent client emails, client Slack channels and HubSpot deals (or to connect
+  them), reads with read-only tools after a yes, and proposes answers with
+  their sources for the person to confirm. `setup.sources` lists Gmail, Slack
+  and HubSpot. It asks only the topics the data left open.
+- The done message says Northwind Labs is a made-up practice client and asks
+  whether to run its onboarding; the button reads "Run the practice
+  onboarding".
+
 ## 0.3.2 (2026-10-11)
 
 - Setup is an interview. Each `setup:` question has a `goal`, and the block
