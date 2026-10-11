@@ -1,5 +1,5 @@
 name: hq-pack-agency-kit
-version: 0.4.12
+version: 0.4.13
 publisher: '@indigoai-us'
 access: public
 displayName: AI Builders Agency Kit
@@ -116,12 +116,23 @@ setup:
         - {name: Notion, domain: notion.so}
         - {name: Dropbox, domain: dropbox.com}
     - kind: project management
-      read: "your active client projects"
+      read: "your active client projects and what is in flight for each client"
       informs: [services]
       options:
         - {name: ClickUp, domain: clickup.com}
         - {name: Monday, domain: monday.com}
-        - {name: Asana, domain: asana.com}
+        - {name: Linear, domain: linear.app}
+        - {name: Asana, available: false, note: "Asana needs an access key, so connecting it from the chat comes in a later update"}
+    - kind: meeting notetaker
+      read: "your recent client meetings: who you met, what was agreed and what is next"
+      informs: [services, voice]
+      options:
+        - {name: Fireflies, domain: fireflies.ai}
+        - {name: Fathom, domain: fathom.ai}
+        - {name: Granola, domain: granola.ai}
+        - {name: Otter, domain: otter.ai}
+        - {name: Read AI, domain: read.ai}
+        - {name: Grain, domain: grain.com}
   documents:                            # asked for once, early; the bot reads them and asks less
     - a rate card or pricing sheet
     - a recent proposal or statement of work

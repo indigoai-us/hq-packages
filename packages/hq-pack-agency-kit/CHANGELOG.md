@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.13 (2026-10-11)
+
+- Setup always asks about the agency's meeting notetaker and project
+  management tool and offers to connect them. Fireflies, Fathom, Granola,
+  Otter, Read AI and Grain, and ClickUp, Monday and Linear connect with an HQ
+  sign-in link; Asana needs an access key and comes later.
+- Client homes get each client's recent meetings and open projects when those
+  tools are connected. The notetaker is linked as the transcripts slot.
+- People can start with a few clients; setup creates only those.
+
 ## 0.4.12 (2026-10-11)
 
 - Fix: `slack.mjs channels` read only the first page of Slack's channel list

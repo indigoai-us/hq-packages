@@ -52,8 +52,9 @@ person's message answers it. If the playbook already exists, setup ran before:
 say so, and carry on with whatever is missing (often the clients).
 
 After the name, learn their tools before asking about the business: a short
-question about where their docs, client chat, CRM and projects live, asked by
-kind (docs, team chat, CRM) rather than by brand until they name one. Then
+question about where their docs, client chat, CRM, project management and
+meeting notes live, asked by kind (docs, team chat, CRM, project management,
+notetaker) rather than by brand until they name one. Then
 offer to connect the ones that can be read, and read them before asking the
 topics below.
 
@@ -86,15 +87,26 @@ on it. Today that means:
   who their clients are and which channels belong to each. `history`,
   `thread` and `search` exist, but use them only if the person asks for
   more; search may not be allowed on their connection yet.
-- **Email, HubSpot, Salesforce and Teams** are not available yet. Say so
-  once if it comes up, plainly, and move on.
+- **Their notetaker and project management tool**: always ask which ones
+  they use and offer to connect them, even when you already know the
+  clients. They are what make a client workspace useful: the notetaker gives
+  each client's recent meetings (what was agreed, what is next) and the
+  project tool gives what is in flight, and the workflows draw on both.
+  Fireflies, Fathom, Granola, Otter, Read AI and Grain (notetakers) and
+  ClickUp, Monday and Linear (projects) connect with an HQ sign-in link.
+- **Email, HubSpot, Salesforce, Teams and Asana** are not available yet. Say
+  so once if it comes up, plainly, and move on.
 - **Other tools** connect with an HQ sign-in link from
-  `hq integrations connect <domain> --company {firm} --link-only`.
+  `hq integrations connect <domain> --company {firm} --link-only`. Read them
+  with `hq integrations tools --company {firm}` to see what they offer, then
+  `hq integrations call` with read-only tools only.
 
 Ask before you read, and read only what you said you would, with read-only
 commands. Useful reads: Drive for proposals, SOPs, pricing, rate cards and
 onboarding docs (the best 5 to 10, not everything); the Slack channel list
-to find who their clients are. They can also drop files into the chat.
+to find who their clients are; the notetaker and project tool for the
+confirmed clients only (each client's last few meetings and open projects,
+not their whole history). They can also drop files into the chat.
 Describe what you found in your own words; never paste private messages back.
 
 ## Writing the agency brain
@@ -120,7 +132,7 @@ source at the top.
 
 Link the client-service slots to the tools they use (crm, billing,
 agreements, portal, transcripts), only where you have evidence, as
-`<slot>=<Tool name>:cli`:
+`<slot>=<Tool name>:cli`. Their notetaker is the `transcripts` slot.
 
 ```bash
 bash core/packages/hq-pack-agency-kit/scripts/firm-setup.sh \
@@ -142,12 +154,13 @@ with another organization (`shared: true`) is almost always a client. Look
 for the naming pattern the agency uses for client channels: a prefix or
 suffix many shared channels have in common (`hqx-acme`, `client-acme`,
 `acme-ext`) usually marks one channel per client, and the rest of the name is
-the client. Names without a pattern can still be a company name. Internal channels (general, random, team, eng, design, ops,
-alerts, sales, hiring and the like) are not clients. Group channels that
+the client. Names without a pattern can still be a company name.
+Internal channels (general, random, team, eng, design, ops, alerts, sales,
+hiring and the like) are not clients. Group channels that
 belong to the same client (`acme`, `acme-ads`, `acme-seo`), and show the
 person each proposed client with its channels so they can confirm, rename or
-drop it. If nothing in the list looks like a client, say so and ask. If you found none, ask them to name their
-clients. Write the confirmed list to a file in your memory folder, one per
+drop it. If nothing in the list looks like a client, say so and ask them to
+name their clients. If they want to start with a few, set up only those. Write the confirmed list to a file in your memory folder, one per
 line as `{slug}<TAB>{Client Name}`, and create every home in one go:
 
 ```bash
@@ -157,7 +170,9 @@ bash core/packages/hq-pack-agency-kit/scripts/import-clients.sh \
 
 Then fill each client's `client-profile.md` and `access-and-assets.md` from
 what you already read, every fact with its source, blank where you have
-nothing. Put each client's Slack channels in its `access-and-assets.md`
+nothing. With a notetaker connected, add the client's recent meetings to its
+profile (date, who, what was agreed, what is next); with a project tool, add
+its open projects and their status. Put each client's Slack channels in its `access-and-assets.md`
 (channel name, whether it is shared with the client, and its purpose). Systems are names only; never copy a credential.
 
 ## Finishing
