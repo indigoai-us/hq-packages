@@ -139,7 +139,7 @@ check "setup skill asks every question with its id" 'for q in $qids; do grep -q 
 check "practice-setup.sh runs onboard-firm.sh with every slot empty" 'grep -q -- "--empty crm --empty billing --empty agreements --empty portal --empty transcripts" "$PACK_DIR/scripts/practice-setup.sh"'
 check "setup skill imports clients, links tools, and keeps the practice client as a fallback" 'grep -q "scripts/import-clients.sh" "$WORKER/skills/setup.md" && grep -q "scripts/firm-setup.sh" "$WORKER/skills/setup.md" && grep -q "## No clients yet" "$WORKER/skills/setup.md" && grep -q "scripts/practice-setup.sh" "$WORKER/skills/setup.md"'
 check "every setup question has a goal" '[ "$(grep -c "^      goal: " "$PACK_DIR/package.yaml")" = 6 ]'
-check "setup lists gmail, slack and hubspot as sources" 'for a in gmail slack hubspot; do grep -A30 "^  sources:" "$PACK_DIR/package.yaml" | grep -q "app: $a" || exit 1; done'
+check "setup lists gmail, slack and hubspot as sources" 'for a in gmail.com slack.com hubspot.com drive.google.com; do grep -A40 "^  sources:" "$PACK_DIR/package.yaml" | grep -q "app: $a" || exit 1; done'
 check "setup skill reads connected apps before asking, read-only" 'grep -q "hq integrations list --usable --json --company {firm}" "$WORKER/skills/setup.md" && grep -q "read-only tools only" "$WORKER/skills/setup.md"'
 check "the practice offer says Northwind is made up" 'grep -q "made-up company" "$WORKER/skills/setup.md"'
 check "firm-setup.sh never forces slots empty" '! grep -q -- "--empty" "$PACK_DIR/scripts/firm-setup.sh" && grep -q -- "--no-auto" "$PACK_DIR/scripts/firm-setup.sh"'

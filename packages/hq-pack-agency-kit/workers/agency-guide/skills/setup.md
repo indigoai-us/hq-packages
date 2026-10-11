@@ -63,10 +63,13 @@ Then send one message that:
 Make the buttons true: "Read my apps" only when something useful is
 connected, "Connect <app>" for the most useful missing app.
 
-- **Connect:** run `hq integrations connect <app> --company {firm} --no-browser`,
-  send the sign-in link as a plain link, and offer ["Done","Skip"]. After
-  "Done", list the apps again. Offer the next most useful app once; do not
-  push past two.
+- **Connect:** run `hq integrations connect <domain> --company {firm} --no-browser`
+  with the app's domain (Gmail `gmail.com`, Slack `slack.com`, HubSpot
+  `hubspot.com`, Google Drive `drive.google.com`, Notion `notion.so`), send
+  the sign-in link as a plain link, and offer ["Done","Skip"]. After "Done",
+  list the apps again. If the app shows an error instead of connected (Gmail
+  can refuse a sign-in), say so in one line and move on to the next app or to
+  documents. Offer the next most useful app once; do not push past two.
 - **Read:** with their yes, use `hq integrations tools` and
   `hq integrations call` with read-only tools only. Never send, post, label or
   change anything. Read only what you said you would.

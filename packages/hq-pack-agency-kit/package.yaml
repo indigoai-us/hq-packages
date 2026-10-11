@@ -88,16 +88,16 @@ setup:
       tools: --tools
       voice: --voice
   sources:                              # connected apps the guide reads (with a yes) instead of asking
-    - app: gmail
+    - app: gmail.com
       read: "the last 30 emails you sent to clients"
       informs: [services, ideal_client, pricing, voice]
-    - app: slack
+    - app: slack.com
       read: "your recent messages in client channels"
       informs: [services, voice, tools]
-    - app: hubspot
+    - app: hubspot.com
       read: "your recent deals and the companies on them"
       informs: [ideal_client, services, pricing]
-    - app: google-drive
+    - app: drive.google.com
       read: "your SOPs, process docs, proposals and rate cards"
       informs: [services, pricing, voice]
   documents:                            # asked for once, early; the bot reads them and asks less
