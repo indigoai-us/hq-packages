@@ -851,11 +851,73 @@ struct RecordingPackageStore: Sendable {
 
     /// Writes a file that must not exist yet, so a revision is never overwritten.
     private func writeNewJSON<T: Encodable>(_ value: T, to relativePath: String, in package: URL) throws {
-        let target = try url(for: relativePath, in: package)
-        guard !FileManager.default.fileExists(atPath: target.path) else { throw PackageError.revisionExists }
+        guard try createNew(Self.encodeJSON(value), at: relativePath, in: package) else {
+            throw PackageError.revisionExists
+        }
+    }
+
+    static func encodeJSON<T: Encodable>(_ value: T) throws -> Data {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        try encoder.encode(value).write(to: target, options: .withoutOverwriting)
+        return try encoder.encode(value)
+    }
+
+    /// Creates a package file that must not exist yet. The data is written and flushed to a hidden
+    /// temp file, which is then hard-linked to the target. The link fails when any file is already
+    /// there, so a file another command or process saved first is never replaced. Returns false
+    /// when the target exists.
+    func createNew(_ data: Data, at relativePath: String, in package: URL) throws -> Bool {
+        let target = try url(for: relativePath, in: package)
+        let temp = target.deletingLastPathComponent()
+            .appendingPathComponent(".\(target.lastPathComponent).tmp-\(UUID().uuidString)")
+        try data.write(to: temp, options: .withoutOverwriting)
+        defer { unlink(temp.path) }
+        let handle = try FileHandle(forWritingTo: temp)
+        try handle.synchronize()
+        try handle.close()
+        try beforeCommit?(temp)
+        if link(temp.path, target.path) == 0 { return true }
+        guard errno == EEXIST else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        return false
+    }
+
+    /// Under the package lock, creates `data` at the first numbered path, counting up from one past
+    /// the paths `used` lists, that the latest manifest does not list and no file holds. Then
+    /// `record` adds the path to the manifest. A number taken meanwhile is skipped and never
+    /// overwritten. Returns the path and the saved manifest.
+    func appendNumbered(_ name: (Int) -> String, data: Data, in package: URL,
+                        used: (RecordingManifest) -> [String],
+                        record: (inout RecordingManifest, String) throws -> Void) throws -> (path: String, manifest: RecordingManifest) {
+        var path: String?
+        do {
+            let saved = try mutateManifest(in: package) { latest in
+                let listed = used(latest)
+                var number = listed.count + 1
+                while try listed.contains(name(number)) || !createNew(data, at: name(number), in: package) {
+                    number += 1
+                }
+                path = name(number)
+                try record(&latest, name(number))
+            }
+            return (path ?? "", saved)
+        } catch {
+            // The file was created but the manifest was not saved, so nothing lists it.
+            if let path { try? FileManager.default.removeItem(at: url(for: path, in: package)) }
+            throw error
+        }
+    }
+
+    /// Creates the first numbered folder, counting up from `start`, that does not exist yet. The
+    /// folder is made without its parents, so the call fails when it is already there and the next
+    /// number is tried. Two commands never get the same folder. The parent must exist.
+    func reserveFolder(_ name: (Int) -> String, from start: Int, in package: URL) throws -> (path: String, number: Int) {
+        var number = max(start, 1)
+        while true {
+            let path = name(number)
+            if mkdir(try url(for: path, in: package).path, 0o755) == 0 { return (path, number) }
+            guard errno == EEXIST else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+            number += 1
+        }
     }
 }
 
@@ -895,8 +957,8 @@ extension RecordingPackageStore {
         guard manifest.company == root.company else { throw PackageError.companyMismatch }
         let folder = try url(for: Self.exportsFolder, in: package)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        let path = try nextExportPath(for: manifest, in: package)
-        let target = try url(for: path, in: package)
+        var path = try nextExportPath(for: manifest, in: package)
+        var target = try url(for: path, in: package)
         let temp = folder.appendingPathComponent(".\(target.deletingPathExtension().lastPathComponent)"
                                                  + "-\(UUID().uuidString).tmp.mp4")
         let duration: Double
@@ -908,8 +970,14 @@ extension RecordingPackageStore {
                 })
             try beforeCommit?(temp)
             try Task.checkCancellation()
-            // Fails when the target exists, so an earlier export is never replaced.
-            try FileManager.default.moveItem(at: temp, to: target)
+            // A hard link fails when the target exists, so an earlier export is never replaced.
+            // When another export took the name after it was chosen, the next free number is used.
+            while link(temp.path, target.path) != 0 {
+                guard errno == EEXIST else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+                path = try nextExportPath(for: manifest, in: package)
+                target = try url(for: path, in: package)
+            }
+            removeIfPresent(temp)
         } catch {
             NSLog("HQ recorder: video export stopped: \(error)")
             removeIfPresent(temp)

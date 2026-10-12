@@ -2,7 +2,8 @@
 // (media/screen/segment-NNN.mov, recorded with the app's own windows excluded), never from the
 // camera track or an editor render. Each sampled frame is read with on-device Vision text
 // recognition, and the frames and recognized text are saved into the recording package as
-// screenshots/screen-<ms>.png and screenshots/evidence.json. Nothing leaves the Mac.
+// screenshots/evidence-NNN/screen-<ms>.png and screenshots/evidence-NNN/evidence.json, one folder
+// per extraction. Nothing leaves the Mac.
 //
 // The evidence records only what was visible on screen at a source timestamp. Clicks, keystrokes
 // and other input events are not captured by the recorder, and none are ever inferred here.
@@ -32,7 +33,7 @@ struct ScreenTextLine: Codable, Equatable, Sendable {
     }
 }
 
-/// The saved evidence file, `screenshots/evidence.json`.
+/// The saved evidence file, `screenshots/evidence-NNN/evidence.json`.
 struct ScreenEvidence: Codable, Equatable, Sendable {
     static let provenance = "screen-track-sample"
     /// The recorder does not capture input events, and evidence never infers them.
@@ -195,8 +196,14 @@ enum ScreenEvidenceError: Error, Equatable {
 }
 
 enum ScreenEvidenceExtractor {
+    /// The single evidence file older versions wrote. Still read when a manifest points at it.
     static let evidencePath = "screenshots/evidence.json"
+    /// Frames older versions wrote straight into `screenshots/`.
     static let imagePrefix = "screenshots/screen-"
+    /// Each extraction writes its evidence and frames into its own `screenshots/evidence-NNN/`.
+    static let revisionPrefix = "screenshots/evidence-"
+
+    static func revisionFolder(_ number: Int) -> String { revisionPrefix + String(format: "%03d", number) }
 
     struct PlannedSample: Equatable, Sendable {
         var segment: String
@@ -256,8 +263,8 @@ enum ScreenEvidenceExtractor {
         }
     }
 
-    static func imagePath(timelineSeconds: Double) -> String {
-        String(format: "\(imagePrefix)%09d.png", Int((timelineSeconds * 1_000).rounded()))
+    static func imagePath(timelineSeconds: Double, in folder: String) -> String {
+        String(format: "\(folder)/screen-%09d.png", Int((timelineSeconds * 1_000).rounded()))
     }
 
     static func png(_ image: CGImage) throws -> Data {
@@ -270,7 +277,8 @@ enum ScreenEvidenceExtractor {
     }
 
     /// Samples the screen track of a saved package, reads its text on device, and saves the
-    /// screenshots, `screenshots/evidence.json` and the updated manifest into the package.
+    /// screenshots and evidence into a new `screenshots/evidence-NNN/` folder, and points the
+    /// manifest at them under the package lock.
     /// Every write goes through the store, so it stays inside the company recordings folder.
     static func extract(package: URL, store: RecordingPackageStore,
                         options: ScreenEvidenceOptions = .init(),
@@ -301,6 +309,30 @@ enum ScreenEvidenceExtractor {
         }
 
         let plan = plan(manifest: manifest, durations: durations, options: options)
+        // This extraction's own folder, reserved by creating it, so an extraction running at the
+        // same time never writes over these frames or this evidence file.
+        try store.ensureDirectory("screenshots", in: package)
+        let taken = try FileManager.default.contentsOfDirectory(atPath: store.url(for: "screenshots", in: package).path)
+            .compactMap { name in name.hasPrefix("evidence-") ? Int(name.dropFirst("evidence-".count)) : nil }
+        let folder = try store.reserveFolder(revisionFolder, from: (taken.max() ?? 0) + 1, in: package).path
+        do {
+            return try await extract(into: folder, package: package, store: store, manifest: manifest, plan: plan,
+                                     options: options, skipped: skipped, screenSegments: screenSegments,
+                                     sampler: sampler, recognizer: recognizer, syncChecker: syncChecker)
+        } catch {
+            NSLog("HQ recorder: screen evidence stopped, removing \(folder): \(error)")
+            remove([folder], package: package, store: store)
+            throw error
+        }
+    }
+
+    private static func extract(into folder: String, package: URL, store: RecordingPackageStore,
+                                manifest: RecordingManifest, plan: Plan, options: ScreenEvidenceOptions,
+                                skipped: [ScreenEvidence.Skipped], screenSegments: [RecordingManifest.Segment],
+                                sampler: any ScreenFrameSampling, recognizer: any ScreenTextRecognizing,
+                                syncChecker: any SyncChecking) async throws -> ScreenEvidenceResult {
+        var skipped = skipped
+        let evidencePath = folder + "/evidence.json"
         var frames: [ScreenEvidence.Frame] = []
         var images: [(path: String, data: Data)] = []
         for sample in plan.samples {
@@ -315,7 +347,7 @@ enum ScreenEvidenceExtractor {
                                      reason: "frame-unavailable: \(error)"))
                 continue
             }
-            let path = imagePath(timelineSeconds: sample.timelineSeconds)
+            let path = imagePath(timelineSeconds: sample.timelineSeconds, in: folder)
             images.append((path, try png(decoded.image)))
             var found: [ScreenTextLine] = []
             var ocrError: String?
@@ -353,25 +385,51 @@ enum ScreenEvidenceExtractor {
         // package lock is taken, so a slow check never holds up another command's save.
         let sync = RecordingManifest.Sync(await syncChecker.observe(vaultKey: manifest.vaultKey), at: SessionStatus.now())
         var stale: [String] = []
+        var replaced: [String] = []
         let saved = try store.mutateManifest(in: package) { latest in
-            // A frame that a saved draft revision or an exported guide still uses is kept, along
-            // with its manifest entry. Only frames nothing points at are removed.
+            // The manifest moves to this extraction's evidence, whose frames are all in its folder.
+            // A frame or evidence file that a saved draft revision or an exported guide still uses
+            // is kept, along with its manifest entry. Only files nothing points at are removed.
             let referenced = referencedScreenshots(latest, in: package, store: store)
-            let old = latest.screenshots.filter { $0.hasPrefix(imagePrefix) && !newImages.contains($0) }
+            let old = latest.screenshots.filter {
+                ($0.hasPrefix(imagePrefix) || $0.hasPrefix(revisionPrefix)) && !newImages.contains($0)
+            }
             stale = referenced.map { keep in old.filter { !keep.contains($0) } } ?? []
+            if let previous = latest.screenEvidence, previous != evidencePath,
+               let keep = referenced, !keep.contains(previous) { replaced = [previous] }
             latest.screenshots = latest.screenshots.filter { !stale.contains($0) && !newImages.contains($0) }
                 + images.map(\.path)
             latest.screenEvidence = evidencePath
             latest.sync = sync
         }
-        for path in stale {
+        remove(stale + replaced, package: package, store: store)
+        return ScreenEvidenceResult(evidence: evidence, evidencePath: evidencePath, manifest: saved)
+    }
+
+    /// Removes package files, then any older extraction folder left empty. A failure is logged and
+    /// the file left in place.
+    private static func remove(_ paths: [String], package: URL, store: RecordingPackageStore) {
+        var folders: Set<String> = []
+        for path in paths {
+            if path.hasPrefix(revisionPrefix) {
+                folders.insert(path.split(separator: "/").prefix(2).joined(separator: "/"))
+            }
             do {
                 try FileManager.default.removeItem(at: store.url(for: path, in: package))
             } catch {
-                NSLog("HQ recorder: could not remove old screenshot \(path): \(error)")
+                NSLog("HQ recorder: could not remove old screen evidence \(path): \(error)")
             }
         }
-        return ScreenEvidenceResult(evidence: evidence, evidencePath: evidencePath, manifest: saved)
+        for folder in folders {
+            do {
+                let url = try store.url(for: folder, in: package)
+                guard FileManager.default.fileExists(atPath: url.path),
+                      try FileManager.default.contentsOfDirectory(atPath: url.path).isEmpty else { continue }
+                try FileManager.default.removeItem(at: url)
+            } catch {
+                NSLog("HQ recorder: could not remove old screen evidence folder \(folder): \(error)")
+            }
+        }
     }
 
     /// Every `screenshots/` path named in any saved draft revision or exported guide record, or nil when

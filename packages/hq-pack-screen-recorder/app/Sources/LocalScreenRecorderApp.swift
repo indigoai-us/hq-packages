@@ -385,11 +385,17 @@ final class SessionController {
             capture = run
             CaptureHiding.hide(NSApplication.shared.windows)
             try await run.start(source: screen)
+        } catch ScreenCaptureError.stopped {
+            // A stop arrived while capture was starting; that stop saves the recording.
+            return
         } catch {
             NSLog("HQ recorder: screen capture did not start: \(error)")
             await stopRecording(reason: "capture-start-failed")
             return
         }
+        // A stop that landed while capture started has already hidden the controls and is
+        // saving the recording, so nothing more is started.
+        guard captureIsLive else { return }
         let windowFrame = screen.kind == .window ? RecordingBadgePlacement.windowFrame(screen.id) : nil
         let recordedScreen = RecordingBadgePlacement.screen(for: screen, windowFrame: windowFrame)
         badge.show(on: recordedScreen, paused: false)
@@ -399,6 +405,9 @@ final class SessionController {
         await startCamera(recording: recording, origin: origin, clock: clock)
         await startMicrophone(recording: recording, origin: origin, clock: clock)
     }
+
+    /// True while a recording is capturing and no stop has begun.
+    private var captureIsLive: Bool { isCapturing && !isStopping && stopTask == nil }
 
     /// Recorded seconds so far, with paused time left out. Nil before the first recording.
     var durationSeconds: Double? {
@@ -462,7 +471,7 @@ final class SessionController {
     /// the screen keeps recording.
     private func startCamera(recording: RecordingSession, origin: Double, clock: RecordingClock) async {
         guard let camera = selection.camera, permissions.camera == .granted,
-              available.cameras.contains(camera) else { return }
+              available.cameras.contains(camera), captureIsLive else { return }
         let track = CameraTrack(session: recording, origin: origin, clock: clock) { [weak self] issue in
             Task { @MainActor in self?.handle(issue) }
         }
@@ -472,6 +481,7 @@ final class SessionController {
         do {
             try await run.start()
         } catch {
+            if (error as? CameraCaptureError) == .stopped { return }
             NSLog("HQ recorder: camera capture did not start: \(error)")
             cameraCapture = nil
             await run.stop()
@@ -483,7 +493,7 @@ final class SessionController {
     /// leaves a note and the screen keeps recording.
     private func startMicrophone(recording: RecordingSession, origin: Double, clock: RecordingClock) async {
         guard let microphone = selection.microphone, permissions.microphone == .granted,
-              available.microphones.contains(microphone) else { return }
+              available.microphones.contains(microphone), captureIsLive else { return }
         let track = MicrophoneTrack(session: recording, origin: origin, clock: clock) { [weak self] issue in
             Task { @MainActor in self?.handle(issue) }
         }
@@ -495,6 +505,7 @@ final class SessionController {
         do {
             try await run.start()
         } catch {
+            if (error as? CameraCaptureError) == .stopped { return }
             NSLog("HQ recorder: microphone capture did not start: \(error)")
             microphoneCapture = nil
             microphoneTrack = nil

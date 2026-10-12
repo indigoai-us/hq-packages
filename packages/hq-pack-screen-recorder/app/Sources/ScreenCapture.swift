@@ -190,6 +190,9 @@ final class ScreenFeed: Sendable {
 
     func send(_ event: ScreenTrackEvent) { continuation.yield(event) }
 
+    /// Stops taking events. Events already queued are still written.
+    func close() { continuation.finish() }
+
     /// Stops taking events and waits until every queued event has been written.
     func drain() async {
         continuation.finish()
@@ -252,6 +255,8 @@ enum ScreenCaptureError: Error, Equatable {
     case sourceUnavailable
     /// The recorder's own window cannot be the recorded source.
     case ownWindow
+    /// The capture was stopped before or while it was starting.
+    case stopped
 }
 
 /// Which ScreenCaptureKit filter to build for a picked source.
@@ -288,11 +293,101 @@ enum ScreenCapture {
     }
 }
 
+/// The start and stop calls of a capture stream, so tests can stand in for ScreenCaptureKit.
+protocol CaptureStreamControl: AnyObject, Sendable {
+    func startCapture() async throws
+    func stopCapture() async throws
+}
+
+/// ScreenCaptureKit's stream behind `CaptureStreamControl`.
+final class ScreenKitStream: CaptureStreamControl, @unchecked Sendable {
+    let stream: SCStream
+    init(_ stream: SCStream) { self.stream = stream }
+    func startCapture() async throws { try await stream.startCapture() }
+    func stopCapture() async throws { try await stream.stopCapture() }
+}
+
+/// Orders start and stop for one capture stream. A stop that arrives while start is under way
+/// waits until start returns and then stops the stream. A start after a stop is refused.
+actor CaptureStartStop {
+    private enum Phase {
+        case idle
+        case starting
+        case running(any CaptureStreamControl)
+        case stopped
+    }
+
+    private var phase = Phase.idle
+    private var stopRequested = false
+    private var stopWaiters: [CheckedContinuation<Void, Never>] = []
+
+    /// Claims the start. Throws `stopped` when a stop came first or a start already ran.
+    func begin() throws {
+        guard case .idle = phase else { throw ScreenCaptureError.stopped }
+        phase = .starting
+    }
+
+    /// Starts `stream`, unless a stop came in first. A stop that arrives while the stream is
+    /// starting stops it as soon as it has started, and this throws `stopped`.
+    func run(_ stream: any CaptureStreamControl) async throws {
+        guard !stopRequested else {
+            finishStop()
+            throw ScreenCaptureError.stopped
+        }
+        do {
+            try await stream.startCapture()
+        } catch {
+            finishStop()
+            throw stopRequested ? ScreenCaptureError.stopped : error
+        }
+        guard !stopRequested else {
+            do {
+                try await stream.stopCapture()
+            } catch {
+                NSLog("HQ recorder: stopping a capture that was stopped while starting failed: \(error)")
+            }
+            finishStop()
+            throw ScreenCaptureError.stopped
+        }
+        phase = .running(stream)
+    }
+
+    /// Ends a start that failed before it had a stream.
+    func abandon() { finishStop() }
+
+    /// Stops the stream. When a start is under way, waits until that start has stopped it.
+    func stop() async {
+        switch phase {
+        case .idle:
+            phase = .stopped
+        case .starting:
+            stopRequested = true
+            await withCheckedContinuation { stopWaiters.append($0) }
+        case .running(let stream):
+            phase = .stopped
+            do {
+                try await stream.stopCapture()
+            } catch {
+                NSLog("HQ recorder: stopping screen capture failed: \(error)")
+            }
+        case .stopped:
+            break
+        }
+    }
+
+    private func finishStop() {
+        phase = .stopped
+        let waiters = stopWaiters
+        stopWaiters = []
+        waiters.forEach { $0.resume() }
+    }
+}
+
 /// One running ScreenCaptureKit stream. All stream calls happen inside this object.
 final class ScreenCaptureRun: @unchecked Sendable {
     private let output: ScreenStreamOutput
-    private let feed: ScreenFeed
-    private var stream: SCStream?
+    let feed: ScreenFeed
+    private let gate = CaptureStartStop()
 
     init(track: ScreenTrack, preview: ScreenPreviewTap? = nil, onStopped: @escaping @Sendable (String) -> Void) {
         feed = ScreenFeed(track: track)
@@ -301,6 +396,25 @@ final class ScreenCaptureRun: @unchecked Sendable {
 
     /// Builds the filter for `source` and starts capture at 30 frames per second.
     func start(source: ScreenSource) async throws {
+        try await start { [output] in try await Self.makeStream(source: source, output: output) }
+    }
+
+    /// Starts the stream `make` returns. Throws `ScreenCaptureError.stopped` when `stop()` was
+    /// called first or while the stream was starting; the stream is stopped in that case.
+    func start(making make: @Sendable () async throws -> any CaptureStreamControl) async throws {
+        try await gate.begin()
+        let stream: any CaptureStreamControl
+        do {
+            stream = try await make()
+        } catch {
+            await gate.abandon()
+            throw error
+        }
+        try await gate.run(stream)
+    }
+
+    private static func makeStream(source: ScreenSource, output: ScreenStreamOutput) async throws
+        -> any CaptureStreamControl {
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
         let ownPID = ProcessInfo.processInfo.processIdentifier
         let plan = try ScreenCapturePlan.make(
@@ -332,20 +446,14 @@ final class ScreenCaptureRun: @unchecked Sendable {
         config.queueDepth = 6
         let stream = SCStream(filter: filter, configuration: config, delegate: output)
         try stream.addStreamOutput(output, type: .screen, sampleHandlerQueue: output.queue)
-        try await stream.startCapture()
-        self.stream = stream
+        return ScreenKitStream(stream)
     }
 
-    /// Stops capture if it is running, then waits until every delivered frame is written.
+    /// Stops capture, including one that is still starting, then waits until every frame
+    /// delivered before the stop is written. Frames that arrive after the stop are dropped.
     func stop() async {
-        if let stream {
-            self.stream = nil
-            do {
-                try await stream.stopCapture()
-            } catch {
-                NSLog("HQ recorder: stopping screen capture failed: \(error)")
-            }
-        }
+        feed.close()
+        await gate.stop()
         await feed.drain()
     }
 }

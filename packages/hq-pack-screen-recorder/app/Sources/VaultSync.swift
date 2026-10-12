@@ -573,11 +573,10 @@ enum SkillRegistrar {
         let source = Data(registrationSource(draft: draft, skill: skill, record: record, folder: folder).utf8)
         let path = "\(folder)/\(folderName)/SKILL.md"
         let target = try store.url(for: path, in: package)
-        if let existing = try? Data(contentsOf: target) {
-            guard existing == source else { throw PackageError.revisionExists }
-        } else {
-            try store.ensureDirectory("\(folder)/\(folderName)", in: package)
-            try store.writeData(source, to: path, in: package)
+        try store.ensureDirectory("\(folder)/\(folderName)", in: package)
+        // Created only when absent, so a source another command prepared first is never replaced.
+        if !(try store.createNew(source, at: path, in: package)) {
+            guard (try? Data(contentsOf: target)) == source else { throw PackageError.revisionExists }
         }
         return (path, VaultSyncWorkflow.sha256(source))
     }

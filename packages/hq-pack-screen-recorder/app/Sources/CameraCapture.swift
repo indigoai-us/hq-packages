@@ -226,6 +226,8 @@ enum CameraCaptureError: Error, Equatable {
     case deviceUnavailable
     case cannotAddInput
     case cannotAddOutput
+    /// The capture was stopped before it started.
+    case stopped
 }
 
 /// One running camera capture for one device. Session, device and observer state is only
@@ -238,6 +240,8 @@ final class CameraCaptureRun: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     private let feed: CameraFeed
     private var observations: [NSKeyValueObservation] = []
     private var tokens: [NSObjectProtocol] = []
+    /// Set by `stop()` on `queue`. A start that runs after it is refused.
+    private var stopped = false
 
     init(track: CameraTrack, deviceID: String) {
         feed = CameraFeed(track: track)
@@ -248,6 +252,10 @@ final class CameraCaptureRun: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     func start() async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             queue.async { [self] in
+                guard !stopped else {
+                    continuation.resume(throwing: CameraCaptureError.stopped)
+                    return
+                }
                 do {
                     session.beginConfiguration()
                     if session.canSetSessionPreset(.hd1280x720) { session.sessionPreset = .hd1280x720 }
@@ -273,6 +281,7 @@ final class CameraCaptureRun: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     func stop() async {
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             queue.async { [self] in
+                stopped = true
                 observations.forEach { $0.invalidate() }
                 observations = []
                 tokens.forEach(NotificationCenter.default.removeObserver)

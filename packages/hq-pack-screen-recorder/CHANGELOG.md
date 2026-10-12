@@ -2,7 +2,7 @@
 
 ## 0.3.0
 
-- Vendored HQ Capture from local-screen-recorder bb790ed: middle cuts, guide
+- Vendored HQ Capture from local-screen-recorder 2e42863: middle cuts, guide
   review and approval commands, screenshot frame listing, media length checks,
   the rounded Liquid Glass window style, the window coming back to the front
   on stop and on launch, and roomier controls. App version 0.3.0 (build 3).
@@ -58,6 +58,19 @@
   build.
 - The skill tells the agent to run `wait` when `stop` returns `finalizing`.
 - The package is private.
+- Stopping while a capture is still starting waits for the start and then
+  stops it, so no capture keeps running after a stop.
+- Transcripts, guide export folders, screen evidence, video exports, kept
+  screenshots, skill sources and edit or draft revisions are created only
+  when their name is still free. If another command took the name first, the
+  next free number is used or the save is refused. A file written by another
+  command is never replaced or removed. Screen evidence goes into its own
+  numbered folder, and the manifest switches to it under the recording lock.
+- Launcher: `stop` fails with `stop-timeout` (exit 1) when HQ Capture is still
+  open after 20 seconds and is not finalizing. The message says the recorder
+  may still be recording and gives its current status. `finalizing` is still
+  reported as success. The skill tells the agent to say this plainly and run
+  `status`.
 - Tests: checks that could not fail now fail the suite.
 
 ## 0.2.0

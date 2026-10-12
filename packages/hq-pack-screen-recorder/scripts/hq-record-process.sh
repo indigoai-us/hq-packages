@@ -19,7 +19,8 @@
 #                                 printing one line per change (with issue when the app sets
 #                                 one) and the full status last; exit 3 when still open at timeout
 #   stop                          write stop.request and wait for the app to close; refused when
-#                                 HQ Capture is open for another company
+#                                 HQ Capture is open for another company; fails with stop-timeout
+#                                 when the app is still open and not finalizing after the wait
 #   run <mode> <package> [args]   run an agent command headless on a saved recording
 #   resume <prompt>               check a pasted resume prompt and print its package
 #
@@ -41,6 +42,7 @@
 #   HQ_RECORDER_COMPILE  command run with the unsigned app path instead of the
 #                        compile, sign and check steps (tests only)
 #   HQ_RECORDER_LOCK_WAIT  seconds to wait for another build to finish (default 600)
+#   HQ_RECORDER_STOP_WAIT  seconds stop waits for the app to act on a stop (default 20)
 set -euo pipefail
 
 script_path="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || python3 -I -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "${BASH_SOURCE[0]}")"
@@ -492,11 +494,21 @@ cmd_stop() {
   # its saved or failed status as it quits.
   if ! app_is_open; then print_status; return; fi
   : >"$control_dir/stop.request"
-  local i
-  for i in $(seq 1 80); do
+  local i limit="${HQ_RECORDER_STOP_WAIT:-20}" state
+  for i in $(seq 1 $((limit * 4))); do
     app_is_open || break
     sleep 0.25
   done
+  # Still open after the wait: finalizing means the files are being written, and a saved or
+  # failed app keeps its result, so those are reported as they are. Any other state means the
+  # app has not acted on the stop and may still be recording.
+  if app_is_open; then
+    state="$(current_state)"
+    case "$state" in
+      finalizing|saved|failed) ;;
+      *) fail stop-timeout "HQ Capture did not stop within $limit seconds and may still be recording (status: $state). Run status to check." ;;
+    esac
+  fi
   print_status
 }
 

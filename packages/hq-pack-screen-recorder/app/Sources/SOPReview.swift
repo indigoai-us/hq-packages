@@ -414,7 +414,8 @@ enum SOPReviewWorkflow {
             let target = try store.url(for: kept, in: package)
             if !FileManager.default.fileExists(atPath: target.path) {
                 try store.ensureDirectory("screenshots/review", in: package)
-                try store.writeData(try Data(contentsOf: store.url(for: image, in: package)), to: kept, in: package)
+                // Created only when absent: a copy another save made first is used as it is.
+                _ = try store.createNew(try Data(contentsOf: store.url(for: image, in: package)), at: kept, in: package)
             }
             if !manifest.screenshots.contains(kept) { added.append(kept) }
             document.steps[i].screenshot.source = .frame(image: kept, timelineSeconds: time)
@@ -483,15 +484,17 @@ enum SOPExporter {
 
         // Folders already on disk count too, so an export that failed part way does not block the next.
         let onDisk = (try? FileManager.default.contentsOfDirectory(atPath: try store.url(for: "exports", in: package).path)) ?? []
-        let number = ((manifest.exports ?? []).compactMap { path -> Substring? in
+        let start = ((manifest.exports ?? []).compactMap { path -> Substring? in
             let parts = path.split(separator: "/")
             return parts.count > 1 ? parts[1] : nil
         } + onDisk.map { Substring($0) }).compactMap { name -> Int? in
             name.hasPrefix("v") ? Int(name.dropFirst()) : nil
         }.max().map { $0 + 1 } ?? 1
-        let folder = folderPrefix + String(format: "v%03d", number)
-        guard !FileManager.default.fileExists(atPath: try store.url(for: folder, in: package).path)
-        else { throw SOPReviewError.exportExists }
+        // The folder is reserved by creating it, so an export started at the same time takes the
+        // next number instead of writing into this one.
+        try store.ensureDirectory("exports", in: package)
+        let (folder, number) = try store.reserveFolder({ folderPrefix + String(format: "v%03d", $0) },
+                                                       from: start, in: package)
         try store.ensureDirectory(folder + "/images", in: package)
 
         var written: [String] = []

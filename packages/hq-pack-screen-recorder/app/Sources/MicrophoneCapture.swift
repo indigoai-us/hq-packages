@@ -566,6 +566,8 @@ final class MicrophoneCaptureRun: NSObject, AVCaptureAudioDataOutputSampleBuffer
     private var currentLevel: Double?
     private var ticker: DispatchSourceTimer?
     private var tokens: [NSObjectProtocol] = []
+    /// Set by `stop()` on `queue`. A start that runs after it is refused.
+    private var stopped = false
 
     init(track: MicrophoneTrack, deviceID: String) {
         feed = MicrophoneFeed(track: track)
@@ -579,6 +581,10 @@ final class MicrophoneCaptureRun: NSObject, AVCaptureAudioDataOutputSampleBuffer
     func start() async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             queue.async { [self] in
+                guard !stopped else {
+                    continuation.resume(throwing: CameraCaptureError.stopped)
+                    return
+                }
                 do {
                     session.beginConfiguration()
                     try attachDevice()
@@ -602,6 +608,7 @@ final class MicrophoneCaptureRun: NSObject, AVCaptureAudioDataOutputSampleBuffer
     func stop() async {
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             queue.async { [self] in
+                stopped = true
                 ticker?.cancel()
                 ticker = nil
                 tokens.forEach(NotificationCenter.default.removeObserver)

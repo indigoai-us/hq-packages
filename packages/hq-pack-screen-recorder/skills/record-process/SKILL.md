@@ -92,7 +92,10 @@ seconds) and exits:
 If the user asks you to stop, run `stop`; a recording in progress is finished
 and saved (`reason: "stop-requested"`). If `stop` returns state `finalizing`,
 the app is still writing the files: run `wait` and handle its result as
-above.
+above. If `stop` fails with error `stop-timeout` (exit 1), the app did not act
+on the stop within 20 seconds and may still be recording. Tell the user that
+plainly, using the status named in `message`, then run `status` and report
+what it shows. Do not say the recording was stopped or saved.
 
 **Media issues.** When the saved status (from `wait` or `status`) has an
 `issue` or a `mediaIssues` list, a recorded file came out shorter or longer

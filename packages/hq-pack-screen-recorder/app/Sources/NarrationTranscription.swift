@@ -143,31 +143,18 @@ enum NarrationTranscription {
                                              kept: ranges.count > 1 ? ranges : nil,
                                              segments: segments, words: segments.flatMap(\.words))
         try store.ensureDirectory(folder, in: package)
-        let path = try nextPath(manifest: manifest, package: package, store: store)
-        try store.writeJSON(transcript, to: path, in: package)
+        // The number is chosen and the file created under the package lock, and a transcript
+        // another command saved meanwhile is skipped, never replaced.
+        let path: String
         do {
-            try store.mutateManifest(in: package) { latest in
-                if !latest.transcripts.contains(path) { latest.transcripts.append(path) }
-            }
+            path = try store.appendNumbered({ "\(folder)/" + String(format: "transcript-%03d.json", $0) },
+                                            data: RecordingPackageStore.encodeJSON(transcript), in: package,
+                                            used: \.transcripts) { latest, path in latest.transcripts.append(path) }.path
         } catch {
-            NSLog("HQ recorder: could not list the transcript in the manifest: \(error)")
-            try? FileManager.default.removeItem(at: store.url(for: path, in: package))
+            NSLog("HQ recorder: could not save the transcript: \(error)")
             throw error
         }
         return (path, transcript)
-    }
-
-    /// The next `transcripts/transcript-NNN.json` that is neither on disk nor in the manifest.
-    static func nextPath(manifest: RecordingManifest, package: URL, store: RecordingPackageStore) throws -> String {
-        let used = Set(manifest.transcripts)
-        var number = manifest.transcripts.count + 1
-        while true {
-            let path = "\(folder)/" + String(format: "transcript-%03d.json", number)
-            if !used.contains(path), !FileManager.default.fileExists(atPath: try store.url(for: path, in: package).path) {
-                return path
-            }
-            number += 1
-        }
     }
 
     /// Writes only the microphone track of the kept range to an audio file.

@@ -71,11 +71,22 @@ write("awaiting-start")
 recording = False
 stop_request = os.path.join(ctl, "stop.request")
 user_stop = os.path.join(flags, "user.stop")
-while not os.path.exists(stop_request) and not (recording and os.path.exists(user_stop)):
+# ignore.stop makes the stub ignore stop requests; finalize.stop makes it answer one by
+# showing finalizing and staying there.
+ignore_stop = os.path.join(flags, "ignore.stop")
+finalize_stop = os.path.join(flags, "finalize.stop")
+def stop_asked():
+    return os.path.exists(stop_request) and not os.path.exists(ignore_stop)
+while not stop_asked() and not (recording and os.path.exists(user_stop)):
     if not recording and os.path.exists(go):
         recording = True
         write("recording", paused=False, durationSeconds=1.5)
     time.sleep(0.05)
+if stop_asked() and os.path.exists(finalize_stop):
+    os.remove(stop_request)
+    write("finalizing")
+    while True:
+        time.sleep(0.05)
 by_user = not os.path.exists(stop_request)
 if not by_user:
     os.remove(stop_request)
@@ -392,6 +403,25 @@ check "a vanished app is reported as lost" 'j["state"]=="lost"' "$(run status)"
 check "wait returns on a lost app" 'j["state"]=="lost"' "$(last "$(run wait --timeout 2)")"
 check "start is allowed after a lost app" 'j["state"]=="awaiting-start"' "$(run start)"
 check "stop closes" 'j["state"]=="closed"' "$(run stop)"
+
+# An app that does not answer a stop request is not reported as stopped.
+touch "$tmp/ignore.stop"
+check "start opens for the stop-timeout checks" 'j["state"]=="awaiting-start"' "$(run start)"
+out="$(HQ_RECORDER_STOP_WAIT=1 run stop)"
+check "stop times out on an app that ignores it before recording" \
+  'j["ok"] is False and j["error"]=="stop-timeout" and "may still be recording" in j["message"] and "awaiting-start" in j["message"]' "$out"
+touch "$tmp/go.record"; sleep 0.5
+expect "a stop timeout exits 1" "$(HQ_RECORDER_STOP_WAIT=1 code stop)" "1"
+out="$(HQ_RECORDER_STOP_WAIT=1 run stop)"
+check "stop times out on a recording that ignores it" \
+  'j["error"]=="stop-timeout" and "(status: recording)" in j["message"]' "$out"
+check "the recording is still running after a stop timeout" 'j["state"]=="recording"' "$(run status)"
+touch "$tmp/finalize.stop"; rm -f "$tmp/ignore.stop"
+out="$(HQ_RECORDER_STOP_WAIT=1 run stop)"
+check "stop succeeds when the app is finalizing" 'j["ok"] and j["state"]=="finalizing"' "$out"
+expect "stop while finalizing exits 0" "$(HQ_RECORDER_STOP_WAIT=1 code stop)" "0"
+kill "$(cat "$tmp/apps/stub.pid")"; sleep 0.2
+rm -f "$tmp/go.record" "$tmp/finalize.stop" "$HQ_RECORDER_HOME"/*/stop.request 2>/dev/null || true
 
 # Build lock: a build waits for a live lock holder and clears a lock left by a dead one.
 mkdir -p "$HQ_RECORDER_HOME/.build.lock"

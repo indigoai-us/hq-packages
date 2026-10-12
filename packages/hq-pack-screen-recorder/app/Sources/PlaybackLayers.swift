@@ -199,29 +199,42 @@ enum PlaybackLayers {
         else { throw TrimEditor.TrimError.exportMismatch }
         session.videoComposition = video
         let hasNarration = playback.tracks[.microphone] != nil
+        // Written to a hidden file beside the destination, so a failure only ever removes its own file.
+        let temp = destination.deletingLastPathComponent().appendingPathComponent(
+            ".\(destination.deletingPathExtension().lastPathComponent)-\(UUID().uuidString).tmp.\(destination.pathExtension)")
         do {
-            try await session.export(to: destination, as: fileType)
+            try await session.export(to: temp, as: fileType)
             try Task.checkCancellation()
-            let exported = try await AVURLAsset(url: destination).load(.duration).seconds
+            let exported = try await AVURLAsset(url: temp).load(.duration).seconds
             guard exported.isFinite, exported >= TrimEditor.minimumLength,
                   abs(exported - expected) <= TrimEditor.tolerance * 2
             else { throw TrimEditor.TrimError.exportMismatch }
             if fileType == .mp4 {
-                let found = try await codecs(of: destination)
+                let found = try await codecs(of: temp)
                 guard found.video == [kCMVideoCodecType_H264],
                       found.audio.allSatisfy({ $0 == kAudioFormatMPEG4AAC }),
                       !hasNarration || !found.audio.isEmpty
                 else { throw TrimEditor.TrimError.exportMismatch }
             }
+            // A hard link fails when the destination exists, so a file saved meanwhile is kept.
+            guard link(temp.path, destination.path) == 0 else {
+                throw errno == EEXIST
+                    ? CocoaError(.fileWriteFileExists, userInfo: [NSFilePathErrorKey: destination.path])
+                    : POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+            }
+            removeTemp(temp)
             return exported
         } catch {
             NSLog("HQ recorder: trimmed export failed: \(error)")
-            if FileManager.default.fileExists(atPath: destination.path) {
-                do { try FileManager.default.removeItem(at: destination) } catch {
-                    NSLog("HQ recorder: could not remove failed export: \(error)")
-                }
-            }
+            removeTemp(temp)
             throw error
+        }
+    }
+
+    private static func removeTemp(_ temp: URL) {
+        guard FileManager.default.fileExists(atPath: temp.path) else { return }
+        do { try FileManager.default.removeItem(at: temp) } catch {
+            NSLog("HQ recorder: could not remove unfinished export: \(error)")
         }
     }
 }
