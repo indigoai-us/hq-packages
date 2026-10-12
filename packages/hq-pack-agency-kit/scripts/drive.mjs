@@ -36,6 +36,15 @@ const EXPORT_AS = {
   "application/vnd.google-apps.presentation": "text/plain",
 };
 const TEXT_TYPES = /^(text\/|application\/(json|csv|xml|markdown))/;
+// Word, RTF and OpenDocument files: downloaded and turned into text with
+// macOS's own textutil (contracts and proposals often live in Drive as .docx).
+const OFFICE_TYPES = new Set([
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/msword",
+  "application/rtf",
+  "text/rtf",
+  "application/vnd.oasis.opendocument.text",
+]);
 
 function out(obj, code = 0) {
   process.stdout.write(`${JSON.stringify(obj, null, 2)}\n`);
@@ -238,10 +247,15 @@ async function main() {
     let text;
     if (EXPORT_AS[meta.mimeType]) {
       text = await (await driveGet(token, `/files/${id}/export`, { mimeType: EXPORT_AS[meta.mimeType] })).text();
+    } else if (OFFICE_TYPES.has(meta.mimeType)) {
+      text = await officeToText(Buffer.from(await (await driveGet(token, `/files/${id}`, { alt: "media" })).arrayBuffer()), meta.mimeType);
+      if (text === null) {
+        out({ ok: true, id, name: meta.name, type: meta.mimeType, link: meta.webViewLink, text: null, note: "Could not turn this document into text on this Mac; open the link to read it." });
+      }
     } else if (TEXT_TYPES.test(meta.mimeType)) {
       text = await (await driveGet(token, `/files/${id}`, { alt: "media" })).text();
     } else {
-      out({ ok: true, id, name: meta.name, type: meta.mimeType, link: meta.webViewLink, text: null, note: "Not a Google Doc, Sheet, Slides or text file; open the link to read it." });
+      out({ ok: true, id, name: meta.name, type: meta.mimeType, link: meta.webViewLink, text: null, note: "Not a Google Doc, Sheet, Slides, Word or text file; open the link to read it." });
     }
     out({
       ok: true,
@@ -259,3 +273,21 @@ async function main() {
 }
 
 main().catch((err) => fail("unexpected", { message: String(err?.message || err).slice(0, 300) }));
+
+/** Word/RTF/ODT bytes to plain text with macOS textutil; null when that fails. */
+async function officeToText(bytes, mimeType) {
+  const { mkdtempSync, writeFileSync, rmSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const ext = mimeType.includes("wordprocessingml") ? "docx" : mimeType.includes("msword") ? "doc" : mimeType.includes("opendocument") ? "odt" : "rtf";
+  const dir = mkdtempSync(join(tmpdir(), "hq-drive-"));
+  try {
+    const file = join(dir, `doc.${ext}`);
+    writeFileSync(file, bytes);
+    return execFileSync("/usr/bin/textutil", ["-convert", "txt", "-stdout", file], { encoding: "utf8", timeout: 30_000, stdio: ["ignore", "pipe", "ignore"] });
+  } catch {
+    return null;
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}

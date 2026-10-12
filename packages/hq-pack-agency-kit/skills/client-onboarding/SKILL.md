@@ -224,6 +224,30 @@ Nothing in this package is a client commitment yet.
 approval does anything go to the client, and sending is still a separate,
 explicitly approved action.
 
+### Kickoff page → `kickoff-page/index.html`
+
+After gate 4, turn the approved package into a page the account lead can walk
+the client through at kickoff, in the agency's own look.
+
+- **Look.** Follow `knowledge/agency-playbook/brand.md`: the agency's logo,
+  colors, fonts and style, so the page looks like it came from their own
+  website. No brand file: use a clean, neutral page and say so.
+- **Content, client-facing only.** The client's goals in their words, what
+  the agency will do first (the approved tests and fixes, each with why), the
+  timeline and order, what the agency needs from the client (from the intake
+  request), the decisions the client has to make, and who approves what. Leave
+  out everything internal: margins and pricing debates, internal names and
+  notes, the strategist's corrections, and scope disputes worded for the
+  agency. Out-of-scope requests appear only as "Options we can quote".
+- **Build.** One self-contained `index.html` (inline CSS, no external scripts;
+  the logo may load from the agency's own site), readable on a phone, in
+  `companies/{firm}/clients/{slug}/onboarding/kickoff-page/`.
+- **Publish only on approval.** Publishing puts the page on the web, so ask
+  first. On approval, deploy the folder with HQ's deploy skill
+  (`.claude/skills/deploy/SKILL.md` in the HQ folder), behind a password by
+  default, and give the link and password to the account lead. Nothing is
+  sent to the client; the account lead shares it.
+
 ## Step 5: Update the engagement record
 
 Add to `companies/{firm}/clients/{slug}/engagement.md`, following each section's

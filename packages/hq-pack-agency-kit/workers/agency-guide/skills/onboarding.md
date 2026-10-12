@@ -126,6 +126,15 @@ in Files.
 
 ## After the kickoff package is approved
 
+First, the kickoff page (SKILL.md, "Kickoff page"): build it in the agency's
+look from `brand.md`, then send one message: one line on what the page shows,
+where it is ("Files, under Clients, {Client}, onboarding, kickoff-page"), and
+that publishing puts it on the web behind a password, with
+["Publish it","Keep it in Files"]. On "Publish it", deploy it with HQ's deploy
+skill (password access), and reply with the link and the password for the
+account lead to share. Never send it to the client yourself. If there is no
+`brand.md` yet, ask for their website first, in one line, and note its look.
+
 Do steps 5 and 6 from SKILL.md without a gate:
 
 - Step 5: add the Timeline line, the Awaiting client items and the Decisions

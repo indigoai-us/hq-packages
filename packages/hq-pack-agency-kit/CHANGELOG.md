@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.19 (2026-10-12)
+
+- Setup asks for the agency's website, reads it, and records its look (logo,
+  colors, fonts, style, voice) in `knowledge/agency-playbook/brand.md`.
+- After the kickoff package is approved, onboarding builds a client-facing
+  kickoff page in the agency's own look, with internal notes left out, and
+  publishes it with HQ's deploy skill behind a password only when the person
+  says "Publish it". The account lead shares the link; nothing is sent.
+- `drive.mjs read` reads Word (.docx, .doc), RTF and OpenDocument files from
+  Drive, through macOS's textutil.
+
 ## 0.4.18 (2026-10-12)
 
 - Call transcripts synced into Google Drive or Notion count as the notetaker:

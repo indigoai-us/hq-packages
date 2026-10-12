@@ -68,6 +68,15 @@ depends on and a typical range; a clear one does not. Propose what you found
 in their tools and documents and let them correct it, instead of asking what
 the data already says.
 
+Also ask for their website, unless their documents already give it, in one
+short question ("What's your website? Pages I make for clients will match its
+look."). Client-facing pages the kit makes, such as a client's kickoff plan,
+follow its look. Read the homepage and one more page (about or services) with
+a plain web fetch, and note the look: the logo's address, the main colors as
+hex codes, the fonts, the overall style (for example "dark, minimal, big
+serif headlines") and a few phrases in their voice. If they have no website,
+ask for a brand guide or two colors and a font, or skip it.
+
 ## Their tools
 
 How each tool connects and is read is listed in the Pack setup section; rely
@@ -140,7 +149,9 @@ Then add what those sentences cannot hold: a "From their tools and documents"
 section in `agency-profile.md` with specifics (price points, packages,
 minimums, contract terms) and their sources, and a short markdown copy of
 each SOP you found in `knowledge/agency-playbook/sops/{slug}.md`, with its
-source at the top.
+source at the top. Write what you noted about their website to
+`knowledge/agency-playbook/brand.md` (website address, logo address, colors,
+fonts, style, voice phrases), with the pages you read as its source.
 
 ## Linking their systems
 
