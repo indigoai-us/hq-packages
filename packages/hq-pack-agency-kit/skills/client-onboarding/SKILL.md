@@ -64,7 +64,8 @@ Never copy firm-internal notes into the client's company (policy
      Notion, Dropbox and the like), in an e-signature tool if one is
      connected, and attached to the client's deal in the CRM.
    - **Call transcript**: the full transcript of each sales or kickoff call
-     with the client in their notetaker, not only its summary.
+     with the client, not only its summary: in their notetaker, or in the
+     Drive or Notion folder their notetaker syncs transcripts into.
    - **Deal facts**: the deal in the CRM (amount, stage, dates, contacts).
    - **Exports**: anything their connected tools hold for the audit.
    `hq integrations list --usable --json --company {firm}` shows what is

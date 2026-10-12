@@ -24,7 +24,10 @@ slug and sends you here.
    Check every kind of source, not the first one that answers:
    - docs (Google Drive, Notion, Dropbox, an e-signature tool) for the
      contract, SOW and proposal;
-   - the notetaker for the full transcript of every call with the client;
+   - the notetaker for the full transcript of every call with the client,
+     and the docs tools too: many notetakers sync transcripts into a Drive
+     or Notion folder (search for the client's name with "transcript",
+     "call" or "meeting");
    - the CRM for the deal, its contacts and any attached files.
    If no docs tool is connected, say so and offer to connect Google Drive or
    Notion (or whatever they keep documents in) right then, with

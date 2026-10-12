@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.18 (2026-10-12)
+
+- Call transcripts synced into Google Drive or Notion count as the notetaker:
+  setup and onboarding look for them there, by client name.
+
 ## 0.4.17 (2026-10-12)
 
 - Onboarding checks every kind of source (docs, notetaker, CRM) and says

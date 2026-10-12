@@ -101,7 +101,9 @@ on it. Today that means:
   they use and offer to connect them, even when you already know the
   clients. They are what make a client workspace useful: the notetaker gives
   each client's recent meetings (what was agreed, what is next) and the
-  project tool gives what is in flight, and the workflows draw on both.
+  project tool gives what is in flight, and the workflows draw on both. If
+  their transcripts sync into Drive or Notion, that folder is their
+  notetaker: connect that tool and read the transcripts there.
   Fireflies, Fathom, Granola, Otter, Read AI and Grain (notetakers) and
   ClickUp, Monday and Linear (projects) connect with an HQ sign-in link;
   Asana with a personal access token through an HQ secrets link.

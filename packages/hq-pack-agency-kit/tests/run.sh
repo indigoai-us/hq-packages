@@ -214,8 +214,8 @@ done
 for w in $(awk '/^  workers:/{f=1;next} /^  [a-z]+:/{f=0} f && /- /{print $2}' "$PACK_DIR/package.yaml"); do
   check "worker $w has worker.yaml with matching id" 'grep -q "^  id: $w$" "$PACK_DIR/workers/$w/worker.yaml"'
 done
-check "package version is 0.4.17" 'grep -q "^version: 0.4.17$" "$PACK_DIR/package.yaml"'
-check "changelog has a 0.4.17 entry" 'grep -q "^## 0.4.17" "$PACK_DIR/CHANGELOG.md"'
+check "package version is 0.4.18" 'grep -q "^version: 0.4.18$" "$PACK_DIR/package.yaml"'
+check "changelog has a 0.4.18 entry" 'grep -q "^## 0.4.18" "$PACK_DIR/CHANGELOG.md"'
 check "setup skill learns tools by kind before the business topics" 'grep -q "learn their tools before asking about the business" "$WORKER/skills/setup.md"'
 check "worker caps buttons at four of one kind" 'grep -q "never answers mixed with actions" "$WORKER/worker.yaml"'
 check "requires client-service through requires.packs" 'grep -A2 "^  packs:" "$PACK_DIR/package.yaml" | grep -q "name: hq-pack-client-service"'
