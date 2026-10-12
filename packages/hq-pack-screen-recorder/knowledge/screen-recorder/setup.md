@@ -1,10 +1,14 @@
-# HQ Recorder setup
+# HQ Capture setup
 
-HQ Recorder is the local Mac app behind `/record-process`. This pack ships its
-Swift source in `app/`. The first time `/record-process` runs, the pack
-compiles the app on the Mac and stores it at
-`~/Library/Application Support/HQ Recorder/HQ Recorder.app`. It rebuilds
-automatically when a pack update changes the source.
+HQ Capture is the local Mac app behind `/record-process`. It only records.
+Summaries, trimming, camera placement, video export and step-by-step guides
+happen in the HQ session that opened it, through the agent.
+
+This pack ships the app's Swift source in `app/`. The first time
+`/record-process` runs, the pack compiles the app on the Mac and stores it at
+`~/Library/Application Support/HQ Capture/HQ Capture.app`. It rebuilds
+automatically when a pack update changes the source. While HQ Capture is open,
+the existing build is used as is.
 
 ## Requirements
 
@@ -19,39 +23,94 @@ automatically when a pack update changes the source.
 
 macOS asks for each permission the first time the app uses it. Approve:
 
-- **Screen Recording**, for the screen track.
-- **Camera**, for the separate webcam track.
+- **Screen Recording**, for the screen layer.
+- **Camera**, for the separate camera layer.
 - **Microphone**, for narration.
 
-You can review them in System Settings → Privacy & Security. Because the app is
-built and signed on your Mac, macOS can treat an updated build as a new app and
-ask for Screen Recording permission again after a pack update. Approve it again
-when asked.
+For Screen Recording, macOS asks you to choose **Quit and Reopen**. The
+reopened app keeps its company binding for 10 minutes, so you can carry on
+without going back to the HQ session. After 10 minutes, run `/record-process`
+again.
+
+You can review the permissions in System Settings → Privacy & Security.
+Because the app is built and signed on your Mac, macOS can treat an updated
+build as a new app and ask for Screen Recording permission again after a pack
+update. Approve it again when asked.
 
 ## Where recordings go
 
-`/record-process` saves to `companies/<company>/recordings/` in the HQ folder of
-the session's company. The company is fixed when the recorder opens. That
-folder follows the company vault's normal access rules and sync.
+`/record-process` saves to `companies/<company>/recordings/<name>.hqrec` in the
+HQ folder of the session's company. The company is fixed when HQ Capture
+opens. The folder follows the company vault's normal access rules, and the
+agent uploads a recording only when you agree (`sync-package`).
+
+A `.hqrec` recording keeps the screen, camera and microphone as separate
+layers that are never changed. Each edit (trim, camera placement) is saved as
+a new revision inside the recording, and exports are written next to it.
+
+## After you save
+
+When you press Stop, HQ Capture shows "Saved. Go back to your HQ session to
+edit and turn this into a guide." The agent in that session then:
+
+1. summarizes the recording: length, what was said, pauses and filler words;
+2. trims the start or end, moves, resizes or hides the camera, and shows
+   still frames before export;
+3. exports the video and offers to show it in Finder;
+4. drafts a step-by-step guide from your narration and the screen, for you to
+   review in chat;
+5. uploads the recording to the company vault when you agree.
+
+Cutting a section out of the middle of a recording is not supported yet. An
+edit keeps one range from a start point to an end point.
+
+Applying review changes to a drafted guide and recording your approval have
+no agent command yet, so a drafted guide cannot be exported from the session
+in this version. The draft stays saved in the recording.
+
+## If the session was interrupted
+
+HQ Capture also shows a prompt you can copy. Paste it into a new HQ session
+for the same company. Its shape is:
+
+```
+Continue my HQ Capture recording for <company> at <absolute path to .hqrec>: show me what was recorded, then trim, place the camera, export the video and draft the step-by-step guide.
+```
+
+The agent checks that the company matches the session and that the path is a
+recording in that company's `recordings/` folder before it continues.
+
+## Updating from 0.1.0
+
+Version 0.1.0 built an app called HQ Recorder (or LocalScreenRecorder) in
+`~/Library/Application Support/HQ Recorder/`. After HQ Capture builds, the
+launcher removes that old app. Recordings are not stored there and are not
+affected.
 
 ## Control channel
 
 The HQ session and the app talk through files in
-`~/Library/Application Support/HQ Recorder/active/`:
+`~/Library/Application Support/HQ Capture/active/`:
 
 - `status.json` is written by the app. Fields: `schema`, `state`
   (`awaiting-start`, `recording`, `finalizing`, `saved`, `failed`, `closed`),
-  `company`, `destination`, `pid`, `updatedAt`, and `reason` when it failed.
+  `company`, `destination`, `pid`, `updatedAt`, `paused` and
+  `durationSeconds` while recording, `recording` and `resumePrompt` once
+  saved, and `reason` when it failed or was stopped.
 - `stop.request` is created by `hq-record-process.sh stop`. The app watches
-  for it and stops.
+  for it, finishes a recording in progress, saves it, and closes.
 
 `status` reports `lost` when the app process is gone without writing a final
 state.
 
+The agent's editing commands (`hq-record-process.sh run <mode> <recording>`)
+run the same app headless, without a window. They work only on recordings
+inside the session company's `recordings/` folder.
+
 ## Offline check
 
-Capture, transcription, OCR and draft writing are designed to run on the Mac.
-To check that a build makes no network requests during a session, open
-Activity Monitor → Network, select HQ Recorder, and watch "Sent Bytes" while
-recording with Wi-Fi off after Apple's on-device model assets are prepared.
-This check is part of the release verification for later versions.
+Capture, transcription, text recognition and guide drafting run on the Mac.
+To check that a build makes no network requests, open Activity Monitor →
+Network, select HQ Capture, and watch "Sent Bytes" while recording with Wi-Fi
+off after Apple's on-device model assets are prepared. Only `sync-package`
+uploads, and only when you agree.

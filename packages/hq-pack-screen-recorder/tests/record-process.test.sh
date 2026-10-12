@@ -1,18 +1,23 @@
 #!/usr/bin/env bash
-# Launcher tests for hq-record-process.sh. Safe on any OS: the real app is
-# replaced by a stub that speaks the same file control channel
-# (status.json + stop.request). The macOS build-and-launch path is covered by
+# Launcher tests for hq-record-process.sh. Safe on any OS: the compiler is replaced by a
+# stub that writes a fake HQ Capture.app whose executable echoes its arguments, and the
+# opener is replaced by a stub that speaks the same file control channel as the real app
+# (status.json + stop.request). The real macOS build and launch are covered by
 # tests/e2e-macos.sh.
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-R="$here/../scripts/hq-record-process.sh"
 
 tmp="$(mktemp -d)"
 cleanup() {
-  [ -f "$tmp/stub.pid" ] && kill "$(cat "$tmp/stub.pid")" 2>/dev/null || true
+  [ -f "$tmp/apps/stub.pid" ] && kill "$(cat "$tmp/apps/stub.pid")" 2>/dev/null || true
   rm -rf "$tmp"
 }
 trap cleanup EXIT
+
+# A copy of the pack, so the test can change app/SOURCE.
+mkdir -p "$tmp/pack"
+cp -R "$here/../app" "$here/../scripts" "$tmp/pack/"
+R="$tmp/pack/scripts/hq-record-process.sh"
 
 # Fake HQ root with two companies and a session helper.
 hq="$tmp/hq"
@@ -24,37 +29,72 @@ cat >"$hq/core/scripts/hq-session.sh" <<'EOF'
 EOF
 session() { printf '%s' "$1" >"$hq/core/scripts/session-company"; }
 
-# Stub app: records its argv, writes awaiting-start, closes on stop.request.
+# Stub compiler: writes an app whose executable prints its arguments as JSON and exits
+# with $STUB_EXIT (default 0). Each build appends a line to builds.log.
+cat >"$tmp/stub-compile.sh" <<'EOF'
+#!/usr/bin/env bash
+app="$1"
+mkdir -p "$app/Contents/MacOS"
+cat >"$app/Contents/MacOS/LocalScreenRecorder" <<'BIN'
+#!/usr/bin/env bash
+python3 -I -c 'import json,sys; print(json.dumps({"argv": sys.argv[1:]}))' "$@"
+exit "${STUB_EXIT:-0}"
+BIN
+chmod +x "$app/Contents/MacOS/LocalScreenRecorder"
+echo built >>"$(dirname "$0")/builds.log"
+EOF
+chmod +x "$tmp/stub-compile.sh"
+
+# Stub opener: records the app's argv, writes awaiting-start, switches to recording when
+# go.record appears, and on stop.request saves (if recording) or closes.
 cat >"$tmp/stub-open.sh" <<'EOF'
 #!/usr/bin/env bash
 app="$1"; shift; [ "$1" = --args ] && shift
 printf '%s\n' "$@" >"$app.argv"
-python3 -I - "$@" <<'PY' >/dev/null 2>&1 &
+python3 -I - "$(dirname "$0")/go.record" "$@" <<'PY' >/dev/null 2>&1 &
 import json, os, sys, time
-args = dict(zip(sys.argv[1::2], sys.argv[2::2]))
+go = sys.argv[1]
+args = dict(zip(sys.argv[2::2], sys.argv[3::2]))
 ctl = args["--hq-control"]
-def write(state):
+def write(state, **extra):
     s = {"schema": 1, "state": state, "company": args["--company"],
          "destination": args["--destination"], "pid": os.getpid(),
          "updatedAt": "2026-01-01T00:00:00Z"}
+    s.update(extra)
     tmp = os.path.join(ctl, ".status.tmp")
     with open(tmp, "w") as f: json.dump(s, f)
     os.replace(tmp, os.path.join(ctl, "status.json"))
 write("awaiting-start")
+recording = False
 while not os.path.exists(os.path.join(ctl, "stop.request")):
+    if not recording and os.path.exists(go):
+        recording = True
+        write("recording", paused=False, durationSeconds=1.5)
     time.sleep(0.05)
 os.remove(os.path.join(ctl, "stop.request"))
-write("closed")
+if recording:
+    pkg = os.path.join(args["--destination"], "demo.hqrec")
+    os.makedirs(pkg, exist_ok=True)
+    rel = "companies/%s/recordings/demo.hqrec" % args["--company"]
+    prompt = ("Continue my HQ Capture recording for %s at %s: show me what was recorded, then trim, "
+              "place the camera, export the video and draft the step-by-step guide." % (args["--company"], pkg))
+    write("saved", recording=rel, durationSeconds=2.0, resumePrompt=prompt, reason="stop-requested")
+else:
+    write("closed")
 PY
 echo $! >"$(dirname "$app")/stub.pid"
 EOF
 chmod +x "$tmp/stub-open.sh"
-touch "$tmp/stub.app"
 
+mkdir -p "$tmp/apps" "$tmp/legacy/HQ Recorder.app/Contents" "$tmp/state/LocalScreenRecorder.app/Contents"
+touch "$tmp/legacy/build.stamp" "$tmp/legacy/keep.txt"
 export HQ_ROOT="$hq"
 export HQ_RECORDER_HOME="$tmp/state"
-export HQ_RECORDER_APP="$tmp/stub.app"
+export HQ_RECORDER_APP="$tmp/apps/HQ Capture.app"
 export HQ_RECORDER_OPEN="$tmp/stub-open.sh"
+export HQ_RECORDER_COMPILE="$tmp/stub-compile.sh"
+export HQ_RECORDER_LEGACY_HOME="$tmp/legacy"
+builds() { [ -f "$tmp/builds.log" ] && wc -l <"$tmp/builds.log" | tr -d ' ' || echo 0; }
 
 pass=0
 check() { # check <description> <python expression over j> <json>
@@ -64,37 +104,148 @@ check() { # check <description> <python expression over j> <json>
     printf 'FAIL: %s\n  got: %s\n' "$1" "$3" >&2; exit 1
   fi
 }
+expect() { # expect <description> <got> <want>
+  if [ "$2" = "$3" ]; then pass=$((pass + 1)); else printf 'FAIL: %s: expected %s, got %s\n' "$1" "$3" "$2" >&2; exit 1; fi
+}
 run() { bash "$R" "$@" 2>/dev/null || true; }
+code() { set +e; bash "$R" "$@" >/dev/null 2>&1; local c=$?; set -e; echo "$c"; }
+last() { tail -n 1 <<<"$1"; }
 
+# Company refusals.
 session ""
 check "no company in session is refused" 'j["ok"] is False and j["error"]=="no-company"' "$(run start)"
 session "personal"
 check "personal session is refused" 'j["error"]=="no-company"' "$(run start)"
 check "unknown company is refused" 'j["error"]=="unknown-company"' "$(run start --company ghost)"
 check "invalid company name is refused" 'j["error"]=="bad-company"' "$(run start --company ../acme)"
+check "--company without a value is refused" 'j["error"]=="bad-argument"' "$(run start --company)"
 [ ! -e "$HQ_RECORDER_HOME/active/status.json" ] && pass=$((pass + 1))
 check "status before any start is none" 'j["state"]=="none"' "$(run status)"
-
+check "wait before any start is refused" 'j["error"]=="not-open"' "$(run wait --timeout 1)"
 session "acme"
+check "a company other than the bound one is refused" 'j["error"]=="company-mismatch"' "$(run start --company other)"
+expect "nothing was built for a refused start" "$(builds)" "0"
+
+# Start builds once, binds the company and removes the 0.1.0 app.
 out="$(run start)"
-check "start opens the recorder awaiting user start" \
+check "start opens HQ Capture awaiting user start" \
   'j["ok"] and j["state"]=="awaiting-start" and j["company"]=="acme" and j["destination"].endswith("/companies/acme/recordings")' "$out"
+expect "first start builds" "$(builds)" "1"
+[ -x "$HQ_RECORDER_APP/Contents/MacOS/LocalScreenRecorder" ] && pass=$((pass + 1)) \
+  || { echo "FAIL: built app has no LocalScreenRecorder executable" >&2; exit 1; }
+[ ! -e "$tmp/legacy/HQ Recorder.app" ] && [ ! -e "$tmp/state/LocalScreenRecorder.app" ] && [ ! -e "$tmp/legacy/build.stamp" ] \
+  && [ -e "$tmp/legacy/keep.txt" ] && pass=$((pass + 1)) \
+  || { echo "FAIL: old app bundles should be removed and nothing else" >&2; exit 1; }
 [ -d "$hq/companies/acme/recordings" ] && [ -z "$(ls -A "$hq/companies/acme/recordings")" ] && pass=$((pass + 1)) \
   || { echo "FAIL: destination should exist and be empty" >&2; exit 1; }
-grep -qx -- "--company" "$tmp/stub.app.argv" && grep -qx "acme" "$tmp/stub.app.argv" && pass=$((pass + 1)) \
-  || { echo "FAIL: app did not receive the company" >&2; exit 1; }
+argv="$(cat "$HQ_RECORDER_APP.argv")"
+grep -qx -- "--hq-control" <<<"$argv" && grep -qx -- "--company" <<<"$argv" && grep -qx "acme" <<<"$argv" \
+  && grep -q '/companies/acme/recordings$' <<<"$argv" && pass=$((pass + 1)) \
+  || { echo "FAIL: app did not receive the control folder, company and destination" >&2; exit 1; }
 
-check "a second start is refused while open" 'j["error"]=="already-open"' "$(run start --company other)"
-check "status reports the open recorder" 'j["state"]=="awaiting-start" and j["company"]=="acme"' "$(run status)"
-check "stop closes the recorder" 'j["state"]=="closed"' "$(run stop)"
-check "stop when closed is a no-op" 'j["state"]=="closed"' "$(run stop)"
+check "a second start is refused while open" 'j["error"]=="already-open"' "$(run start)"
+check "status reports the open app" 'j["state"]=="awaiting-start" and j["company"]=="acme"' "$(run status)"
 
-session "other"
-check "start works again after stop, for the new company" 'j["state"]=="awaiting-start" and j["company"]=="other"' "$(run start)"
-kill -9 "$(cat "$tmp/stub.pid")"; sleep 0.2
-check "a vanished app is reported as lost" 'j["state"]=="lost"' "$(run status)"
-check "start is allowed after a lost app" 'j["state"]=="awaiting-start"' "$(run start)"
+# wait: argument checks, timeout while open, state changes, save.
+check "wait rejects a bad timeout" 'j["error"]=="bad-argument"' "$(run wait --timeout abc)"
+check "wait rejects a zero timeout" 'j["error"]=="bad-argument"' "$(run wait --timeout 0)"
+check "wait rejects an unknown argument" 'j["error"]=="bad-argument"' "$(run wait --forever)"
+expect "wait exits 3 when still open at the timeout" "$(code wait --timeout 1)" "3"
+out="$(run wait --timeout 1)"
+check "wait prints the awaiting-start state first" 'j["event"]=="state" and j["state"]=="awaiting-start"' "$(head -n 1 <<<"$out")"
+check "wait ends with the full status at the timeout" 'j["ok"] and j["state"]=="awaiting-start"' "$(last "$out")"
+touch "$tmp/go.record"
+sleep 0.5
+out="$(run wait --timeout 1)"
+check "wait reports recording with pause and duration" \
+  'j["state"]=="recording" and j["paused"] is False and j["durationSeconds"]==1.5' "$(head -n 1 <<<"$out")"
+check "stop saves the recording" 'j["state"]=="saved" and j["recording"]=="companies/acme/recordings/demo.hqrec"' "$(run stop)"
+out="$(run wait --timeout 5)"
+expect "wait exits 0 once saved" "$(code wait --timeout 5)" "0"
+check "wait returns the resume prompt after save" \
+  'j["state"]=="saved" and j["resumePrompt"].startswith("Continue my HQ Capture recording for acme at /")' "$(last "$out")"
+check "stop when saved is a no-op" 'j["state"]=="saved"' "$(run stop)"
+rm -f "$tmp/go.record"
+prompt="$(python3 -I -c 'import json,sys; print(json.loads(sys.argv[1])["resumePrompt"])' "$(last "$out")")"
+
+# Rebuild only when the pack's app inputs change.
+out="$(run start)"
+check "start works again after a save" 'j["state"]=="awaiting-start"' "$out"
+expect "an unchanged pack does not rebuild" "$(builds)" "1"
+check "stop closes HQ Capture" 'j["state"]=="closed"' "$(run stop)"
+printf 'local-screen-recorder 0000000000000000000000000000000000000000\n' >"$tmp/pack/app/SOURCE"
+check "start after a SOURCE change opens" 'j["state"]=="awaiting-start"' "$(run start)"
+expect "a SOURCE change rebuilds" "$(builds)" "2"
+check "build refuses to replace the app while it is open" 'j["error"]=="already-open"' "$(run build --force)"
 check "stop closes it" 'j["state"]=="closed"' "$(run stop)"
+check "build reports a current build without rebuilding" 'j["ok"] and j["built"] is False' "$(run build)"
+check "build --force rebuilds" 'j["ok"] and j["built"] is True' "$(run build --force)"
+expect "build --force ran the compiler" "$(builds)" "3"
+
+# run: argument, company and package checks.
+pkg="$hq/companies/acme/recordings/demo.hqrec"
+mkdir -p "$hq/companies/other/recordings/theirs.hqrec" "$hq/companies/acme/recordings/notes"
+ln -s "$hq/companies/other/recordings/theirs.hqrec" "$hq/companies/acme/recordings/link.hqrec"
+check "run needs a mode and a package" 'j["error"]=="bad-argument"' "$(run run describe)"
+expect "run refusals exit 3" "$(code run describe)" "3"
+check "run rejects an unknown mode" 'j["error"]=="bad-mode"' "$(run run measure-sync "$pkg")"
+check "run rejects a second mode in the arguments" 'j["error"]=="bad-argument"' "$(run run edit "$pkg" --sync-package)"
+check "run rejects a company override" 'j["error"]=="bad-argument"' "$(run run describe "$pkg" --company other)"
+check "run rejects a destination override" 'j["error"]=="bad-argument"' "$(run run describe "$pkg" --destination /tmp)"
+check "run refuses another company's recording" 'j["error"]=="package-outside-company"' \
+  "$(run run describe "$hq/companies/other/recordings/theirs.hqrec")"
+check "run refuses a path that climbs out of the company" 'j["error"]=="package-outside-company"' \
+  "$(run run describe "$hq/companies/acme/recordings/../../other/recordings/theirs.hqrec")"
+check "run refuses a symlink to another company's recording" 'j["error"]=="package-outside-company"' \
+  "$(run run describe "$hq/companies/acme/recordings/link.hqrec")"
+check "run refuses a folder that is not a .hqrec package" 'j["error"]=="package-outside-company"' \
+  "$(run run describe "$hq/companies/acme/recordings/notes")"
+check "run refuses a nested path inside a package" 'j["error"]=="package-outside-company"' \
+  "$(run run describe "$pkg/exports")"
+check "run refuses a missing package" 'j["error"]=="no-package"' "$(run run describe "$hq/companies/acme/recordings/gone.hqrec")"
+session "other"
+check "run refuses the bound company's neighbor" 'j["error"]=="package-outside-company"' "$(run run describe "$pkg")"
+session ""
+check "run refuses with no bound company" 'j["error"]=="no-company"' "$(run run describe "$pkg")"
+session "acme"
+
+# run: passes the mode, the resolved package and the arguments to the app, and its exit code back.
+real_pkg="$(python3 -I -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "$pkg")"
+out="$(run run describe "$pkg" --json)"
+check "run describe calls the app headless" "j[\"argv\"]==[\"--describe\", \"$real_pkg\", \"--json\"]" "$out"
+out="$(cd "$hq/companies/acme/recordings" && bash "$R" run --edit demo.hqrec --in 1.5 --camera 0.8,0.8,0.18 --json)"
+check "run accepts a relative package and a -- mode" \
+  "j[\"argv\"]==[\"--edit\", \"$real_pkg\", \"--in\", \"1.5\", \"--camera\", \"0.8,0.8,0.18\", \"--json\"]" "$out"
+out="$(run run sync-package "$pkg")"
+check "run sync-package passes the HQ root" 'j["argv"][0]=="--sync-package" and j["argv"][-2]=="--hq-root" and j["argv"][-1].endswith("/hq")' "$out"
+expect "run passes a refusal exit code through" "$(STUB_EXIT=1 code run export-sop "$pkg")" "1"
+expect "run passes a cancel exit code through" "$(STUB_EXIT=130 code run export-video "$pkg")" "130"
+expect "run exits 0 when the app succeeds" "$(code run frame "$pkg" --at 1 --out /tmp/x.png)" "0"
+
+# resume: parses the app's prompt and checks it against the bound company.
+out="$(run resume "$prompt")"
+check "resume accepts the app's prompt" "j[\"ok\"] and j[\"company\"]==\"acme\" and j[\"package\"]==\"$real_pkg\"" "$out"
+wrapped="$(python3 -I -c 'import sys; p=sys.argv[1]; i=p.index(": show"); print(p[:i].replace(" recording for ", " recording\n  for ") + ":\n" + p[i+2:])' "$prompt")"
+check "resume accepts the prompt with line breaks" "j[\"ok\"] and j[\"package\"]==\"$real_pkg\"" "$(run resume "$wrapped")"
+check "resume accepts the prompt among other words" "j[\"ok\"]" "$(run resume "please: $prompt thanks")"
+check "resume rejects text that is not the prompt" 'j["error"]=="not-a-resume-prompt"' "$(run resume "trim my last video")"
+check "resume rejects an empty prompt" 'j["error"]=="bad-argument"' "$(run resume)"
+other_prompt="Continue my HQ Capture recording for other at $hq/companies/other/recordings/theirs.hqrec: show me what was recorded, then trim, place the camera, export the video and draft the step-by-step guide."
+check "resume refuses another company's prompt" 'j["error"]=="company-mismatch"' "$(run resume "$other_prompt")"
+sneaky="Continue my HQ Capture recording for acme at $hq/companies/other/recordings/theirs.hqrec: show me what was recorded."
+check "resume refuses a path outside the company's recordings" 'j["error"]=="package-outside-company"' "$(run resume "$sneaky")"
+expect "resume refusals exit 3" "$(code resume "$sneaky")" "3"
+session "other"
+check "resume refuses in a session bound to another company" 'j["error"]=="company-mismatch"' "$(run resume "$prompt")"
+session "acme"
+
+# Lost app.
+check "start opens again" 'j["state"]=="awaiting-start"' "$(run start)"
+kill -9 "$(cat "$tmp/apps/stub.pid")"; sleep 0.2
+check "a vanished app is reported as lost" 'j["state"]=="lost"' "$(run status)"
+check "wait returns on a lost app" 'j["state"]=="lost"' "$(last "$(run wait --timeout 2)")"
+check "start is allowed after a lost app" 'j["state"]=="awaiting-start"' "$(run start)"
+check "stop closes" 'j["state"]=="closed"' "$(run stop)"
 
 doc="$(bash "$R" doctor 2>/dev/null || true)"
 if [ "$(uname -s)" = Darwin ]; then

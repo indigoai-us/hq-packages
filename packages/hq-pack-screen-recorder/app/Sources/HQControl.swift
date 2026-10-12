@@ -60,6 +60,17 @@ struct SessionStatus: Codable, Equatable, Sendable {
     var pid: Int32
     var updatedAt: String
     var reason: String?
+    /// Vault-relative path of the recording package, once one exists.
+    var recording: String?
+    /// Sync state of that package: local-only, pending, synced or failed-retry.
+    var sync: String?
+    /// True while a recording is paused. Absent when not recording.
+    var paused: Bool?
+    /// Recorded seconds so far, with paused time left out. Absent before a recording starts.
+    var durationSeconds: Double?
+    /// After a save, a prompt to paste into any HQ session to pick the recording up again.
+    /// Kept on later updates such as closed, so an interrupted session can still read it.
+    var resumePrompt: String? = nil
 }
 
 /// File-based control channel shared with the HQ session.
@@ -109,5 +120,41 @@ enum DestinationCheck {
 extension SessionStatus {
     static func now() -> String {
         ISO8601DateFormatter().string(from: Date())
+    }
+}
+
+/// Remembers the last HQ launch binding so a plain relaunch shortly after (macOS "Quit & Reopen"
+/// after granting Screen Recording, or opening the app from the Dock) stays bound to the same
+/// company and destination. The restored arguments still go through `HQLaunchContext.parse` and
+/// the destination check, so a stale or moved folder is refused the same way as a fresh launch.
+struct LaunchBindingStore: @unchecked Sendable {
+    let defaults: UserDefaults
+    /// How long after the last HQ launch a plain relaunch reuses its binding.
+    static let window: TimeInterval = 600
+    static let key = "hqLaunchBinding.v1"
+
+    /// The arguments to launch with. An HQ launch is remembered and returned unchanged. A launch
+    /// with no `--` options (system-added `-NS...` flags are ignored) reuses a binding saved within
+    /// `window`. Any other launch, such as a command-line tool or `--review-package`, is unchanged.
+    func resolve(_ arguments: [String], now: Date = Date()) -> [String] {
+        if arguments.contains("--hq-control") {
+            if let context = try? HQLaunchContext.parse(arguments) { save(context, at: now) }
+            return arguments
+        }
+        guard !arguments.dropFirst().contains(where: { $0.hasPrefix("--") }),
+              let saved = defaults.dictionary(forKey: Self.key),
+              let control = saved["control"] as? String, let company = saved["company"] as? String,
+              let destination = saved["destination"] as? String, let savedAt = saved["savedAt"] as? Double
+        else { return arguments }
+        let age = now.timeIntervalSince1970 - savedAt
+        guard age >= 0, age <= Self.window else { return arguments }
+        return [arguments.first ?? "LocalScreenRecorder", "--hq-control", control, "--company", company,
+                "--destination", destination]
+    }
+
+    func save(_ context: HQLaunchContext, at date: Date) {
+        defaults.set(["control": context.controlDirectory.path, "company": context.company,
+                      "destination": context.destination.path, "savedAt": date.timeIntervalSince1970],
+                     forKey: Self.key)
     }
 }
