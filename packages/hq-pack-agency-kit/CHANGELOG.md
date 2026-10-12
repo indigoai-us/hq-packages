@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.15 (2026-10-12)
+
+- Onboarding pulls the client's documents from the agency's tools before
+  asking for any: the contract and proposal from docs tools (Google Drive,
+  Notion, Dropbox, e-signature) and the CRM deal, full call transcripts from
+  the notetaker, and deal facts from the CRM. It shows what it found and asks
+  only for the rest. A missing signed contract is a blocking question in the
+  brief instead of a stop.
+- Scope checks look for the contract in the agency's tools too.
+- The onboarding button reads "Kick off {Client}".
+
 ## 0.4.14 (2026-10-11)
 
 - The tool list is examples, not a limit: the Agency Guide works out how to

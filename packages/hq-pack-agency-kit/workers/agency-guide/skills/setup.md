@@ -190,7 +190,9 @@ Files. Lead with the client workspaces: name each client and what you filled
 in for it. Then offer the next step as a real choice: open one client's
 workspace and walk through what is in it, or run a workflow on one client
 (onboarding with `skills/onboarding.md`, a scope check or a weekly update with
-`skills/clients.md`). Record `Setup: finished` and the date in your progress
+`skills/clients.md`). Name the buttons so they never read as unfinished setup:
+"Walk me through {Client}" and "Kick off {Client}" (the onboarding), not
+"Onboard {Client}". Record `Setup: finished` and the date in your progress
 note.
 
 Only if they have no clients at all, offer a practice run on Northwind Labs,

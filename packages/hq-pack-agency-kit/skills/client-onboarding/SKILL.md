@@ -56,10 +56,30 @@ Never copy firm-internal notes into the client's company (policy
 3. Resolve `{slug}`. If the user did not name a client, list
    `companies/{firm}/clients/`, skipping `_`-prefixed folders, and ask. If the
    client has no engagement folder, point at `/new-client`.
-4. List `onboarding/inputs/`. If it is empty, ask the user to add the contract,
-   proposal and call transcript or notes, plus any exports. Accept pasted text
-   and save it there. The contract is required. Everything else is optional, and
-   each missing document becomes a gap in Step 2.
+4. Gather the client's documents from their tools before asking for any.
+   If `onboarding/inputs/` is missing documents, look for them yourself, by the
+   client's name, domain and contacts (from `client-profile.md`):
+   - **Contract and proposal** (contract, MSA, SOW, agreement, order form,
+     proposal, quote): in the docs tools they have connected (Google Drive,
+     Notion, Dropbox and the like), in an e-signature tool if one is
+     connected, and attached to the client's deal in the CRM.
+   - **Call transcript**: the full transcript of each sales or kickoff call
+     with the client in their notetaker, not only its summary.
+   - **Deal facts**: the deal in the CRM (amount, stage, dates, contacts).
+   - **Exports**: anything their connected tools hold for the audit.
+   `hq integrations list --usable --json --company {firm}` shows what is
+   connected. If no docs tool is connected, offer to connect one first (any
+   tool works; see how tools connect in setup), then search it.
+   Save each document as markdown in `onboarding/inputs/` with a header naming
+   its source (tool, title, link or id, date fetched). Never copy a credential.
+   Then show the person what you found and where, in one message, and let them
+   confirm or correct it. Ask them only for what you could not find; they can
+   still drop files in or paste text.
+   If no signed contract can be found anywhere, do not stop: use the best
+   signed document there is (a signed proposal or order form, else the CRM
+   deal) as the stand-in, and make "No signed contract found" a blocking open
+   question in the brief. Everything else that is missing becomes a gap in
+   Step 2.
 5. Read every playbook file. They are the standard this client is checked against.
 6. If `onboarding/status.md` exists, this is a re-run. Read its **Steps** table
    and resume at the first step that is not approved. Never overwrite an
