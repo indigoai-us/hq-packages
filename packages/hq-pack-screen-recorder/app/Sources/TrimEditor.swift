@@ -219,8 +219,7 @@ struct TrimDocument: Sendable {
     /// placement, the same layers playback and export use. The saved trim is restored as is.
     static func open(_ package: URL, store: RecordingPackageStore) async throws -> TrimDocument {
         let manifest = try store.open(package)
-        let timeline = try JSONDecoder().decode(RecordingTimeline.self, from: Data(
-            contentsOf: store.url(for: manifest.timeline, in: package)))
+        let timeline = try store.readTimeline(of: manifest, in: package)
         let duration = try await PlaybackLayers.composition(package: package, timeline: timeline,
                                                             webcam: manifest.webcam).duration.seconds
         return TrimDocument(store: store, package: package, timeline: timeline, manifest: manifest,

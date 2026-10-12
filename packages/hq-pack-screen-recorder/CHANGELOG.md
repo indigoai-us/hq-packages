@@ -2,10 +2,19 @@
 
 ## 0.3.0
 
-- Vendored HQ Capture from local-screen-recorder 295ff3c: middle cuts, guide
+- Vendored HQ Capture from local-screen-recorder f058fec: middle cuts, guide
   review and approval commands, screenshot frame listing, media length checks,
   the rounded Liquid Glass window style, the window coming back to the front
   on stop and on launch, and roomier controls. App version 0.3.0 (build 3).
+- The app refuses any file path in a recording that points outside the
+  recording, with links resolved, before playback, export, frames, describe or
+  transcription.
+- Agent commands leave a recording that is still being captured alone. It is
+  marked interrupted only once the app that owned it is confirmed gone.
+- Vault sync checks the recording before and after each upload. If it changed
+  during the upload, the upload repeats up to three times and then stays
+  pending instead of being marked synced. The sync-state write is uploaded and
+  checked too. A crash on failed syncs is fixed.
 - `/record-process` cuts by words: the agent maps "cut where I said um" to
   `--cut` ranges from the transcript's word times.
 - `/record-process` reviews the drafted guide in chat and applies each change

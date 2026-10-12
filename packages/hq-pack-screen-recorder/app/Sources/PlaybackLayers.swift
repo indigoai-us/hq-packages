@@ -35,7 +35,7 @@ enum PlaybackLayers {
         for entry in visibleEntries(timeline, webcam: webcam) {
             // Narration is the audio of the microphone segments; screen and camera are video.
             let media: AVMediaType = entry.kind == .microphone ? .audio : .video
-            let asset = AVURLAsset(url: package.appendingPathComponent(entry.relativePath))
+            let asset = AVURLAsset(url: try RecordingPackageStore.contained(entry.relativePath, in: package))
             guard let source = try await asset.loadTracks(withMediaType: media).first else { continue }
             let range = try await source.load(.timeRange)
             guard range.duration > .zero else { continue }

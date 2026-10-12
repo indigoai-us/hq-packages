@@ -452,10 +452,60 @@ struct VolumeFreeSpace: FreeSpaceProviding {
     }
 }
 
+/// The process that is writing a package while it records. Saved as a hidden file in the
+/// package so a headless command can tell a live recording from one whose app has gone.
+struct RecordingOwner: Codable, Equatable, Sendable {
+    var pid: Int32
+    var host: String
+    /// Process start time in microseconds since 1970, so a reused pid is not mistaken for the owner.
+    var startedAt: Int64
+
+    static func current() -> RecordingOwner {
+        let pid = getpid()
+        return RecordingOwner(pid: pid, host: SystemProcessLiveness.hostName(),
+                              startedAt: SystemProcessLiveness.startTime(of: pid) ?? 0)
+    }
+}
+
+/// Whether a package owner is still running, injectable for tests.
+protocol ProcessLiveness: Sendable {
+    /// True only when the owner is confirmed gone. Unknown counts as running.
+    func isGone(_ owner: RecordingOwner) -> Bool
+}
+
+struct SystemProcessLiveness: ProcessLiveness {
+    func isGone(_ owner: RecordingOwner) -> Bool {
+        // A process on another Mac cannot be checked from here.
+        guard owner.host == Self.hostName(), owner.pid > 0 else { return false }
+        if kill(owner.pid, 0) != 0 { return errno == ESRCH }
+        guard let started = Self.startTime(of: owner.pid) else { return false }
+        // The pid was reused by a later process.
+        return owner.startedAt != 0 && started != owner.startedAt
+    }
+
+    static func hostName() -> String {
+        var buffer = [CChar](repeating: 0, count: 256)
+        guard gethostname(&buffer, buffer.count) == 0 else { return "" }
+        return String(cString: buffer)
+    }
+
+    static func startTime(of pid: Int32) -> Int64? {
+        var info = proc_bsdinfo()
+        let size = Int32(MemoryLayout<proc_bsdinfo>.size)
+        guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size else { return nil }
+        return Int64(info.pbi_start_tvsec) * 1_000_000 + Int64(info.pbi_start_tvusec)
+    }
+}
+
 /// Reads and writes recording packages inside one company's recordings folder.
 struct RecordingPackageStore: Sendable {
     static let packageExtension = "hqrec"
     static let manifestName = "manifest.json"
+    /// Hidden, so vault sync leaves it out.
+    static let ownerName = ".owner.json"
+    /// A recording whose owner cannot be identified (no owner file, or another Mac) is only
+    /// recovered once nothing in the package has changed for this long.
+    static let unknownOwnerStaleSeconds: TimeInterval = 24 * 60 * 60
     static let exportsFolder = "exports"
     static let subdirectories = ["media/screen", "media/camera", "media/microphone",
                                  "edits", "transcripts", "screenshots", "drafts", exportsFolder]
@@ -466,6 +516,9 @@ struct RecordingPackageStore: Sendable {
     var minimumFreeBytes: Int64 = 2 * 1_024 * 1_024 * 1_024
     /// Test hook: runs after a temporary file is written and before it replaces the live file.
     var beforeCommit: (@Sendable (URL) throws -> Void)?
+    var liveness: any ProcessLiveness = SystemProcessLiveness()
+    /// The owner written into new packages.
+    var owner: RecordingOwner = .current()
 
     init(root: RecordingsRoot) { self.root = root }
 
@@ -501,6 +554,7 @@ struct RecordingPackageStore: Sendable {
         let manifest = RecordingManifest(id: id, title: title, company: root.company,
                                          vaultPath: "\(root.vaultPath)/\(name)",
                                          createdAt: SessionStatus.now(), state: .recording)
+        try writeJSON(owner, to: Self.ownerName, in: package)
         try writeJSON(RecordingTimeline(), to: "timeline.json", in: package)
         try writeManifest(manifest, in: package)
         return (package, manifest)
@@ -521,9 +575,40 @@ struct RecordingPackageStore: Sendable {
         return manifest
     }
 
+    /// The owner saved in a package, or nil for a package written before owners were saved.
+    func readOwner(in package: URL) throws -> RecordingOwner? {
+        let url = try url(for: Self.ownerName, in: package)
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        return try JSONDecoder().decode(RecordingOwner.self, from: Data(contentsOf: url))
+    }
+
+    /// True when the app that was recording the package is confirmed gone, so the package can
+    /// be recovered. A recording with no readable owner counts as gone only after nothing in it
+    /// has changed for `unknownOwnerStaleSeconds`.
+    func ownerIsGone(in package: URL, now: Date = Date()) -> Bool {
+        if let owner = try? readOwner(in: package), owner.host == SystemProcessLiveness.hostName() {
+            return liveness.isGone(owner)
+        }
+        guard let newest = newestChange(in: package) else { return false }
+        return now.timeIntervalSince(newest) > Self.unknownOwnerStaleSeconds
+    }
+
+    private func newestChange(in package: URL) -> Date? {
+        guard let enumerator = FileManager.default.enumerator(
+            at: package, includingPropertiesForKeys: [.contentModificationDateKey]) else { return nil }
+        var newest: Date?
+        for case let file as URL in enumerator {
+            guard let date = try? file.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+            else { return nil }
+            newest = max(newest ?? date, date)
+        }
+        return newest
+    }
+
     /// Opens a package for editing or recovery. A v1 `project.json` package is migrated
     /// into a v2 manifest without changing `project.json`. Segment files that are gone
-    /// are marked missing, and a recording that never finalized is marked interrupted.
+    /// are marked missing. A package still recording, paused or finalizing is refused while
+    /// its app is running, and marked interrupted once that app is confirmed gone.
     func open(_ package: URL) throws -> RecordingManifest {
         let package = try root.contain(package)
         let manifestURL = package.appendingPathComponent(Self.manifestName)
@@ -536,6 +621,12 @@ struct RecordingPackageStore: Sendable {
             changed = true
         } else {
             throw PackageError.notAPackage
+        }
+        // Segments, exports, transcripts, drafts and screenshots must all stay inside the package.
+        for path in manifest.allReferences { _ = try url(for: path, in: package) }
+        // Paused recordings keep the recording state. Nothing is changed while the owner may be live.
+        if manifest.state == .recording || manifest.state == .finalizing, !ownerIsGone(in: package) {
+            throw PackageError.stillRecording
         }
         for t in manifest.tracks.indices {
             for s in manifest.tracks[t].segments.indices {
@@ -628,11 +719,37 @@ struct RecordingPackageStore: Sendable {
         manifest = candidate
     }
 
-    /// Absolute URL for a package-relative path, refused when it would leave the recordings folder.
+    /// Absolute URL for a package-relative path, refused when it would leave the package or the
+    /// recordings folder.
     func url(for relativePath: String, in package: URL) throws -> URL {
         guard RecordingManifest.isSafeRelative(relativePath) else { throw PackageError.invalidPath }
         let package = try root.contain(package)
-        return try root.contain(package.appendingPathComponent(relativePath))
+        return try root.contain(Self.contained(relativePath, in: package))
+    }
+
+    /// Absolute URL for a package-relative path read from a manifest or timeline. Refuses an
+    /// absolute path, `..`, and any path that resolves outside the package once symlinks are
+    /// followed, so a tampered package cannot point playback or export at another file.
+    static func contained(_ relativePath: String, in package: URL) throws -> URL {
+        guard RecordingManifest.isSafeRelative(relativePath) else { throw PackageError.invalidPath }
+        let base: URL
+        let target: URL
+        do {
+            base = try RecordingsRoot.canonical(package)
+            target = try RecordingsRoot.canonical(package.appendingPathComponent(relativePath))
+        } catch { throw PackageError.invalidPath }
+        let parts = base.pathComponents
+        guard target.pathComponents.count > parts.count, Array(target.pathComponents.prefix(parts.count)) == parts
+        else { throw PackageError.invalidPath }
+        return target
+    }
+
+    /// Reads the package timeline. Every entry must point inside the package.
+    func readTimeline(of manifest: RecordingManifest, in package: URL) throws -> RecordingTimeline {
+        let timeline = try JSONDecoder().decode(RecordingTimeline.self, from: Data(
+            contentsOf: url(for: manifest.timeline, in: package)))
+        for entry in timeline.entries { _ = try url(for: entry.relativePath, in: package) }
+        return timeline
     }
 
     /// Creates a folder inside the package, refused when it would leave the recordings folder.

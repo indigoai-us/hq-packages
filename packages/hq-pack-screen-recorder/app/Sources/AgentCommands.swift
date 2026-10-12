@@ -311,7 +311,10 @@ enum AgentCommandsCLI {
         case PackageError.outsideCompanyRecordings, PackageError.invalidCompany:
             return "The package must be inside companies/<company>/recordings."
         case PackageError.notAPackage: return "That folder is not a recording package."
-        case PackageError.stillRecording: return "The recording has not finished saving yet."
+        case PackageError.stillRecording:
+            return "The recording is still being recorded or saved. Try again after it has saved."
+        case PackageError.invalidPath:
+            return "The recording package points at a file outside itself, so it wasn't opened."
         case PackageError.companyMismatch: return "The package belongs to another company."
         case PackageError.lowDiskSpace: return "There isn't enough free space. Free up some space and try again."
         default: return "The command failed: \(error)"
@@ -530,6 +533,8 @@ enum AgentCommandsCLI {
 
     static func describe(package: URL, store: RecordingPackageStore) async throws -> AgentDescription {
         let manifest = try store.open(package)
+        // Refuse a timeline that points outside the package before anything measures it.
+        _ = try store.readTimeline(of: manifest, in: package)
         var duration: Double?
         do {
             duration = try await TrimDocument.open(package, store: store).editor.duration

@@ -132,7 +132,7 @@ enum SyncMeasurement {
         var markers: [RecordingProject.Track.Kind: [Double]] = [:]
         for track in manifest.tracks {
             for segment in track.segments where segment.status != .missing {
-                let url = package.appendingPathComponent(segment.relativePath)
+                let url = try RecordingPackageStore.contained(segment.relativePath, in: package)
                 let asset = AVURLAsset(url: url)
                 let media = try await asset.load(.duration).seconds
                 let mediaDuration = media.isFinite ? media : nil

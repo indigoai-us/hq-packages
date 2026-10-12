@@ -148,7 +148,7 @@ struct VaultSyncFile: Codable, Equatable, Sendable {
 }
 
 struct VaultSyncReport: Codable, Equatable, Sendable {
-    enum Outcome: String, Codable, Sendable { case synced, failedRetry = "failed-retry" }
+    enum Outcome: String, Codable, Sendable { case synced, pending, failedRetry = "failed-retry" }
     var version = 1
     var checkedAt: String
     var company: String
@@ -173,6 +173,8 @@ struct VaultSyncReport: Codable, Equatable, Sendable {
         switch outcome {
         case .synced:
             "Synced to the company vault at \(destination). \(filesVerified) files, \(bytesVerified) bytes checked against this Mac. Storage only."
+        case .pending:
+            "Not synced yet: the recording changed while it was uploading. The originals are still on this Mac. \(retry ?? "")"
         case .failedRetry:
             "Not fully synced (\(failure ?? "unknown")). The originals are still on this Mac. \(retry ?? "")"
         }
@@ -180,44 +182,89 @@ struct VaultSyncReport: Codable, Equatable, Sendable {
 }
 
 enum VaultSyncWorkflow {
+    /// How many times a push is repeated when the package changes while it uploads.
+    static let maxAttempts = 3
+
     /// Pushes a saved package through `hq sync push`, then downloads every file back with
     /// `hq files cat` and compares it with the bytes hashed before the push. Records the result in
-    /// `manifest.sync`. Never deletes or changes a local media, draft or export file.
+    /// `manifest.sync`, then pushes and checks that manifest too, so the vault copy ends up byte
+    /// for byte the same as the package. If any file changes while it uploads, the push is
+    /// repeated up to `maxAttempts` times, then the package is left `pending` rather than marked
+    /// synced. Never deletes or changes a local media, draft or export file.
     static func sync(package: URL, store: RecordingPackageStore,
                      runner: any HQCommandRunning = HQCLIRunner()) async throws -> VaultSyncReport {
         let package = try store.root.contain(package)
         let manifest = try store.readManifest(in: package)
         guard manifest.state != .recording, manifest.state != .finalizing else { throw VaultSyncFailure.stillRecording }
         let destination = try destination(of: package, manifest: manifest, store: store)
-        let files = try snapshot(package: package)
+        let company = store.root.company
         let hqRoot = hqRoot(of: store)
 
-        var report = VaultSyncReport(checkedAt: SessionStatus.now(), company: store.root.company,
-                                     destination: destination, outcome: .synced, files: files,
-                                     filesVerified: 0, bytesVerified: 0)
-        do {
-            try await push(destination: destination, company: store.root.company, hqRoot: hqRoot, runner: runner)
-            try await confirmDestination(destination, company: store.root.company, hqRoot: hqRoot, runner: runner)
-            for file in files {
-                try await verify(file, destination: destination, company: store.root.company, hqRoot: hqRoot,
-                                 runner: runner)
-                report.filesVerified += 1
-                report.bytesVerified += file.bytes
-            }
-        } catch let failure as VaultSyncFailure {
-            report.outcome = .failedRetry
-            report.failure = failure.detail
-            report.retry = failure.retryAdvice
+        var report = VaultSyncReport(checkedAt: SessionStatus.now(), company: company, destination: destination,
+                                     outcome: .synced, files: [], filesVerified: 0, bytesVerified: 0)
+        // Takes the time as a value: `failed` holds `report` inout while it calls this, so reading
+        // `report` here would be a simultaneous access and trap at runtime.
+        func record(_ state: RecordingManifest.Sync.State, checkedAt: String, detail: String?) throws {
+            // Re-read so a review autosave that landed during the push is kept.
+            var latest = try store.readManifest(in: package)
+            latest.sync = .init(state: state, checkedAt: checkedAt, detail: detail)
+            try store.writeManifest(latest, in: package)
         }
-        report.checkedAt = SessionStatus.now()
 
-        // Re-read so a review autosave that landed during the push is kept.
-        var latest = try store.readManifest(in: package)
-        latest.sync = report.outcome == .synced
-            ? .init(state: .synced, checkedAt: report.checkedAt,
-                    detail: "verified \(report.filesVerified) files, \(report.bytesVerified) bytes")
-            : .init(state: .failedRetry, checkedAt: report.checkedAt, detail: report.failure)
-        try store.writeManifest(latest, in: package)
+        for _ in 0..<maxAttempts {
+            let files = try snapshot(package: package)
+            report.files = files
+            report.filesVerified = 0
+            report.bytesVerified = 0
+            do {
+                try await push(destination: destination, company: company, hqRoot: hqRoot, runner: runner)
+                try await confirmDestination(destination, company: company, hqRoot: hqRoot, runner: runner)
+                for file in files {
+                    try await verify(file, destination: destination, company: company, hqRoot: hqRoot, runner: runner)
+                    report.filesVerified += 1
+                    report.bytesVerified += file.bytes
+                }
+            } catch let failure as VaultSyncFailure {
+                return try failed(&report, failure, record: record)
+            }
+            // A file changed while it uploaded, so what was checked is not what is on disk.
+            guard try snapshot(package: package) == files else { continue }
+
+            report.checkedAt = SessionStatus.now()
+            try record(.synced, checkedAt: report.checkedAt, detail: "verified \(report.filesVerified) files, \(report.bytesVerified) bytes")
+
+            // The sync-state write changed manifest.json, so push it and check what changed.
+            let final = try snapshot(package: package)
+            let checked = Dictionary(uniqueKeysWithValues: files.map { ($0.path, $0.sha256) })
+            do {
+                try await push(destination: destination, company: company, hqRoot: hqRoot, runner: runner)
+                for file in final where checked[file.path] != file.sha256 {
+                    try await verify(file, destination: destination, company: company, hqRoot: hqRoot, runner: runner)
+                }
+            } catch let failure as VaultSyncFailure {
+                return try failed(&report, failure, record: record)
+            }
+            guard try snapshot(package: package) == final else { continue }
+            report.files = final
+            return report
+        }
+
+        report.outcome = .pending
+        report.failure = "the recording changed while it was uploading"
+        report.retry = "HQ sync will try again."
+        report.checkedAt = SessionStatus.now()
+        try record(.pending, checkedAt: report.checkedAt, detail: report.failure)
+        return report
+    }
+
+    private static func failed(_ report: inout VaultSyncReport, _ failure: VaultSyncFailure,
+                               record: (RecordingManifest.Sync.State, String, String?) throws -> Void) throws -> VaultSyncReport {
+        report.outcome = .failedRetry
+        report.failure = failure.detail
+        report.retry = failure.retryAdvice
+        let checkedAt = SessionStatus.now()
+        report.checkedAt = checkedAt
+        try record(.failedRetry, checkedAt, failure.detail)
         return report
     }
 
