@@ -214,8 +214,8 @@ done
 for w in $(awk '/^  workers:/{f=1;next} /^  [a-z]+:/{f=0} f && /- /{print $2}' "$PACK_DIR/package.yaml"); do
   check "worker $w has worker.yaml with matching id" 'grep -q "^  id: $w$" "$PACK_DIR/workers/$w/worker.yaml"'
 done
-check "package version is 0.4.16" 'grep -q "^version: 0.4.16$" "$PACK_DIR/package.yaml"'
-check "changelog has a 0.4.16 entry" 'grep -q "^## 0.4.16" "$PACK_DIR/CHANGELOG.md"'
+check "package version is 0.4.17" 'grep -q "^version: 0.4.17$" "$PACK_DIR/package.yaml"'
+check "changelog has a 0.4.17 entry" 'grep -q "^## 0.4.17" "$PACK_DIR/CHANGELOG.md"'
 check "setup skill learns tools by kind before the business topics" 'grep -q "learn their tools before asking about the business" "$WORKER/skills/setup.md"'
 check "worker caps buttons at four of one kind" 'grep -q "never answers mixed with actions" "$WORKER/worker.yaml"'
 check "requires client-service through requires.packs" 'grep -A2 "^  packs:" "$PACK_DIR/package.yaml" | grep -q "name: hq-pack-client-service"'
@@ -315,6 +315,9 @@ STUB
   check "a missing contract is a blocking question, not a stop" 'grep -q "No signed contract found" "$PACK_DIR/skills/client-onboarding/SKILL.md" && ! grep -q "The contract is required" "$PACK_DIR/skills/client-onboarding/SKILL.md" && ! grep -q "Do not create a brief until the contract is there" "$WORKER/skills/onboarding.md"'
   check "the onboarding button reads Kick off, never Onboard" 'grep -q "Kick off {Name}" "$WORKER/skills/clients.md" && grep -q "Kick off {Client}" "$WORKER/skills/setup.md"'
   check "the guide re-reads a workflow skill file each time it starts it" 'grep -q "never repeat an earlier answer from memory" "$WORKER/worker.yaml"'
+  check "onboarding offers to connect Drive or Notion when no docs tool is connected" 'grep -q "Connect Google Drive\",\"Connect Notion\"" "$WORKER/skills/onboarding.md" && grep -q "Check every kind of source" "$WORKER/skills/onboarding.md"'
+  check "a missing contract offers a stand-in and never removing the client" 'grep -q "Go ahead with that" "$WORKER/skills/onboarding.md" && grep -q "Never offer to remove the client" "$WORKER/skills/onboarding.md"'
+  check "Slack connect always shows the link and explains the owner-only limit" 'grep -q "Always put the link in your message too" "$WORKER/skills/setup.md" && grep -q "only lets a workspace owner" "$WORKER/skills/setup.md"'
   check "setup skill tries any tool before saying it cannot connect" 'grep -q "Any tool they use" "$WORKER/skills/setup.md" && grep -q "Never say a tool cannot be connected before trying those" "$WORKER/skills/setup.md"'
   check "HubSpot, Salesforce and Asana have a route, not a refusal" 'grep -q "name: HubSpot, domain: hubspot.com" "$PACK_DIR/package.yaml" && grep -q "name: Salesforce, domain: salesforce.com" "$PACK_DIR/package.yaml" && grep -q "name: Asana, domain: asana.com" "$PACK_DIR/package.yaml" && ! grep -q "comes in a later update" "$PACK_DIR/package.yaml"'
   check "package declares a meeting notetaker source and project tools that connect" 'grep -q "kind: meeting notetaker" "$PACK_DIR/package.yaml" && grep -q "domain: fireflies.ai" "$PACK_DIR/package.yaml" && grep -q "domain: linear.app" "$PACK_DIR/package.yaml"'

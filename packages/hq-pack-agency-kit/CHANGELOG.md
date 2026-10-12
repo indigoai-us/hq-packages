@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.17 (2026-10-12)
+
+- Onboarding checks every kind of source (docs, notetaker, CRM) and says
+  which it checked. With no docs tool connected it offers to connect Google
+  Drive or Notion right then. A missing signed contract offers a stand-in
+  ("Go ahead with that") and never ends the run or offers to remove the client.
+- Slack connect always puts the link in the chat, and says plainly when Slack
+  only lets a workspace owner connect HQ's app, with a workaround.
+
 ## 0.4.16 (2026-10-12)
 
 - The Agency Guide re-reads a workflow's skill file each time it starts the

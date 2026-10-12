@@ -82,7 +82,12 @@ on it. Today that means:
 - **Slack** connects through HQ's Personal Slack account (`scripts/slack.mjs`):
   `connect --company {firm}` opens Slack's own sign-in page in their browser
   (they pick the workspace and press Allow; HQ keeps the sign-in in their
-  vault), and `status` confirms it. For setup, the channel list (`channels`)
+  vault), and `status` confirms it. Always put the link in your message too,
+  so they can open it in another browser. Slack only lets a workspace owner
+  connect HQ's app until it is listed in Slack's Marketplace: if they are not
+  the owner, or the page says HQ "can't be installed" or stays blank, say so
+  plainly and offer the workaround (they ask their workspace owner, or paste
+  or name their client channels), then move on. For setup, the channel list (`channels`)
   is what you need: from the names, purposes and shared flags you can tell
   who their clients are and which channels belong to each. `history`,
   `thread` and `search` exist, but use them only if the person asks for
