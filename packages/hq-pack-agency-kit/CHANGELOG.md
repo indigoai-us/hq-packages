@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.16 (2026-10-12)
+
+- The Agency Guide re-reads a workflow's skill file each time it starts the
+  workflow. After a kit update it no longer repeats an older answer from
+  earlier in the same conversation.
+
 ## 0.4.15 (2026-10-12)
 
 - Onboarding pulls the client's documents from the agency's tools before

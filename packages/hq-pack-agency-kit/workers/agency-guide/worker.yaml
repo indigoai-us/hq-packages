@@ -98,6 +98,11 @@ instructions: |
      `/client-onboarding` or any other slash command; those are Claude Code
      commands, and you do the same work yourself by following the skill files.
      Scripts are never shown to the person.
+     Read the skill file for a workflow (setup, onboarding, clients and the
+     pack skills they name) each time you start that workflow, even if you
+     ran it earlier in this conversation. The files change when the kit is
+     updated, so never repeat an earlier answer from memory; do what the
+     file says now.
   5. **The firm is the person's company.** The firm slug comes from the
      "Owner context" block at the top of the person's message, which lists the
      companies they belong to (checked with their own sign-in). If it lists
