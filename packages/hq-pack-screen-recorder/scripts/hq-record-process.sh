@@ -332,12 +332,9 @@ cmd_build() {
   local force=false
   [ "${1:-}" = --force ] && force=true
   built=false
-  case "$(current_state)" in
-    awaiting-start|recording|finalizing)
-      if [ "$force" = true ] || ! build_is_current; then
-        fail already-open "HQ Capture is open. Stop it before rebuilding."
-      fi ;;
-  esac
+  if app_is_open && { [ "$force" = true ] || ! build_is_current; }; then
+    fail already-open "HQ Capture is open. Stop it before rebuilding."
+  fi
   build_app "$force"
   json ok true app "$app_path" built "$built"
 }
@@ -351,6 +348,19 @@ current_state() {
   case "$state" in
     closed|saved|failed) echo "$state" ;;
     *) if kill -0 "$pid" 2>/dev/null; then echo "$state"; else echo lost; fi ;;
+  esac
+}
+
+# True while HQ Capture's process is running: awaiting start, recording or finalizing, or
+# still showing a saved or failed recording in its window.
+app_is_open() {
+  case "$(current_state)" in
+    awaiting-start|recording|finalizing) return 0 ;;
+    saved|failed)
+      local pid
+      pid="$(python3 -I -c 'import json,sys;print(json.load(open(sys.argv[1])).get("pid", ""))' "$status_file" 2>/dev/null || true)"
+      [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null ;;
+    *) return 1 ;;
   esac
 }
 
@@ -408,12 +418,9 @@ cmd_start() {
   done
   resolve_company "$requested"
 
-  local state
-  state="$(current_state)"
-  case "$state" in
-    awaiting-start|recording|finalizing)
-      fail already-open "HQ Capture is already open (state: $state). Stop it before starting another." ;;
-  esac
+  if app_is_open; then
+    fail already-open "HQ Capture is already open (state: $(current_state)). Stop it before starting another."
+  fi
 
   mkdir -p "$destination" 2>/dev/null || fail destination-unwritable "Can't create $destination."
   [ -w "$destination" ] || fail destination-unwritable "Can't write to $destination."
@@ -477,20 +484,17 @@ print(json.dumps(out))' "$status_file" "$state" 2>/dev/null || true)"
 }
 
 cmd_stop() {
-  local state
   resolve_company ""
   if open_for_other_company; then
     fail other-company "HQ Capture is open for another company. Stop it from a session in that company."
   fi
-  state="$(current_state)"
-  case "$state" in
-    none|closed|saved|failed|lost) print_status; return ;;
-  esac
+  # A saved or failed app that is still showing its window is asked to quit too, and keeps
+  # its saved or failed status as it quits.
+  if ! app_is_open; then print_status; return; fi
   : >"$control_dir/stop.request"
   local i
   for i in $(seq 1 80); do
-    state="$(current_state)"
-    case "$state" in closed|saved|failed|lost) break ;; esac
+    app_is_open || break
     sleep 0.25
   done
   print_status
@@ -542,10 +546,11 @@ cmd_run() {
 
   # Build if needed. While HQ Capture is open, an existing build is used as is so the running
   # app is not replaced underneath it.
-  case "$(current_state)" in
-    awaiting-start|recording|finalizing) [ -x "$app_path/Contents/MacOS/$executable" ] || build_app ;;
-    *) build_app ;;
-  esac
+  if app_is_open; then
+    [ -x "$app_path/Contents/MacOS/$executable" ] || build_app
+  else
+    build_app
+  fi
 
   local extra=()
   [ "$mode" = sync-package ] && extra=(--hq-root "$root")

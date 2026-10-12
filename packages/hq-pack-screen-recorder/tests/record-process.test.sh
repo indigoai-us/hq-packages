@@ -69,12 +69,16 @@ def write(state, **extra):
     os.replace(tmp, os.path.join(ctl, "status.json"))
 write("awaiting-start")
 recording = False
-while not os.path.exists(os.path.join(ctl, "stop.request")):
+stop_request = os.path.join(ctl, "stop.request")
+user_stop = os.path.join(flags, "user.stop")
+while not os.path.exists(stop_request) and not (recording and os.path.exists(user_stop)):
     if not recording and os.path.exists(go):
         recording = True
         write("recording", paused=False, durationSeconds=1.5)
     time.sleep(0.05)
-os.remove(os.path.join(ctl, "stop.request"))
+by_user = not os.path.exists(stop_request)
+if not by_user:
+    os.remove(stop_request)
 if recording:
     pkg = os.path.join(args["--destination"], "demo.hqrec")
     os.makedirs(pkg, exist_ok=True)
@@ -90,9 +94,16 @@ if recording:
     rel = "companies/%s/recordings/demo.hqrec" % args["--company"]
     prompt = ("Continue my HQ Capture recording for %s at %s: show me what was recorded, then trim, "
               "place the camera, export the video and draft the step-by-step guide." % (args["--company"], pkg))
-    write("saved", recording=rel, durationSeconds=2.0, resumePrompt=prompt, reason="stop-requested", **extra)
+    write("saved", recording=rel, durationSeconds=2.0, resumePrompt=prompt,
+          reason="user-stopped" if by_user else "stop-requested", **extra)
 else:
     write("closed")
+# Stopped from the window (user.stop): like the real app, it stays open showing the saved
+# recording until a stop request asks it to quit, and quitting keeps the saved status.
+if by_user:
+    while not os.path.exists(stop_request):
+        time.sleep(0.05)
+    os.remove(stop_request)
 PY
 echo $! >"$(dirname "$app")/stub.pid"
 EOF
@@ -234,6 +245,43 @@ check "stop closes it" 'j["state"]=="closed"' "$(run stop)"
 check "build reports a current build without rebuilding" 'j["ok"] and j["built"] is False' "$(run build)"
 check "build --force rebuilds" 'j["ok"] and j["built"] is True' "$(run build --force)"
 expect "build --force ran the compiler" "$(builds)" "3"
+
+# A saved or failed app whose process is still running counts as open until it quits.
+alive() { kill -0 "$(cat "$tmp/apps/stub.pid")" 2>/dev/null && echo yes || echo no; }
+check "start opens for a recording stopped in the window" 'j["state"]=="awaiting-start"' "$(run start)"
+touch "$tmp/go.record"; sleep 0.5; touch "$tmp/user.stop"
+check "a recording stopped in the window is saved" 'j["state"]=="saved" and j["reason"]=="user-stopped"' "$(last "$(run wait --timeout 5)")"
+expect "the app stays open after saving from the window" "$(alive)" "yes"
+check "start refuses while the saved app is still open" 'j["ok"] is False and j["error"]=="already-open"' "$(run start)"
+expect "start refuses a saved app that is still open with exit 1" "$(code start)" "1"
+check "build refuses to replace a saved app that is still open" 'j["error"]=="already-open"' "$(run build --force)"
+check "status still reports the saved recording" 'j["state"]=="saved" and j["resumePrompt"].startswith("Continue my HQ Capture")' "$(run status)"
+check "stop closes the saved app and keeps the saved status" \
+  'j["state"]=="saved" and j["recording"]=="companies/acme/recordings/demo.hqrec" and j["resumePrompt"].startswith("Continue my HQ Capture")' "$(run stop)"
+expect "the saved app has quit after stop" "$(alive)" "no"
+rm -f "$tmp/go.record" "$tmp/user.stop"
+check "start works after stop closes the saved app" 'j["state"]=="awaiting-start"' "$(run start)"
+check "stop closes the new app" 'j["state"]=="closed"' "$(run stop)"
+# A failed app that is still open is treated the same way.
+check "start opens for a failed recording" 'j["state"]=="awaiting-start"' "$(run start)"
+touch "$tmp/go.record"; sleep 0.5; touch "$tmp/user.stop"
+run wait --timeout 5 >/dev/null
+python3 -I -c 'import json,sys; p=sys.argv[1]; s=json.load(open(p)); s["state"]="failed"; json.dump(s, open(p, "w"))' "$HQ_RECORDER_HOME/active/status.json"
+check "start refuses while the failed app is still open" 'j["error"]=="already-open"' "$(run start)"
+check "stop closes the failed app and keeps the failed status" 'j["state"]=="failed"' "$(run stop)"
+expect "the failed app has quit after stop" "$(alive)" "no"
+rm -f "$tmp/go.record" "$tmp/user.stop"
+# A saved app whose process is gone keeps today's behavior: status says saved and start opens.
+check "start opens for a recording whose app then dies" 'j["state"]=="awaiting-start"' "$(run start)"
+touch "$tmp/go.record"; sleep 0.5; touch "$tmp/user.stop"
+run wait --timeout 5 >/dev/null
+kill -9 "$(cat "$tmp/apps/stub.pid")"; sleep 0.2
+rm -f "$tmp/go.record" "$tmp/user.stop"
+check "a saved app that quit is still reported as saved" 'j["state"]=="saved"' "$(run status)"
+check "stop on a saved app that quit is a no-op" 'j["state"]=="saved"' "$(run stop)"
+check "start proceeds after a saved app quit" 'j["state"]=="awaiting-start"' "$(run start)"
+check "stop closes it again" 'j["state"]=="closed"' "$(run stop)"
+expect "none of this rebuilt the app" "$(builds)" "3"
 
 # run: argument, company and package checks.
 pkg="$hq/companies/acme/recordings/demo.hqrec"

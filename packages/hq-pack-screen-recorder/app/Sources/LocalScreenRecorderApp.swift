@@ -105,6 +105,8 @@ final class SessionController {
     private var microphoneTrack: MicrophoneTrack?
     private var captureOrigin: Double?
     private var stopTask: Task<Void, Never>?
+    /// True once the last recording ended and its saved or failed status was published.
+    private var finished = false
     /// The shared timeline of the current recording. Pausing it pauses every track together.
     private(set) var clock: RecordingClock?
     private(set) var isPaused = false
@@ -187,8 +189,7 @@ final class SessionController {
                     self.publish(.recording)
                 }
                 if channel.stopRequested {
-                    try? channel.clearStopRequest()
-                    await self.finishRecording(reason: "stop-requested")
+                    await self.handleStopRequest()
                     NSApplication.shared.terminate(nil)
                     return
                 }
@@ -311,6 +312,13 @@ final class SessionController {
         return RecordingPackageStore(root: root).hasRoomToRecord() ? nil : "low-disk-space"
     }
 
+    /// HQ asked the helper to stop: finalizes any recording and publishes saved or failed.
+    /// The caller then quits the app, and close() keeps that outcome in status.json.
+    func handleStopRequest() async {
+        if let channel { try? channel.clearStopRequest() }
+        await finishRecording(reason: "stop-requested")
+    }
+
     /// Finalizes an active recording before the helper closes. Saved files stay in the package on failure.
     private func finishRecording(reason: String) async {
         if isCapturing { return await stopRecording(reason: reason) }
@@ -321,7 +329,7 @@ final class SessionController {
             await report(recording, reason: nil)
         } catch {
             NSLog("HQ recorder: finalize failed: \(error)")
-            publish(.failed, reason: "finalize-failed")
+            finish(.failed, reason: "finalize-failed")
         }
     }
 
@@ -335,6 +343,7 @@ final class SessionController {
         guard canStart, let context, let screen = selection.screen, var recording else { return }
         isCapturing = true
         isPaused = false
+        finished = false
         stoppedHost = nil
         savedPackage = nil
         resumePrompt = nil
@@ -533,7 +542,7 @@ final class SessionController {
         evaluate()
         CaptureHiding.restore(NSApplication.shared.windows)
         stopNote = Self.stopNote(reason)
-        guard let recording else { return publish(.failed, reason: reason) }
+        guard let recording else { return finish(.failed, reason: reason) }
         if let clock {
             // A recording stopped while paused ends at the pause; the open pause is closed so
             // the manifest records how long it lasted.
@@ -557,13 +566,13 @@ final class SessionController {
                 _ = try await recording.stop(reason: reason, originHostTime: captureOrigin)
             } catch {
                 NSLog("HQ recorder: finalize failed: \(error)")
-                return publish(.failed, reason: "finalize-failed")
+                return finish(.failed, reason: "finalize-failed")
             }
         }
         if reason == "capture-start-failed" {
             // Nothing usable was recorded; the package stays on disk with its stop reason.
             await refreshSources()
-            return publish(.failed, reason: reason)
+            return finish(.failed, reason: reason)
         }
         await report(recording, reason: Self.userStops.contains(reason) ? nil : reason)
     }
@@ -653,7 +662,7 @@ final class SessionController {
             case .screen: stopNote = issue.message
             }
         }
-        publish(manifest.state == .saved ? .saved : .failed, reason: reason)
+        finish(manifest.state == .saved ? .saved : .failed, reason: reason)
     }
 
     /// The line shown after a save, above the resume prompt.
@@ -686,7 +695,16 @@ final class SessionController {
         observers.forEach(NotificationCenter.default.removeObserver)
         observers = []
         guard state != .closed else { return }
+        // A recording that ended as saved or failed keeps that status, with its package path and
+        // resume prompt, so HQ still sees the outcome after the app quits.
+        if finished, state == .saved || state == .failed { return }
         publish(.closed, reason: problem)
+    }
+
+    /// Publishes how a recording ended. close() leaves this status in place.
+    private func finish(_ outcome: SessionState, reason: String?) {
+        finished = true
+        publish(outcome, reason: reason)
     }
 
     /// Screenshot staging only: shows the saved state with a sample prompt. Nothing is recorded
