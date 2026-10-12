@@ -20,11 +20,28 @@ slug and sends you here.
 ## Before step 1
 
 1. Read every file in `companies/{firm}/knowledge/agency-playbook/`.
-2. List `companies/{firm}/clients/{slug}/onboarding/inputs/`. If it is empty,
-   stop and say which documents to drop in and where (contract required;
-   proposal, call notes and exports optional), as a Files location: "Files,
-   under Clients, {Client}, onboarding, inputs". Offer ["I've added them"]. Do
-   not create a brief until the contract is there.
+2. Gather the documents from their tools first, as SKILL.md Step 0 says.
+   Check every kind of source, not the first one that answers:
+   - docs (Google Drive, Notion, Dropbox, an e-signature tool) for the
+     contract, SOW and proposal;
+   - the notetaker for the full transcript of every call with the client,
+     and the docs tools too: many notetakers sync transcripts into a Drive
+     or Notion folder (search for the client's name with "transcript",
+     "call" or "meeting");
+   - the CRM for the deal, its contacts and any attached files.
+   If no docs tool is connected, say so and offer to connect Google Drive or
+   Notion (or whatever they keep documents in) right then, with
+   ["Connect Google Drive","Connect Notion","I'll add the files"]; contracts
+   usually live there. Then show what you found, saying which sources you
+   checked and where each document came from, and offer
+   ["Use these","Not the right ones"]. Ask only for what you could not find,
+   as a Files location ("Files, under Clients, {Client}, onboarding, inputs")
+   or pasted text.
+   A missing signed contract never ends the run. Say which signed document
+   you will treat as the agreement instead (a signed proposal or order form,
+   else the CRM deal), offer ["Go ahead with that","I'll find the contract"],
+   and on "Go ahead" start step 1 with "No signed contract found" as a
+   blocking open question in the brief. Never offer to remove the client.
 3. If `onboarding/status.md` exists, this is a re-run. Read its Steps table
    and resume at the first step that is not approved. Never rewrite an
    approved file.
@@ -108,6 +125,15 @@ in Files.
    not start until this gate is approved.
 
 ## After the kickoff package is approved
+
+First, the kickoff page (SKILL.md, "Kickoff page"): build it in the agency's
+look from `brand.md`, then send one message: one line on what the page shows,
+where it is ("Files, under Clients, {Client}, onboarding, kickoff-page"), and
+that publishing puts it on the web behind a password, with
+["Publish it","Keep it in Files"]. On "Publish it", deploy it with HQ's deploy
+skill (password access), and reply with the link and the password for the
+account lead to share. Never send it to the client yourself. If there is no
+`brand.md` yet, ask for their website first, in one line, and note its look.
 
 Do steps 5 and 6 from SKILL.md without a gate:
 

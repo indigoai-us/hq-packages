@@ -1,9 +1,9 @@
 name: hq-pack-agency-kit
-version: 0.3.0
+version: 0.4.19
 publisher: '@indigoai-us'
 access: public
 displayName: AI Builders Agency Kit
-description: 'The AI Builders agency operating kit for HQ. Builds on hq-pack-client-service. Ships the Agency Guide, a personal bot that sets up the agency and runs client onboarding from the HQ app chat, with tap-to-answer questions and approval gates. The same flows are available as Claude Code commands: /agency-setup writes the agency playbook (profile, onboarding checklist, audit criteria, scope rules, example briefs and delivery plans) into the firm company. /client-workspace gives every client the same workspace layout, as a folder inside the agency or as the client''s own HQ company. /client-onboarding runs the onboarding system on a signed client: scope review, missing inputs, account audit and a kickoff package, each with sources and a human approval point, then feeds what the strategist caught back into the playbook. /practice-client loads a pre-filled practice client with planted gaps so students can try the whole flow on day one. Also ships /scope-check, /weekly-update and /proposal. AI Builders brand tokens in brand/.'
+description: 'The AI Builders agency operating kit for HQ. Builds on hq-pack-client-service. Ships the Agency Guide, a personal bot that sets up the agency (an agency brain, a brain per current client, and connected tools, learned from the agency''s apps) and runs client onboarding from the HQ app chat, with tap-to-answer questions and approval gates. The same flows are available as Claude Code commands: /agency-setup writes the agency playbook (profile, onboarding checklist, audit criteria, scope rules, example briefs and delivery plans) into the firm company. /client-workspace gives every client the same workspace layout, as a folder inside the agency or as the client''s own HQ company. /client-onboarding runs the onboarding system on a signed client: scope review, missing inputs, account audit and a kickoff package, each with sources and a human approval point, then feeds what the strategist caught back into the playbook. /practice-client loads a pre-filled practice client with planted gaps so students can try the whole flow on day one. Also ships /scope-check, /weekly-update and /proposal. AI Builders brand tokens in brand/.'
 keywords:
   - hq
   - hq-pack
@@ -15,8 +15,9 @@ capabilities:
   - fs
 requires:
   hqCore: '>=16.0.0-beta.50'
-  packages:
-    - hq-pack-client-service
+  packs:
+    - name: hq-pack-client-service
+      version: '>=0.2.0'
 contributes:
   workers:
     - agency-guide
@@ -38,37 +39,43 @@ contributes:
   scripts: []
 initialization:
   entrypoint: /agency-setup
-  welcome: 'Welcome to the AI Builders Agency Kit. In the HQ app, your Agency Guide bot sets up the agency and walks you through a practice client in chat. In Claude Code, run /agency-setup to set up your agency, then /practice-client to try the onboarding system on a sample client. When a real client signs: /new-client, /client-workspace, /client-onboarding.'
+  welcome: 'Welcome to the AI Builders Agency Kit. In the HQ app, your Agency Guide bot sets up your agency in chat: a brain for your agency, one for each current client, and your tools connected, learned from your apps. In Claude Code, run /agency-setup to set up your agency, then /practice-client to try the onboarding system on a sample client. When a real client signs: /new-client, /client-workspace, /client-onboarding.'
 setup:
   bot:
     name: agency-guide              # bot handle; also the worker id under contributes.workers
     display_name: Agency Guide
-    intro: "Hi, I'm your Agency Guide. I'll set up your agency in HQ and show you how it works on a practice client. Six quick questions."
+    intro: "Hi, I'm your Agency Guide. I'll get your agency set up in HQ in a few minutes: a brain for your agency and a workspace for each of your clients. If you connect your apps, I'll use them to find your clients and fill in the details, so you type as little as possible."
   takeover_setup: true              # if HQ's setup bot has not finished, this bot finishes it first
   questions:
     - id: agency_name
       text: "What's your agency called, as clients see it?"
+      goal: "The name clients know them by."
       default_from: company_display_name   # optional; the bot proposes it and asks to confirm
       options: []                          # free text only
       skippable: false
     - id: services
       text: "What do you sell?"
+      goal: "What they sell and, per service, what the client actually gets, enough to tell in-scope work from out-of-scope work."
       options: ["Paid ads", "SEO and content", "Web and design", "Automations and AI", "Something else"]
       skippable: true
     - id: ideal_client
       text: "Who do you sell to?"
+      goal: "Who they do their best work for, sharp enough to spot a bad-fit lead: industry, size or spend, stage."
       options: ["Ecommerce brands", "B2B SaaS", "Local businesses", "Professional services"]
       skippable: true
     - id: pricing
       text: "How do you charge?"
+      goal: "How a price is built, well enough to check a proposal or scope change against it: the model, what it varies with, typical ranges or minimums."
       options: ["Monthly retainer", "Per project", "Performance based", "A mix"]
       skippable: true
     - id: tools
       text: "Which tools do you run? CRM, project management, reporting, ad platforms."
+      goal: "The CRM, project management, reporting and ad platforms they use (not how to connect them)."
       options: ["HubSpot and Asana", "Notion and Slack", "Google Sheets and email", "Not sure yet"]
       skippable: true
     - id: voice
       text: "How do you sound with clients, in a few words?"
+      goal: "How they sound with clients, specific enough to write in."
       options: ["Direct and plain", "Warm and friendly", "Formal and precise"]
       skippable: true
   run:
@@ -80,8 +87,57 @@ setup:
       pricing: --pricing
       tools: --tools
       voice: --voice
-    then:                                 # run after `script`, in order, same --firm
-      - scripts/practice-client.sh --agency-name {agency_name}
+  sources:                              # kinds of tools: asked about (typed answer), connected, then read (with a yes)
+    - kind: email
+      read: "the last 30 emails you sent to clients"
+      informs: [services, ideal_client, pricing, voice]
+      options:
+        - {name: Gmail, available: false, note: "they can forward or paste a few client emails, or drop exported ones into the chat"}
+        - {name: Outlook, available: false, note: "they can forward or paste a few client emails, or drop exported ones into the chat"}
+    - kind: CRM
+      read: "your recent deals and the companies on them"
+      informs: [ideal_client, services, pricing]
+      options:
+        - {name: HubSpot, domain: hubspot.com, note: "if the sign-in does not work, a HubSpot private app access key with read scopes does"}
+        - {name: Salesforce, domain: salesforce.com, note: "if the sign-in does not work, offer a report export instead"}
+        - {name: Pipedrive, domain: pipedrive.com}
+        - {name: Close, domain: close.com}
+    - kind: team chat
+      read: "your channel list, to find your clients and their channels"
+      informs: [ideal_client]
+      options:
+        - {name: Slack, tool: scripts/slack.mjs, connect: "connect --company <company slug>", status: status, usage: "channels (enough for setup) | history <channelId> | thread <channelId> <threadTs> | search <query>"}
+        - {name: Teams, available: false, note: "they can name their client channels or paste the list"}
+    - kind: docs and SOPs
+      read: "your SOPs, process docs, proposals and rate cards"
+      informs: [services, pricing, voice]
+      options:
+        - {name: Google Drive, tool: scripts/drive.mjs, connect: connect, status: status, usage: "search <terms> | recent | read <fileId>"}
+        - {name: Notion, domain: notion.so}
+        - {name: Dropbox, domain: dropbox.com}
+    - kind: project management
+      read: "your active client projects and what is in flight for each client"
+      informs: [services]
+      options:
+        - {name: ClickUp, domain: clickup.com}
+        - {name: Monday, domain: monday.com}
+        - {name: Linear, domain: linear.app}
+        - {name: Asana, domain: asana.com, note: "it signs in with an Asana personal access token, entered through an HQ secrets link"}
+    - kind: meeting notetaker
+      read: "your recent client meetings: who you met, what was agreed and what is next"
+      informs: [services, voice]
+      options:
+        - {name: Fireflies, domain: fireflies.ai}
+        - {name: Fathom, domain: fathom.ai}
+        - {name: Granola, domain: granola.ai}
+        - {name: Otter, domain: otter.ai}
+        - {name: Read AI, domain: read.ai}
+        - {name: Grain, domain: grain.com}
+  documents:                            # asked for once, early; the bot reads them and asks less
+    - a rate card or pricing sheet
+    - a recent proposal or statement of work
+    - a case study
+    - an SOP or process doc
   done:
-    message: "Your agency playbook is written. You'll find it in Files under Knowledge, Agency Playbook. Northwind Labs just signed with you."
-    suggestion: "Run Northwind's onboarding"
+    message: "Your agency is set up in HQ. Here's what I set up:"
+    suggestion: "Show me a client workspace"

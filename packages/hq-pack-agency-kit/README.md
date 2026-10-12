@@ -38,7 +38,7 @@ commands. Both write the same files.
    them).
 4. **Northwind Labs signs with you.** A made-up client with eight planted
    problems lands in Files, under Clients, Northwind Labs (practice). Tap
-   "Run Northwind's onboarding" and the Guide produces the client brief, the
+   "Run the practice onboarding" and the Guide produces the client brief, the
    intake request, the account audit and the kickoff package one at a time.
    Each step ends with a two-line summary, where the file is in Files, and
    Approve / Needs changes. Approve records your name and the date in the

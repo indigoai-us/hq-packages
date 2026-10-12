@@ -56,10 +56,31 @@ Never copy firm-internal notes into the client's company (policy
 3. Resolve `{slug}`. If the user did not name a client, list
    `companies/{firm}/clients/`, skipping `_`-prefixed folders, and ask. If the
    client has no engagement folder, point at `/new-client`.
-4. List `onboarding/inputs/`. If it is empty, ask the user to add the contract,
-   proposal and call transcript or notes, plus any exports. Accept pasted text
-   and save it there. The contract is required. Everything else is optional, and
-   each missing document becomes a gap in Step 2.
+4. Gather the client's documents from their tools before asking for any.
+   If `onboarding/inputs/` is missing documents, look for them yourself, by the
+   client's name, domain and contacts (from `client-profile.md`):
+   - **Contract and proposal** (contract, MSA, SOW, agreement, order form,
+     proposal, quote): in the docs tools they have connected (Google Drive,
+     Notion, Dropbox and the like), in an e-signature tool if one is
+     connected, and attached to the client's deal in the CRM.
+   - **Call transcript**: the full transcript of each sales or kickoff call
+     with the client, not only its summary: in their notetaker, or in the
+     Drive or Notion folder their notetaker syncs transcripts into.
+   - **Deal facts**: the deal in the CRM (amount, stage, dates, contacts).
+   - **Exports**: anything their connected tools hold for the audit.
+   `hq integrations list --usable --json --company {firm}` shows what is
+   connected. If no docs tool is connected, offer to connect one first (any
+   tool works; see how tools connect in setup), then search it.
+   Save each document as markdown in `onboarding/inputs/` with a header naming
+   its source (tool, title, link or id, date fetched). Never copy a credential.
+   Then show the person what you found and where, in one message, and let them
+   confirm or correct it. Ask them only for what you could not find; they can
+   still drop files in or paste text.
+   If no signed contract can be found anywhere, do not stop: use the best
+   signed document there is (a signed proposal or order form, else the CRM
+   deal) as the stand-in, and make "No signed contract found" a blocking open
+   question in the brief. Everything else that is missing becomes a gap in
+   Step 2.
 5. Read every playbook file. They are the standard this client is checked against.
 6. If `onboarding/status.md` exists, this is a re-run. Read its **Steps** table
    and resume at the first step that is not approved. Never overwrite an
@@ -202,6 +223,30 @@ Nothing in this package is a client commitment yet.
 **Approval gate 4.** The strategist reviews the package. Only after their
 approval does anything go to the client, and sending is still a separate,
 explicitly approved action.
+
+### Kickoff page → `kickoff-page/index.html`
+
+After gate 4, turn the approved package into a page the account lead can walk
+the client through at kickoff, in the agency's own look.
+
+- **Look.** Follow `knowledge/agency-playbook/brand.md`: the agency's logo,
+  colors, fonts and style, so the page looks like it came from their own
+  website. No brand file: use a clean, neutral page and say so.
+- **Content, client-facing only.** The client's goals in their words, what
+  the agency will do first (the approved tests and fixes, each with why), the
+  timeline and order, what the agency needs from the client (from the intake
+  request), the decisions the client has to make, and who approves what. Leave
+  out everything internal: margins and pricing debates, internal names and
+  notes, the strategist's corrections, and scope disputes worded for the
+  agency. Out-of-scope requests appear only as "Options we can quote".
+- **Build.** One self-contained `index.html` (inline CSS, no external scripts;
+  the logo may load from the agency's own site), readable on a phone, in
+  `companies/{firm}/clients/{slug}/onboarding/kickoff-page/`.
+- **Publish only on approval.** Publishing puts the page on the web, so ask
+  first. On approval, deploy the folder with HQ's deploy skill
+  (`.claude/skills/deploy/SKILL.md` in the HQ folder), behind a password by
+  default, and give the link and password to the account lead. Nothing is
+  sent to the client; the account lead shares it.
 
 ## Step 5: Update the engagement record
 

@@ -66,34 +66,23 @@ Also: "we signed {name}", "{name} just signed", "add a client".
 
 6. Close with where things go and what to do next, as Files locations:
 
-   > {Name} is set up. Drop their contract, proposal and any call notes or exports into Files, under Clients, {Name}, onboarding, inputs. Then tell me "onboard {Name}".
+   > {Name} is set up. When you kick them off, I'll pull their contract, proposal and call notes from your tools; anything I can't find, you can drop into Files, under Clients, {Name}, onboarding, inputs.
 
    ```hq-block
-   {"v":1,"blocks":[{"kind":"suggestions","items":["Onboard {Name}","Weekly update for {Name}"]}]}
+   {"v":1,"blocks":[{"kind":"suggestions","items":["Kick off {Name}","Weekly update for {Name}"]}]}
    ```
 
 Record the new client in your memory folder (name, slug, mode, date).
 
 ## "onboard {client}"
 
-Also: "run onboarding on {client}", "{client} is ready".
+Also: "kick off {client}", "run onboarding on {client}", "{client} is ready".
 
 1. Resolve the slug.
-2. List `companies/{firm}/clients/{slug}/onboarding/inputs/`, ignoring
-   `README.md`. If there is nothing else, say exactly which files to drop in
-   and where, and wait:
-
-   > I don't have {Name}'s documents yet. Drop the signed contract (required), plus the proposal, call notes or transcript, and any exports you have, into Files, under Clients, {Name}, onboarding, inputs. Tell me when they're there.
-
-   ```hq-block
-   {"v":1,"blocks":[{"kind":"suggestions","items":["They're there now"]}]}
-   ```
-
-   Do not create a brief, a status file or anything else until the contract is
-   there. If documents are there but no contract, say the contract is the one
-   you cannot work without and wait the same way.
-3. With the contract present, run `skills/onboarding.md` for `{slug}`. Same
-   four steps, same gates, same files.
+2. Run `skills/onboarding.md` for `{slug}`. It gathers the documents from
+   their tools first (contract and proposal from docs tools and the CRM, full
+   call transcripts from the notetaker), shows what it found, and asks only
+   for what it could not find. Same four steps, same gates, same files.
 
 ## "is this in scope: {request}"
 
@@ -106,8 +95,9 @@ context) for how to decide and what to read. In the chat:
    ask which one. If the request text is missing, ask for it in one line.
 2. Decide: in scope, out of scope, or unclear, with the clause. If there is no
    contract in `onboarding/inputs/` and no commercials in `engagement.md`,
-   say you cannot judge scope without the contract, name the inputs location,
-   and stop.
+   look for the contract in their tools first (as onboarding does) and save
+   it there. Only if it is nowhere, say you cannot judge scope without it,
+   name the inputs location, and stop.
 3. Write the draft to
    `companies/{firm}/clients/{slug}/reports/{YYYY-MM-DD}-scope-check.md`:
    the request, the verdict with the clause, and the reply or change-request

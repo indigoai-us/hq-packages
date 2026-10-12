@@ -118,7 +118,7 @@ qids="$(setup_block | awk '/^  questions:/{f=1;next} f && /^  [a-z]/{f=0} f && $
 check "setup has six questions" '[ "$(printf "%s\n" "$qids" | wc -l | tr -d " ")" = 6 ]'
 check "question ids are unique" '[ "$(printf "%s\n" "$qids" | sort | uniq -d | wc -l | tr -d " ")" = 0 ]'
 check "question ids match ^[a-z_]+$" '! printf "%s\n" "$qids" | grep -qvE "^[a-z_]+$"'
-check "first question is agency_name with default_from company_display_name" 'setup_block | awk "/^  questions:/{f=1;next} f" | grep -m1 -A2 "id: agency_name" | grep -q "default_from: company_display_name"'
+check "first question is agency_name with default_from company_display_name" 'setup_block | awk "/^  questions:/{f=1;next} f" | grep -m1 -A4 "id: agency_name" | grep -q "default_from: company_display_name"'
 check "every question has an options list" '[ "$(setup_block | awk "/^  questions:/{f=1;next} f && /^  [a-z]/{f=0} f" | grep -c "^      options: \[")" = 6 ]'
 check "agency_name is not skippable" 'setup_block | awk "/id: agency_name/{f=1} f && /skippable/{print; exit}" | grep -q "skippable: false"'
 run_script="$(setup_block | awk '/^  run:/{f=1;next} f && /^  [a-z]/{f=0} f && $1=="script:"{print $2; exit}')"
@@ -130,18 +130,25 @@ for k in $arg_keys; do
   check "run.args.$k flag $flag is accepted by agency-setup.sh" 'grep -q -- "    $flag)" "$SETUP"'
 done
 then_entries="$(setup_block | awk '/^  run:/{f=1;next} f && /^  [a-z]/{f=0} f' | awk '/^    then:/{t=1;next} t && /^    [a-z]/{t=0} t && /^      - /{sub(/^      - /,""); print}')"
-check "run.then has one entry" '[ "$(printf "%s\n" "$then_entries" | wc -l | tr -d " ")" = 1 ]'
-while IFS= read -r entry; do
-  first="${entry%% *}"
-  check "then entry $first exists in the pack" '[ -f "$PACK_DIR/$first" ]'
-  check "then entry placeholders are question ids" '! printf "%s" "$entry" | grep -oE "\{[a-z_]+\}" | tr -d "{}" | grep -qvxF -f <(printf "%s\n" "$qids")'
-done <<< "$then_entries"
-check "done.message names the Files location of the playbook" 'setup_block | grep -q "^    message: .*Files under Knowledge, Agency Playbook"'
-NW_SUGGESTION=$'Run Northwind\'s onboarding'
-check "done.suggestion is the Northwind suggestion" 'setup_block | grep -qF -- "    suggestion: \"$NW_SUGGESTION\""'
-check "done.suggestion is offered by the setup skill" 'grep -qF -- "$NW_SUGGESTION" "$WORKER/skills/setup.md"'
-check "setup skill asks every question with its id" 'for q in $qids; do grep -q "\*\*[0-9]\. $q\*\*" "$WORKER/skills/setup.md" || exit 1; done'
-check "setup skill runs onboard-firm.sh with every slot empty" 'grep -q -- "--empty crm --empty billing --empty agreements --empty portal --empty transcripts" "$WORKER/skills/setup.md"'
+check "run.then is empty: the guide runs the later stages itself" '[ -z "$then_entries" ]'
+check "setup skill is a brief: no scripted message lines and no preset buttons" '! grep -q "^ *> " "$WORKER/skills/setup.md" && ! grep -q "hq-block" "$WORKER/skills/setup.md" && grep -q "This is a brief, not a script" "$WORKER/skills/setup.md"'
+check "worker uses buttons only for real choices" 'grep -q "Buttons are for real choices" "$WORKER/worker.yaml" && ! grep -q "Every question and every approval ends with a suggestions block" "$WORKER/worker.yaml"'
+NW_SUGGESTION='Show me a client workspace'
+check "done.suggestion offers a client workspace" 'setup_block | grep -qF -- "    suggestion: \"$NW_SUGGESTION\""'
+check "setup skill ends with a summary of what was set up and a next step" 'grep -q "Tell them what you set up" "$WORKER/skills/setup.md" && grep -q "Lead with the client workspaces" "$WORKER/skills/setup.md" && grep -q "run a workflow on one client" "$WORKER/skills/setup.md"'
+check "setup skill says connections only serve a fast setup of the client workspaces" 'grep -q "Connecting their tools is only a way to get there faster" "$WORKER/skills/setup.md" && grep -q "Speed matters more than completeness" "$WORKER/skills/setup.md"'
+check "setup skill writes every topic into the playbook" '( for f in --name --services --ideal-client --pricing --tools --voice; do grep -q -- "$f" "$WORKER/skills/setup.md" || exit 1; done )'
+check "practice-setup.sh runs onboard-firm.sh with every slot empty" 'grep -q -- "--empty crm --empty billing --empty agreements --empty portal --empty transcripts" "$PACK_DIR/scripts/practice-setup.sh"'
+check "setup skill imports clients, links tools, and keeps the practice client as a fallback" 'grep -q "scripts/import-clients.sh" "$WORKER/skills/setup.md" && grep -q "scripts/firm-setup.sh" "$WORKER/skills/setup.md" && grep -q "Only if they have no clients at all" "$WORKER/skills/setup.md" && grep -q "scripts/practice-setup.sh" "$WORKER/skills/setup.md"'
+check "every setup question has a goal" '[ "$(grep -c "^      goal: " "$PACK_DIR/package.yaml")" = 6 ]'
+check "setup skill states how Drive and Slack connect, and the package declares their tools" 'grep -q "scripts/drive.mjs" "$WORKER/skills/setup.md" && grep -q "scripts/slack.mjs" "$WORKER/skills/setup.md" && grep -q "tool: scripts/drive.mjs" "$PACK_DIR/package.yaml" && grep -q "tool: scripts/slack.mjs" "$PACK_DIR/package.yaml" && grep -q -- "--link-only" "$WORKER/skills/setup.md" && ! grep -q -- "--no-browser" "$WORKER/skills/setup.md"'
+check "setup lists email, CRM, team chat, docs and project management as sources" '( for k in email CRM "team chat" "docs and SOPs" "project management"; do grep -A60 "^  sources:" "$PACK_DIR/package.yaml" | grep -q "kind: $k$" || exit 1; done )'
+check "setup skill asks before reading and reads read-only" 'grep -q "Ask before you read" "$WORKER/skills/setup.md" && grep -q "read-only" "$WORKER/skills/setup.md"'
+check "the practice offer says Northwind is made up" 'grep -q "made-up client" "$WORKER/skills/setup.md"'
+check "firm-setup.sh never forces slots empty" '! grep -q -- "--empty" "$PACK_DIR/scripts/firm-setup.sh" && grep -q -- "--no-auto" "$PACK_DIR/scripts/firm-setup.sh"'
+check "setup skill writes SOPs into the agency brain" 'grep -q "agency-playbook/sops/" "$WORKER/skills/setup.md"'
+check "setup lists documents to ask for" 'grep -A1 "^  documents:" "$PACK_DIR/package.yaml" | grep -q "rate card"'
+check "setup skill follows up on vague answers like variable pricing" 'grep -q "variable pricing" "$WORKER/skills/setup.md" && grep -q "needs a follow-up" "$WORKER/skills/setup.md"'
 
 # --- agency-guide worker ------------------------------------------------
 for f in worker.yaml skills/setup.md skills/onboarding.md skills/clients.md; do
@@ -166,7 +173,7 @@ check "worker files contain no em dashes" '! grep -rq -- "—" "$WORKER"'
 check "onboarding skill gates with Approve and Needs changes" 'grep -q "\[\"Approve\",\"Needs changes\"\]" "$WORKER/skills/onboarding.md"'
 check "onboarding skill records approver and date" 'grep -q "approved_by: {Display Name}" "$WORKER/skills/onboarding.md"'
 check "onboarding skill runs the grader" 'grep -q "scripts/grade-practice.sh --firm" "$WORKER/skills/onboarding.md"'
-check "clients skill covers the four triggers" 'for t in "new client" "onboard {client}" "is this in scope" "weekly update for"; do grep -q "\"$t" "$WORKER/skills/clients.md" || exit 1; done'
+check "clients skill covers the four triggers" '( for t in "new client" "onboard {client}" "is this in scope" "weekly update for"; do grep -q "\"$t" "$WORKER/skills/clients.md" || exit 1; done )'
 check "clients skill runs new-client.sh engagement --local-only then client-workspace.sh" 'grep -q "new-client.sh engagement" "$WORKER/skills/clients.md" && grep -q -- "--local-only" "$WORKER/skills/clients.md" && grep -q "client-workspace.sh" "$WORKER/skills/clients.md"'
 check "clients skill saves approved drafts under reports/" 'grep -q "reports/{YYYY-MM-DD}-scope-check.md" "$WORKER/skills/clients.md" && grep -q "reports/{YYYY-MM-DD}-weekly-update.md" "$WORKER/skills/clients.md"'
 check "worker skills never send" 'grep -qi "never send" "$WORKER/skills/clients.md" && grep -q "Nothing is sent to anyone" "$WORKER/skills/onboarding.md"'
@@ -207,8 +214,12 @@ done
 for w in $(awk '/^  workers:/{f=1;next} /^  [a-z]+:/{f=0} f && /- /{print $2}' "$PACK_DIR/package.yaml"); do
   check "worker $w has worker.yaml with matching id" 'grep -q "^  id: $w$" "$PACK_DIR/workers/$w/worker.yaml"'
 done
-check "package version is 0.3.0" 'grep -q "^version: 0.3.0$" "$PACK_DIR/package.yaml"'
-check "changelog has a 0.3.0 entry" 'grep -q "^## 0.3.0" "$PACK_DIR/CHANGELOG.md"'
+check "package version is 0.4.19" 'grep -q "^version: 0.4.19$" "$PACK_DIR/package.yaml"'
+check "changelog has a 0.4.19 entry" 'grep -q "^## 0.4.19" "$PACK_DIR/CHANGELOG.md"'
+check "setup skill learns tools by kind before the business topics" 'grep -q "learn their tools before asking about the business" "$WORKER/skills/setup.md"'
+check "worker caps buttons at four of one kind" 'grep -q "never answers mixed with actions" "$WORKER/worker.yaml"'
+check "requires client-service through requires.packs" 'grep -A2 "^  packs:" "$PACK_DIR/package.yaml" | grep -q "name: hq-pack-client-service"'
+check "no legacy requires.packages list" '! grep -q "^  packages:" "$PACK_DIR/package.yaml"'
 check "readme describes the chat door" 'grep -q "Agency Guide" "$PACK_DIR/README.md"'
 check "package.yaml parses as YAML when python3 has yaml" 'python3 -c "import yaml,sys; yaml.safe_load(open(sys.argv[1]))" "$PACK_DIR/package.yaml" 2>/dev/null || ! python3 -c "import yaml" 2>/dev/null'
 check "worker.yaml parses as YAML when python3 has yaml" 'python3 -c "import yaml,sys; yaml.safe_load(open(sys.argv[1]))" "$WORKER/worker.yaml" 2>/dev/null || ! python3 -c "import yaml" 2>/dev/null'
@@ -225,6 +236,100 @@ check "free trial is 46% of spend" '[ "$trial_share" = 46 ]'
 check "11 enterprise opportunities in total" '[ "$ent_opps" = 11 ]'
 check "7 enterprise opportunities from enterprise search and LinkedIn" '[ "$ent_opps_target" = 7 ]'
 check "free trial produced 0 enterprise opportunities" '[ "$trial_ent" = 0 ]'
+
+# --- import-clients (needs the sibling client-service pack) ----------------
+CS_PACK="$PACK_DIR/../hq-pack-client-service"
+if [ -d "$CS_PACK/scripts" ]; then
+  R3="$(new_root)"
+  mkdir -p "$R3/core/packages"
+  ln -s "$PACK_DIR" "$R3/core/packages/hq-pack-agency-kit"
+  ln -s "$(cd "$CS_PACK" && pwd)" "$R3/core/packages/hq-pack-client-service"
+  printf 'brightside\tBrightside Coffee\n# a comment\n\nnorth-peak\tNorth Peak Outdoors\n' > "$R3/clients.tsv"
+  imp1="$(cd "$R3" && bash "$PACK_DIR/scripts/import-clients.sh" --firm acme-agency --file clients.tsv --agency-name "Acme" --root "$R3" 2>&1)"
+  check "import-clients creates every client home" 'printf "%s" "$imp1" | grep -q "created=2 existing=0 failed=0"'
+  check "each imported client has a record and a workspace" '[ -f "$R3/companies/acme-agency/clients/brightside/engagement.md" ] && [ -f "$R3/companies/acme-agency/clients/north-peak/client-profile.md" ]'
+  imp2="$(cd "$R3" && bash "$PACK_DIR/scripts/import-clients.sh" --firm acme-agency --file clients.tsv --root "$R3" 2>&1)"
+  check "import-clients is safe to re-run" 'printf "%s" "$imp2" | grep -q "created=0 existing=2 failed=0"'
+  printf 'Bad Slug\tNope\n' > "$R3/bad.tsv"
+  check "import-clients refuses a bad slug" '! (cd "$R3" && bash "$PACK_DIR/scripts/import-clients.sh" --firm acme-agency --file bad.tsv --root "$R3" >/dev/null 2>&1)'
+  rm -rf "$R3"
+else
+  ok "import-clients (skipped: client-service pack not next to this one)"
+fi
+
+# --- drive.mjs (read-only Google Drive) ------------------------------------
+DRIVE="$PACK_DIR/scripts/drive.mjs"
+if command -v node >/dev/null 2>&1; then
+  check "drive.mjs parses" 'node --check "$DRIVE"'
+  check "drive.mjs only sends GET requests to Drive" '! grep -E -q "method: *\"(POST|PUT|PATCH|DELETE)\"" "$DRIVE" && [ "$(grep -c "method: \"GET\"" "$DRIVE")" -ge 1 ]'
+  check "drive.mjs refuses an unknown command" '! node "$DRIVE" nope >/dev/null 2>&1'
+  check "drive.mjs refuses a malformed file id" '! node "$DRIVE" read "../x" >/dev/null 2>&1'
+  SLACKJS="$PACK_DIR/scripts/slack.mjs"
+  check "slack.mjs parses" 'node --check "$SLACKJS"'
+  check "slack.mjs allows only Slack read methods" 'node -e "const s=require(\"fs\").readFileSync(process.argv[1],\"utf8\");const m=s.match(/READ_METHODS = new Set\(\[([^\]]*)\]/)[1];const bad=/(post|update|delete|join|invite|kick|react|archive|set|create|rename|leave|open|close|upload|add|remove)/i;process.exit(m.split(\",\").some(x=>bad.test(x))?1:0)" "$SLACKJS"'
+  check "slack.mjs refuses an unknown command" '! node "$SLACKJS" nope >/dev/null 2>&1'
+  SLACKSTUB=$(mktemp -d)
+  cat > "$SLACKSTUB/hq" <<'STUB'
+#!/bin/bash
+echo "$*" > "$(dirname "$0")/args"
+if [ "$1 $2 $3" = "integrations slack connect" ]; then
+  case " $* " in *" --open "*) o=true;; *) o=false;; esac
+  echo "{\"url\":\"https://slack.com/oauth/v2/authorize?state=x\",\"opened\":$o}"
+  exit 0
+fi
+exit 1
+STUB
+  chmod +x "$SLACKSTUB/hq"
+  check "slack.mjs connect opens Slack's own sign-in via hq integrations slack connect" '( out=$(PATH="$SLACKSTUB:$PATH" node "$SLACKJS" connect --company acme) && grep -q "integrations slack connect --json --company acme --open" "$SLACKSTUB/args" && echo "$out" | grep -q "\"started\": true" && echo "$out" | grep -q "slack.com/oauth" )'
+  check "slack.mjs connect-link prints Slack's link without opening it" '( out=$(PATH="$SLACKSTUB:$PATH" node "$SLACKJS" connect-link --company acme) && ! grep -q -- "--open" "$SLACKSTUB/args" && echo "$out" | grep -q "\"started\": false" )'
+  check "package declares Slack connect with the company" 'grep -q "connect: \"connect --company <company slug>\"" "$PACK_DIR/package.yaml"'
+  check "setup skill connects Slack with slack.mjs and finds clients from the channel list" 'grep -q "scripts/slack.mjs" "$WORKER/skills/setup.md" && grep -q "connect --company {firm}" "$WORKER/skills/setup.md" && grep -q "the channel list is enough" "$WORKER/skills/setup.md" && grep -q "shared: true" "$WORKER/skills/setup.md" && ! grep -q "search first" "$WORKER/skills/setup.md"'
+  check "setup skill records each client's Slack channels in its home" 'grep -q "Slack channels in its \`access-and-assets.md\`" "$WORKER/skills/setup.md"'
+  cat > "$SLACKSTUB/hq" <<'STUB'
+#!/bin/bash
+case "$*" in
+  "secrets --personal list") echo "SLACK_PERSONAL/T1/U1/USER_TOKEN  personal";;
+  "secrets --personal get --reveal SLACK_PERSONAL/T1/U1/USER_TOKEN") echo "Value: xoxp-test";;
+  *) exit 1;;
+esac
+STUB
+  cat > "$SLACKSTUB/fetch.mjs" <<'STUB'
+// Two pages, like Slack: the first page carries a cursor for the rest.
+globalThis.fetch = async (url, init) => {
+  if (!String(url).endsWith("/conversations.list")) return new Response(JSON.stringify({ ok: false, error: "unexpected" }));
+  if (!new URLSearchParams(String(init.body)).get("cursor")) {
+    return new Response(JSON.stringify({ ok: true, response_metadata: { next_cursor: "page2" }, channels: [
+      { id: "C1", name: "acme-ext", is_private: false, is_member: true, num_members: 6, is_ext_shared: true, purpose: { value: "Working with Acme" } },
+      { id: "C2", name: "general", is_private: false, is_member: true, num_members: 9, is_ext_shared: false },
+    ] }));
+  }
+  return new Response(JSON.stringify({ ok: true, response_metadata: { next_cursor: "" }, channels: [
+    { id: "C3", name: "hqx-globex", is_private: false, is_member: true, num_members: 4, is_ext_shared: true },
+  ] }));
+};
+STUB
+  check "slack.mjs channels flags channels shared with another organization and carries purposes" '( out=$(PATH="$SLACKSTUB:$PATH" node --import "$SLACKSTUB/fetch.mjs" "$SLACKJS" channels) && echo "$out" | node -e "let t=\"\";process.stdin.on(\"data\",d=>t+=d).on(\"end\",()=>{const c=JSON.parse(t).channels;process.exit(c[0].shared===true&&c[0].purpose===\"Working with Acme\"&&c[1].shared===false?0:1)})" )'
+  check "slack.mjs channels follows every page of the channel list" '( out=$(PATH="$SLACKSTUB:$PATH" node --import "$SLACKSTUB/fetch.mjs" "$SLACKJS" channels) && echo "$out" | node -e "let t=\"\";process.stdin.on(\"data\",d=>t+=d).on(\"end\",()=>{const d=JSON.parse(t);process.exit(d.total===3&&d.complete===true&&d.channels[2].name===\"hqx-globex\"?0:1)})" )'
+  check "setup skill uses the whole channel list and the client naming pattern" 'grep -q "check \`complete\` is true" "$WORKER/skills/setup.md" && grep -q "naming pattern the agency uses" "$WORKER/skills/setup.md"'
+  check "onboarding gathers the client documents from their tools before asking" 'grep -q "Gather the client.s documents from their tools before asking for any" "$PACK_DIR/skills/client-onboarding/SKILL.md" && grep -q "Gather the documents from their tools first" "$WORKER/skills/onboarding.md" && grep -q "It gathers the documents from" "$WORKER/skills/clients.md"'
+  check "a missing contract is a blocking question, not a stop" 'grep -q "No signed contract found" "$PACK_DIR/skills/client-onboarding/SKILL.md" && ! grep -q "The contract is required" "$PACK_DIR/skills/client-onboarding/SKILL.md" && ! grep -q "Do not create a brief until the contract is there" "$WORKER/skills/onboarding.md"'
+  check "the onboarding button reads Kick off, never Onboard" 'grep -q "Kick off {Name}" "$WORKER/skills/clients.md" && grep -q "Kick off {Client}" "$WORKER/skills/setup.md"'
+  check "the guide re-reads a workflow skill file each time it starts it" 'grep -q "never repeat an earlier answer from memory" "$WORKER/worker.yaml"'
+  check "onboarding offers to connect Drive or Notion when no docs tool is connected" 'grep -q "Connect Google Drive\",\"Connect Notion\"" "$WORKER/skills/onboarding.md" && grep -q "Check every kind of source" "$WORKER/skills/onboarding.md"'
+  check "a missing contract offers a stand-in and never removing the client" 'grep -q "Go ahead with that" "$WORKER/skills/onboarding.md" && grep -q "Never offer to remove the client" "$WORKER/skills/onboarding.md"'
+  check "Slack connect always shows the link and explains the owner-only limit" 'grep -q "Always put the link in your message too" "$WORKER/skills/setup.md" && grep -q "only lets a workspace owner" "$WORKER/skills/setup.md"'
+  check "setup asks for the website and records its look in brand.md" 'grep -q "Also ask for their website" "$WORKER/skills/setup.md" && grep -q "knowledge/agency-playbook/brand.md" "$WORKER/skills/setup.md"'
+  check "the approved kickoff package becomes a branded page, published only on approval behind a password" 'grep -q "### Kickoff page" "$PACK_DIR/skills/client-onboarding/SKILL.md" && grep -q "Publish only on approval" "$PACK_DIR/skills/client-onboarding/SKILL.md" && grep -q "behind a password by" "$PACK_DIR/skills/client-onboarding/SKILL.md" && grep -q "\"Publish it\",\"Keep it in Files\"" "$WORKER/skills/onboarding.md"'
+  check "the kickoff page leaves internal notes out" 'grep -q "Leave" "$PACK_DIR/skills/client-onboarding/SKILL.md" && grep -q "out everything internal" "$PACK_DIR/skills/client-onboarding/SKILL.md"'
+  check "drive.mjs reads Word, RTF and ODT files with textutil" 'grep -q "OFFICE_TYPES" "$PACK_DIR/scripts/drive.mjs" && grep -q "/usr/bin/textutil" "$PACK_DIR/scripts/drive.mjs"'
+  check "setup skill tries any tool before saying it cannot connect" 'grep -q "Any tool they use" "$WORKER/skills/setup.md" && grep -q "Never say a tool cannot be connected before trying those" "$WORKER/skills/setup.md"'
+  check "HubSpot, Salesforce and Asana have a route, not a refusal" 'grep -q "name: HubSpot, domain: hubspot.com" "$PACK_DIR/package.yaml" && grep -q "name: Salesforce, domain: salesforce.com" "$PACK_DIR/package.yaml" && grep -q "name: Asana, domain: asana.com" "$PACK_DIR/package.yaml" && ! grep -q "comes in a later update" "$PACK_DIR/package.yaml"'
+  check "package declares a meeting notetaker source and project tools that connect" 'grep -q "kind: meeting notetaker" "$PACK_DIR/package.yaml" && grep -q "domain: fireflies.ai" "$PACK_DIR/package.yaml" && grep -q "domain: linear.app" "$PACK_DIR/package.yaml"'
+  check "setup skill always offers the notetaker and project tool and fills client homes from them" 'grep -q "always ask which ones" "$WORKER/skills/setup.md" && grep -q "recent meetings to its" "$WORKER/skills/setup.md" && grep -q "notetaker is the \`transcripts\` slot" "$WORKER/skills/setup.md"'
+  check "setup skill connects Drive with drive.mjs and reads with it" 'grep -q "scripts/drive.mjs" "$WORKER/skills/setup.md" && grep -q "Google sign-in page" "$WORKER/skills/setup.md" && grep -q "and .read. read Drive" "$WORKER/skills/setup.md"'
+else
+  ok "drive.mjs (skipped: node not installed)"
+fi
 
 rm -rf "$R" "$R2"
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
