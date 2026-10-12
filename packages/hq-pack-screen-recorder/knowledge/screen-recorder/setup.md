@@ -120,10 +120,15 @@ The agent's editing commands (`hq-record-process.sh run <mode> <recording>`)
 run the same app headless, without a window. They work only on recordings
 inside the session company's `recordings/` folder.
 
-## Offline check
+## What stays on the Mac
 
 Capture, transcription, text recognition and guide drafting run on the Mac.
-To check that a build makes no network requests, open Activity Monitor →
-Network, select HQ Capture, and watch "Sent Bytes" while recording with Wi-Fi
-off after Apple's on-device model assets are prepared. Only `sync-package`
-uploads, and only when you agree.
+The HQ session agent you are talking to reads the transcript, the guide
+drafts and any still it shows you, so it can edit by conversation. Stills are
+opened on your screen; the agent reads one only when you ask it to check it.
+Nothing is uploaded to any other service or shared with another company.
+
+To check that HQ Capture itself makes no network requests, open Activity
+Monitor → Network, select HQ Capture, and watch "Sent Bytes" while recording
+with Wi-Fi off after Apple's on-device model assets are prepared. Only
+`sync-package` uploads, to the company vault, and only when you ask.

@@ -17,6 +17,25 @@
   the same company and destination checks. `status` and `wait` return `issue`
   and the recording's `mediaIssues`.
 - Removed the 0.2.0 known gaps: middle cuts and guide review are available.
+- Privacy wording in the skill, `package.yaml` and setup guide now says what
+  happens: capture, transcription and guide drafting run on the Mac; the
+  session agent reads the transcript, guide drafts and stills it shows;
+  nothing goes to another service or company; vault sync only on request.
+  Stills are shown with `open` and read into the session only when the user
+  asks for a placement check.
+- `status`, `wait` and `stop` check the session's company. When HQ Capture is
+  open for another company, `status` and `wait` return only
+  `busy-other-company` and `stop` refuses.
+- `start --company` is refused when the session has no company.
+- `run frame --out` refuses a path inside another company's folder.
+- Concurrent builds share a lock, and a lock left by a dead process is
+  cleared. The build hash now covers the compile recipe and handles paths
+  with spaces.
+- `doctor` works without python3 and uses the same developer directory as the
+  build.
+- The skill tells the agent to run `wait` when `stop` returns `finalizing`.
+- The package is private.
+- Tests: checks that could not fail now fail the suite.
 
 ## 0.2.0
 

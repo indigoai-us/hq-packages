@@ -6,7 +6,8 @@ description: >-
   by talking to the agent. Use when the user says /record-process, "record my
   screen", "record how I do this", "make an SOP from a recording", "screen
   record this process", or pastes a "Continue my HQ Capture recording for"
-  prompt. Capture, editing and drafting stay on the Mac.
+  prompt. Capture, transcription and guide drafting run on the Mac; the
+  session agent reads the transcript, drafts and stills it shows.
 ---
 
 # /record-process: HQ Capture
@@ -39,9 +40,14 @@ refusals print `{"ok":false,"error":...,"message":...}` and exit 1 (3 for
 `run` modes: `describe`, `transcribe`, `edit`, `export-video`, `frame`,
 `extract-screen-evidence`, `draft-sop`, `review-sop`, `list-frames`,
 `approve-sop`, `export-sop`, `sync-package`. The
-launcher refuses a package outside the bound company's `recordings/` folder
-and refuses `--company`, `--destination`, `--hq-root` or a second mode in the
-arguments. App exit codes: 0 done, 1 refused (read the message), 2 usage or
+launcher refuses a package outside the bound company's `recordings/` folder,
+a `frame --out` path inside another company's folder, and `--company`,
+`--destination`, `--hq-root` or a second mode in the arguments.
+
+When HQ Capture is open for another company, `status` and `wait` return only
+`{"ok":true,"state":"busy-other-company"}` and `stop` refuses. Tell the user
+HQ Capture is in use in another company's session and must be finished there
+first. Do not try to find out which company. App exit codes: 0 done, 1 refused (read the message), 2 usage or
 error, 130 cancelled.
 
 ## 1. Confirm the company
@@ -84,7 +90,9 @@ seconds) and exits:
   that were saved stay in the company's `recordings/` folder.
 
 If the user asks you to stop, run `stop`; a recording in progress is finished
-and saved (`reason: "stop-requested"`).
+and saved (`reason: "stop-requested"`). If `stop` returns state `finalizing`,
+the app is still writing the files: run `wait` and handle its result as
+above.
 
 **Media issues.** When the saved status (from `wait` or `status`) has an
 `issue` or a `mediaIssues` list, a recorded file came out shorter or longer
@@ -184,8 +192,10 @@ bash "$R" run frame "<package>" --edited-at 30 --out /tmp/hq-capture-preview-2.p
 edited video, after the trim and cuts, which is easier for checking around a
 cut.
 
-Show the stills to the user (delegate image viewing to a sub-agent when the
-session already holds several images) and ask whether to export. Then:
+Show the stills to the user on their screen with `open "<png>"` and ask
+whether to export. Do not read the images into the session yourself unless
+the user asks you to check the camera placement; then delegate the image
+viewing to a sub-agent when the session already holds several images. Then:
 
 ```bash
 bash "$R" run export-video "<package>" --json
@@ -244,9 +254,10 @@ bash "$R" run list-frames "<package>" --step 2 --json
 ```
 
 Each frame has `image` (a path inside the package), `timelineSeconds`,
-`width` and `height`. Show two or three candidates to the user (delegate
-image viewing to a sub-agent when the session already holds several
-images), then pass the chosen `image` to `--screenshot`. No frames means
+`width` and `height`. Show two or three candidates to the user on their
+screen with `open "<image>"`, then pass the chosen `image` to `--screenshot`.
+Read a frame into the session only when the user asks you to check it, and
+delegate that to a sub-agent when the session already holds several images. No frames means
 `extract-screen-evidence` has not run or found nothing.
 
 ### Approve and export
@@ -304,7 +315,12 @@ recording in this company. On success, continue at step 4 with `package`.
 - One HQ Capture window at a time.
 - The company is fixed for the life of a recording. Changing the session's
   company does not move an open recording.
-- Recordings, transcripts, stills and drafts stay on the Mac and in the
-  company vault. Do not send them to a cloud model or another company.
+- Capture, transcription and guide drafting run on the Mac. You, the session
+  agent, read the transcript, the guide drafts and any still you are asked to
+  check, so the user can edit by conversation; tell the user this if they ask
+  where their recording goes. Do not upload recordings, transcripts, stills
+  or drafts to any other service, and never share them with another company.
+  Copy a recording to the company vault with `sync-package` only when the
+  user asks.
 - Never edit files inside a `.hqrec` package directly; use `run`.
 - Generated guides and skills are drafts until the user approves them.

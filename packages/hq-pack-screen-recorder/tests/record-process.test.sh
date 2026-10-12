@@ -128,13 +128,21 @@ session ""
 check "no company in session is refused" 'j["ok"] is False and j["error"]=="no-company"' "$(run start)"
 session "personal"
 check "personal session is refused" 'j["error"]=="no-company"' "$(run start)"
-check "unknown company is refused" 'j["error"]=="unknown-company"' "$(run start --company ghost)"
-check "invalid company name is refused" 'j["error"]=="bad-company"' "$(run start --company ../acme)"
 check "--company without a value is refused" 'j["error"]=="bad-argument"' "$(run start --company)"
-[ ! -e "$HQ_RECORDER_HOME/active/status.json" ] && pass=$((pass + 1))
+check "--company with no bound company is refused" 'j["ok"] is False and j["error"]=="no-company"' "$(run start --company acme)"
+expect "--company with no bound company exits 1" "$(code start --company acme)" "1"
+check "status with no bound company is refused" 'j["error"]=="no-company"' "$(run status)"
+check "wait with no bound company is refused" 'j["error"]=="no-company"' "$(run wait --timeout 1)"
+check "stop with no bound company is refused" 'j["error"]=="no-company"' "$(run stop)"
+session "ghost"
+check "unknown company is refused" 'j["error"]=="unknown-company"' "$(run start)"
+session "../acme"
+check "invalid company name is refused" 'j["error"]=="bad-company"' "$(run start)"
+[ ! -e "$HQ_RECORDER_HOME/active/status.json" ] && pass=$((pass + 1)) \
+  || { echo "FAIL: a refused start should not create status.json" >&2; exit 1; }
+session "acme"
 check "status before any start is none" 'j["state"]=="none"' "$(run status)"
 check "wait before any start is refused" 'j["error"]=="not-open"' "$(run wait --timeout 1)"
-session "acme"
 check "a company other than the bound one is refused" 'j["error"]=="company-mismatch"' "$(run start --company other)"
 expect "nothing was built for a refused start" "$(builds)" "0"
 
@@ -157,6 +165,18 @@ grep -qx -- "--hq-control" <<<"$argv" && grep -qx -- "--company" <<<"$argv" && g
 
 check "a second start is refused while open" 'j["error"]=="already-open"' "$(run start)"
 check "status reports the open app" 'j["state"]=="awaiting-start" and j["company"]=="acme"' "$(run status)"
+
+# Another company's session sees only that HQ Capture is busy, and can't stop it.
+session "other"
+check "status in another company is redacted" 'j=={"ok": True, "state": "busy-other-company"}' "$(run status)"
+out="$(run wait --timeout 1)"
+check "wait in another company prints only the redacted status" 'j=={"ok": True, "state": "busy-other-company"}' "$out"
+expect "wait in another company prints one line" "$(wc -l <<<"$out" | tr -d ' ')" "1"
+expect "wait in another company exits 0" "$(code wait --timeout 1)" "0"
+check "stop in another company is refused" 'j["ok"] is False and j["error"]=="other-company"' "$(run stop)"
+expect "stop in another company exits 1" "$(code stop)" "1"
+session "acme"
+check "the app is still open after another company's stop" 'j["state"]=="awaiting-start" and j["company"]=="acme"' "$(run status)"
 
 # wait: argument checks, timeout while open, state changes, save.
 check "wait rejects a bad timeout" 'j["error"]=="bad-argument"' "$(run wait --timeout abc)"
@@ -255,6 +275,27 @@ expect "run passes a refusal exit code through" "$(STUB_EXIT=1 code run export-s
 expect "run passes a cancel exit code through" "$(STUB_EXIT=130 code run export-video "$pkg")" "130"
 expect "run exits 0 when the app succeeds" "$(code run frame "$pkg" --at 1 --out /tmp/x.png)" "0"
 
+# run frame: --out may not land in another company's folder.
+check "run frame refuses --out in another company" 'j["error"]=="out-outside-company"' \
+  "$(run run frame "$pkg" --at 1 --out "$hq/companies/other/x.png")"
+expect "run frame --out refusals exit 3" "$(code run frame "$pkg" --at 1 --out "$hq/companies/other/x.png")" "3"
+check "run frame refuses --out= in another company" 'j["error"]=="out-outside-company"' \
+  "$(run run frame "$pkg" --at 1 --out="$hq/companies/other/x.png")"
+check "run frame refuses --out that climbs into another company" 'j["error"]=="out-outside-company"' \
+  "$(run run frame "$pkg" --at 1 --out "$hq/companies/acme/../other/x.png")"
+check "run frame refuses --out loose in companies/" 'j["error"]=="out-outside-company"' \
+  "$(run run frame "$pkg" --at 1 --out "$hq/companies/x.png")"
+check "run frame refuses a relative --out into another company" 'j["error"]=="out-outside-company"' \
+  "$(cd "$hq/companies/acme" && bash "$R" run frame "$pkg" --at 1 --out ../other/x.png 2>/dev/null || true)"
+out="$(run run frame "$pkg" --at 1 --out "$hq/companies/acme/recordings/still.png")"
+check "run frame allows --out in the bound company" 'j["argv"][0]=="--frame" and j["argv"][-1].endswith("/companies/acme/recordings/still.png")' "$out"
+out="$(run run frame "$pkg" --at 1 --out "${TMPDIR:-/tmp}/still.png")"
+check "run frame allows --out in TMPDIR" 'j["argv"][0]=="--frame"' "$out"
+out="$(run run frame "$pkg" --at 1 --out /tmp/still.png)"
+check "run frame allows --out in /tmp" 'j["argv"][-1]=="/tmp/still.png"' "$out"
+out="$(run run edit "$pkg" --out 4.5 --json)"
+check "run edit's --out seconds are not treated as a path" 'j["argv"][0]=="--edit"' "$out"
+
 # run: the guide review, approval and frame list modes pass through like the others.
 out="$(run run review-sop "$pkg" --move 3 1 --reword 2 "Click Save" --drop 4 --json)"
 check "run review-sop passes every change to the app" \
@@ -304,11 +345,50 @@ check "wait returns on a lost app" 'j["state"]=="lost"' "$(last "$(run wait --ti
 check "start is allowed after a lost app" 'j["state"]=="awaiting-start"' "$(run start)"
 check "stop closes" 'j["state"]=="closed"' "$(run stop)"
 
+# Build lock: a build waits for a live lock holder and clears a lock left by a dead one.
+mkdir -p "$HQ_RECORDER_HOME/.build.lock"
+sleep 60 & holder=$!
+echo "$holder" >"$HQ_RECORDER_HOME/.build.lock/pid"
+check "build refuses while another build holds the lock" 'j["ok"] is False and j["error"]=="build-busy"' \
+  "$(HQ_RECORDER_LOCK_WAIT=1 run build --force)"
+expect "nothing was built while the lock was held" "$(builds)" "3"
+kill "$holder" 2>/dev/null || true; wait "$holder" 2>/dev/null || true
+check "build clears a lock left by a process that exited" 'j["ok"] and j["built"] is True' "$(HQ_RECORDER_LOCK_WAIT=1 run build --force)"
+[ ! -e "$HQ_RECORDER_HOME/.build.lock" ] && pass=$((pass + 1)) \
+  || { echo "FAIL: build should release its lock" >&2; exit 1; }
+
+# The build recipe is part of the rebuild hash.
+sed -i.bak 's/-swift-version 6 -O/-swift-version 6 -Osize/' "$R" && rm -f "$R.bak"
+check "a build recipe change makes build rebuild" 'j["ok"] and j["built"] is True' "$(run build)"
+check "an unchanged recipe does not rebuild" 'j["ok"] and j["built"] is False' "$(run build)"
+
 doc="$(bash "$R" doctor 2>/dev/null || true)"
 if [ "$(uname -s)" = Darwin ]; then
   check "doctor reports each check on macOS" '"command_line_tools" in j and "macos_26_or_later" in j' "$doc"
 else
   check "doctor fails off macOS with a fix" 'j["ok"] is False and j["macos"] is False and "fix" in j' "$doc"
 fi
+
+# doctor prints its JSON, including the fix line, on a machine without python3.
+nopy="$tmp/nopy-bin"
+mkdir -p "$nopy"
+for d in /usr/bin /bin /usr/sbin /sbin; do
+  for f in "$d"/*; do
+    n="$(basename "$f")"
+    case "$n" in python*) continue ;; esac
+    [ -x "$f" ] && [ ! -e "$nopy/$n" ] && ln -s "$f" "$nopy/$n"
+  done
+done
+expect "the no-python3 PATH has no python3" "$(PATH="$nopy" command -v python3 || echo none)" "none"
+doc="$(PATH="$nopy" bash "$R" doctor 2>/dev/null || true)"
+check "doctor prints valid JSON without python3" '"ok" in j and "macos" in j and "apple_silicon" in j' "$doc"
+# Force a failing check (an Intel uname) to see the fix line without python3.
+rm -f "$nopy/uname"
+printf '#!/bin/sh\n[ "$1" = -m ] && echo x86_64 || /usr/bin/uname "$@"\n' >"$nopy/uname"
+chmod +x "$nopy/uname"
+doc="$(PATH="$nopy" bash "$R" doctor 2>/dev/null || true)"
+expect "doctor exits 1 when a check fails" "$(set +e; PATH="$nopy" bash "$R" doctor >/dev/null 2>&1; echo $?)" "1"
+check "doctor prints the fix line without python3" \
+  'j["ok"] is False and j["apple_silicon"] is False and j["apple_silicon_detail"]=="x86_64" and j["fix"].startswith("Run: xcode-select --install")' "$doc"
 
 echo "record-process launcher: $pass checks passed"

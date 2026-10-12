@@ -12,11 +12,14 @@
 #   build [--force]               build the app if missing or out of date
 #   start [--company <slug>]      open HQ Capture bound to a company's recordings folder
 #   status                        print status.json with the live state; after a save it adds
-#                                 mediaIssues from the package and keeps the app's issue note
+#                                 mediaIssues from the package and keeps the app's issue note.
+#                                 When HQ Capture is open for another company it prints only
+#                                 {"ok": true, "state": "busy-other-company"}
 #   wait [--timeout <seconds>]    block until the state is saved, failed, closed or lost,
 #                                 printing one line per change (with issue when the app sets
 #                                 one) and the full status last; exit 3 when still open at timeout
-#   stop                          write stop.request and wait for the app to close
+#   stop                          write stop.request and wait for the app to close; refused when
+#                                 HQ Capture is open for another company
 #   run <mode> <package> [args]   run an agent command headless on a saved recording
 #   resume <prompt>               check a pasted resume prompt and print its package
 #
@@ -25,8 +28,8 @@
 # its code (0 done, 1 refused, 2 usage or error, 130 cancelled). A launcher refusal
 # prints {"ok": false, ...} and exits 3 for run and resume, 1 for the other subcommands.
 #
-# Every subcommand that touches a company uses the session's bound company and refuses
-# a company or a package outside it.
+# Every subcommand except doctor and build uses the session's bound company and refuses
+# a company, a package or a frame --out path inside another company.
 #
 # Environment overrides (used by tests):
 #   HQ_ROOT              HQ root (default: nearest parent with companies/manifest.yaml)
@@ -37,6 +40,7 @@
 #                        (default: ~/Library/Application Support/HQ Recorder)
 #   HQ_RECORDER_COMPILE  command run with the unsigned app path instead of the
 #                        compile, sign and check steps (tests only)
+#   HQ_RECORDER_LOCK_WAIT  seconds to wait for another build to finish (default 600)
 set -euo pipefail
 
 script_path="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || python3 -I -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "${BASH_SOURCE[0]}")"
@@ -48,6 +52,7 @@ executable="LocalScreenRecorder"
 control_dir="$state_dir/active"
 status_file="$control_dir/status.json"
 stamp_file="$state_dir/build.stamp"
+lock_dir="$state_dir/.build.lock"
 refusal_code=1
 
 # json key value [key value ...] — values are emitted as strings, except
@@ -89,7 +94,10 @@ resolve_company() {
     bound="$(bash "$root/core/scripts/hq-session.sh" get company_slug 2>/dev/null || true)"
   fi
   [ "$bound" = personal ] && bound=""
-  if [ -n "$requested" ] && [ -n "$bound" ] && [ "$requested" != "$bound" ]; then
+  if [ -n "$requested" ] && [ -z "$bound" ]; then
+    fail no-company "This session isn't working in a company, so --company can't be used. Pick the company for the session first, then run /record-process again."
+  fi
+  if [ -n "$requested" ] && [ "$requested" != "$bound" ]; then
     fail company-mismatch "This session is bound to $bound, not $requested. HQ Capture only works in the bound company."
   fi
   company="${requested:-$bound}"
@@ -116,41 +124,72 @@ resolve_package() {
   package="$real"
 }
 
+# Covers every shipped app input and the build recipe itself (compile_and_sign and the
+# developer folder choice), so a pack update that only changes how the app is built
+# still rebuilds it.
 build_inputs_hash() {
   (
     cd "$pack_dir/app"
     cat SOURCE Info.plist HQCapture.entitlements
-    ls Sources/*.swift | LC_ALL=C sort | xargs cat
+    find Sources -name '*.swift' -type f -print0 | LC_ALL=C sort -z | xargs -0 cat
     cat Resources/AppIcon.icns
+    declare -f compile_and_sign developer_dir
   ) | shasum -a 256 | cut -d' ' -f1
+}
+
+# The developer folder used for the build and checked by doctor: Command Line Tools when
+# installed, else $DEVELOPER_DIR, else whatever xcode-select points at. Empty when none.
+developer_dir() {
+  if [ -d /Library/Developer/CommandLineTools ]; then
+    echo /Library/Developer/CommandLineTools
+  elif [ -n "${DEVELOPER_DIR:-}" ]; then
+    printf '%s\n' "$DEVELOPER_DIR"
+  else
+    xcode-select -p 2>/dev/null || true
+  fi
+}
+
+# Prints a JSON string literal for $1. doctor uses this so it works without python3.
+json_string() {
+  local s="$1"
+  s="${s//\\/\\\\}"; s="${s//\"/\\\"}"
+  s="${s//$'\n'/\\n}"; s="${s//$'\t'/\\t}"; s="${s//$'\r'/\\r}"
+  printf '"%s"' "$s"
 }
 
 doctor_checks() {
   # Prints "name<TAB>ok<TAB>detail" lines.
-  local os arch ver swift_ok sdk_ok
+  local os arch ver dev swift_ok sdk_ok sdk_ver
   os="$(uname -s)"; arch="$(uname -m)"
   printf 'macos\t%s\t%s\n' "$([ "$os" = Darwin ] && echo true || echo false)" "$os"
   printf 'apple_silicon\t%s\t%s\n' "$([ "$arch" = arm64 ] && echo true || echo false)" "$arch"
   if [ "$os" = Darwin ]; then
     ver="$(sw_vers -productVersion)"
     printf 'macos_26_or_later\t%s\t%s\n' "$([ "${ver%%.*}" -ge 26 ] && echo true || echo false)" "$ver"
-    if xcrun --sdk macosx --find swiftc >/dev/null 2>&1; then swift_ok=true; else swift_ok=false; fi
-    printf 'command_line_tools\t%s\t%s\n' "$swift_ok" "$(xcode-select -p 2>/dev/null || echo missing)"
-    sdk_ok=false
-    if [ "$swift_ok" = true ] && [ -d "$(xcrun --sdk macosx --show-sdk-path 2>/dev/null)/System/Library/Frameworks/ScreenCaptureKit.framework" ]; then sdk_ok=true; fi
-    printf 'macos_sdk\t%s\t%s\n' "$sdk_ok" "$(xcrun --sdk macosx --show-sdk-version 2>/dev/null || echo missing)"
+    # Find the developer folder before calling xcrun, which otherwise pops up the install
+    # dialog, and use the same folder the build uses.
+    dev="$(developer_dir)"
+    swift_ok=false
+    if [ -n "$dev" ] && [ -d "$dev" ] && DEVELOPER_DIR="$dev" xcrun --sdk macosx --find swiftc >/dev/null 2>&1; then swift_ok=true; fi
+    printf 'command_line_tools\t%s\t%s\n' "$swift_ok" "${dev:-missing}"
+    sdk_ok=false sdk_ver=missing
+    if [ "$swift_ok" = true ]; then
+      [ -d "$(DEVELOPER_DIR="$dev" xcrun --sdk macosx --show-sdk-path 2>/dev/null)/System/Library/Frameworks/ScreenCaptureKit.framework" ] && sdk_ok=true
+      sdk_ver="$(DEVELOPER_DIR="$dev" xcrun --sdk macosx --show-sdk-version 2>/dev/null || echo missing)"
+    fi
+    printf 'macos_sdk\t%s\t%s\n' "$sdk_ok" "$sdk_ver"
   fi
 }
 
+# Builds its JSON in bash, so the fix line still prints on a Mac without python3.
 cmd_doctor() {
-  local args=(ok true) all=true name ok detail
+  local body="" all=true name ok detail
   while IFS=$'\t' read -r name ok detail; do
-    args+=("$name" "$ok" "${name}_detail" "$detail")
+    body+=", $(json_string "$name"): $ok, $(json_string "${name}_detail"): $(json_string "$detail")"
     [ "$ok" = true ] || all=false
   done < <(doctor_checks)
-  args[1]="$all"
-  [ "$all" = true ] || args+=(fix "Run: xcode-select --install   (installs Apple's free Command Line Tools). HQ Capture needs an Apple Silicon Mac on macOS 26 or later.")
-  json "${args[@]}"
+  [ "$all" = true ] || body+=", \"fix\": $(json_string "Run: xcode-select --install   (installs Apple's free Command Line Tools). HQ Capture needs an Apple Silicon Mac on macOS 26 or later.")"
+  printf '{"ok": %s%s}\n' "$all" "$body"
   [ "$all" = true ]
 }
 
@@ -181,9 +220,7 @@ compile_and_sign() {
   local app="$1" log="$2" bin signed key
   bin="$app/Contents/MacOS/$executable"
   mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
-  local developer_dir="${DEVELOPER_DIR:-}"
-  [ -d /Library/Developer/CommandLineTools ] && developer_dir=/Library/Developer/CommandLineTools
-  if ! DEVELOPER_DIR="${developer_dir:-$(xcode-select -p)}" xcrun --sdk macosx swiftc \
+  if ! DEVELOPER_DIR="$(developer_dir)" xcrun --sdk macosx swiftc \
       -parse-as-library -swift-version 6 -O -target arm64-apple-macos26.0 \
       -framework AVKit -o "$bin" "$app_src"/*.swift >>"$log" 2>&1; then
     echo build-failed; return 1
@@ -212,13 +249,40 @@ build_is_current() {
   [ -x "$app_path/Contents/MacOS/$executable" ] && [ "$(cat "$stamp_file" 2>/dev/null)" = "$(build_inputs_hash)" ]
 }
 
+# Takes the build lock (a directory holding the owner's pid), so two launchers never build
+# into the same app at once. A lock left by a process that has exited is cleared.
+acquire_build_lock() {
+  local waited=0 limit="${HQ_RECORDER_LOCK_WAIT:-600}" owner
+  mkdir -p "$state_dir"
+  until mkdir "$lock_dir" 2>/dev/null; do
+    owner="$(cat "$lock_dir/pid" 2>/dev/null || true)"
+    if [ -n "$owner" ] && ! kill -0 "$owner" 2>/dev/null; then
+      rm -rf "$lock_dir"; continue
+    fi
+    [ "$waited" -lt "$limit" ] || fail build-busy "Another HQ Capture build is still running. Try again when it finishes."
+    sleep 1; waited=$((waited + 1))
+  done
+  printf '%s\n' "$$" >"$lock_dir/pid"
+  trap release_build_lock EXIT
+}
+
+release_build_lock() {
+  [ "$(cat "$lock_dir/pid" 2>/dev/null)" = "$$" ] && rm -rf "$lock_dir"
+  return 0
+}
+
 build_app() {
   local force="${1:-false}" want
   want="$(build_inputs_hash)"
   if [ "$force" != true ] && build_is_current; then
     return 0
   fi
-  mkdir -p "$state_dir"
+  acquire_build_lock
+  # Another launcher may have finished the same build while this one waited.
+  if [ "$force" != true ] && build_is_current; then
+    release_build_lock; trap - EXIT
+    return 0
+  fi
   local log="$state_dir/build.log" tmp="$state_dir/.build-$$" reason
   : >"$log"
   rm -rf "$tmp"; mkdir -p "$tmp"
@@ -248,6 +312,7 @@ build_app() {
   rmdir "$tmp"
   printf '%s\n' "$want" >"$stamp_file"
   built=true
+  release_build_lock; trap - EXIT
   remove_legacy_apps
 }
 
@@ -289,7 +354,26 @@ current_state() {
   esac
 }
 
+# Prints the company status.json belongs to, or nothing.
+status_company() {
+  python3 -I -c 'import json,sys;c=json.load(open(sys.argv[1])).get("company");print(c if isinstance(c,str) else "")' "$status_file" 2>/dev/null || true
+}
+
+# True when HQ Capture's status belongs to a company other than the bound one. A status
+# with no company counts as another company's.
+open_for_other_company() {
+  [ -f "$status_file" ] && [ "$(status_company)" != "$company" ]
+}
+
+busy_other_company() { printf '{"ok": true, "state": "busy-other-company"}\n'; }
+
 cmd_status() {
+  resolve_company ""
+  if open_for_other_company; then busy_other_company; return; fi
+  print_status
+}
+
+print_status() {
   local state
   state="$(current_state)"
   if [ "$state" = none ]; then json ok true state none; return; fi
@@ -349,7 +433,7 @@ cmd_start() {
     sleep 0.25
   done
   [ -f "$status_file" ] || fail no-status "HQ Capture opened but didn't report back within 15 seconds."
-  cmd_status
+  print_status
 }
 
 cmd_wait() {
@@ -364,9 +448,12 @@ cmd_wait() {
       *) fail bad-argument "Unknown argument: $1" ;;
     esac
   done
+  resolve_company ""
   [ -f "$status_file" ] || fail not-open "HQ Capture has not been opened. Run start first."
   local deadline=$(( $(date +%s) + limit )) last="" now state line
   while :; do
+    # Checked on every pass: another company's session may start HQ Capture while this waits.
+    if open_for_other_company; then busy_other_company; return 0; fi
     state="$(current_state)"
     line="$(python3 -I -c '
 import json, sys
@@ -379,10 +466,10 @@ print(json.dumps(out))' "$status_file" "$state" 2>/dev/null || true)"
     now="$(python3 -I -c 'import json,sys; j=json.loads(sys.argv[1]); j.pop("durationSeconds", None); print(json.dumps(j, sort_keys=True))' "$line" 2>/dev/null || echo "$state")"
     if [ -n "$line" ] && [ "$now" != "$last" ]; then printf '%s\n' "$line"; last="$now"; fi
     case "$state" in
-      saved|failed|closed|lost) cmd_status; return 0 ;;
+      saved|failed|closed|lost) print_status; return 0 ;;
     esac
     if [ "$(date +%s)" -ge "$deadline" ]; then
-      cmd_status
+      print_status
       exit 3
     fi
     sleep 1
@@ -391,9 +478,13 @@ print(json.dumps(out))' "$status_file" "$state" 2>/dev/null || true)"
 
 cmd_stop() {
   local state
+  resolve_company ""
+  if open_for_other_company; then
+    fail other-company "HQ Capture is open for another company. Stop it from a session in that company."
+  fi
   state="$(current_state)"
   case "$state" in
-    none|closed|saved|failed|lost) cmd_status; return ;;
+    none|closed|saved|failed|lost) print_status; return ;;
   esac
   : >"$control_dir/stop.request"
   local i
@@ -402,7 +493,30 @@ cmd_stop() {
     case "$state" in closed|saved|failed|lost) break ;; esac
     sleep 0.25
   done
-  cmd_status
+  print_status
+}
+
+# Refuses a frame --out path inside another company's folder (companies/<slug>/ for any slug
+# but the bound one, or loose in companies/). Paths elsewhere, such as $TMPDIR, are allowed.
+check_frame_out() {
+  local out="" real companies rel
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --out) out="${2:-}"; shift; [ $# -eq 0 ] || shift ;;
+      --out=*) out="${1#--out=}"; shift ;;
+      *) shift ;;
+    esac
+  done
+  [ -n "$out" ] || return 0
+  case "$out" in /*) ;; *) out="$PWD/$out" ;; esac
+  real="$(realpath_of "$out")"
+  companies="$(realpath_of "$root/companies")"
+  case "$real" in
+    "$companies"/*)
+      rel="${real#"$companies"/}"
+      [ "${rel%%/*}" = "$company" ] && [ "$rel" != "$company" ] \
+        || fail out-outside-company "That frame path is in another company's folder. Save it in $company's folder or a temporary folder." ;;
+  esac
 }
 
 cmd_run() {
@@ -424,6 +538,7 @@ cmd_run() {
   done
   resolve_company ""
   resolve_package "$given"
+  [ "$mode" != frame ] || check_frame_out "$@"
 
   # Build if needed. While HQ Capture is open, an existing build is used as is so the running
   # app is not replaced underneath it.
