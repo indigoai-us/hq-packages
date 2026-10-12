@@ -10,11 +10,14 @@
 # Subcommands (each prints JSON on stdout):
 #   doctor                        check this Mac can build and run the app
 #   build [--force]               build the app if missing or out of date
-#   start [--company <slug>]      open HQ Capture bound to a company's recordings folder
+#   start [--company <slug>]      open HQ Capture bound to a company's recordings folder; refused
+#                                 with already-open while it is open, or busy while another
+#                                 session is opening it
 #   status                        print status.json with the live state; after a save it adds
 #                                 mediaIssues from the package and keeps the app's issue note.
 #                                 When HQ Capture is open for another company it prints only
-#                                 {"ok": true, "state": "busy-other-company"}
+#                                 {"ok": true, "state": "busy-other-company"}; once that app has
+#                                 exited it prints {"ok": true, "state": "none"}
 #   wait [--timeout <seconds>]    block until the state is saved, failed, closed or lost,
 #                                 printing one line per change (with issue when the app sets
 #                                 one) and the full status last; exit 3 when still open at timeout
@@ -42,7 +45,10 @@
 #   HQ_RECORDER_COMPILE  command run with the unsigned app path instead of the
 #                        compile, sign and check steps (tests only)
 #   HQ_RECORDER_LOCK_WAIT  seconds to wait for another build to finish (default 600)
+#   HQ_RECORDER_START_WAIT seconds start waits for another start to finish (default 5)
 #   HQ_RECORDER_STOP_WAIT  seconds stop waits for the app to act on a stop (default 20)
+#   HQ_RECORDER_PROCESS_NAME  process name a live HQ Capture has (default LocalScreenRecorder;
+#                        tests only)
 set -euo pipefail
 
 script_path="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || python3 -I -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "${BASH_SOURCE[0]}")"
@@ -55,6 +61,9 @@ control_dir="$state_dir/active"
 status_file="$control_dir/status.json"
 stamp_file="$state_dir/build.stamp"
 lock_dir="$state_dir/.build.lock"
+start_lock="$state_dir/.start.lock"
+process_name="${HQ_RECORDER_PROCESS_NAME:-$executable}"
+held_locks=()
 refusal_code=1
 
 # json key value [key value ...] — values are emitted as strings, except
@@ -251,26 +260,73 @@ build_is_current() {
   [ -x "$app_path/Contents/MacOS/$executable" ] && [ "$(cat "$stamp_file" 2>/dev/null)" = "$(build_inputs_hash)" ]
 }
 
-# Takes the build lock (a directory holding the owner's pid), so two launchers never build
-# into the same app at once. A lock left by a process that has exited is cleared.
+# Locks are directories holding the owner's pid. The pid is written to a temp file inside the
+# new directory and renamed into place, so a reader sees either no pid or the whole pid. A lock
+# whose owner has exited is stale, and so is one with no pid that is older than 30 seconds (its
+# owner died between creating it and writing the pid).
+lock_is_stale() {
+  local dir="$1" owner age
+  owner="$(cat "$dir/pid" 2>/dev/null || true)"
+  if [ -n "$owner" ]; then
+    [[ "$owner" =~ ^[0-9]+$ ]] && kill -0 "$owner" 2>/dev/null && return 1
+    return 0
+  fi
+  [ -d "$dir" ] || return 1
+  age="$(python3 -I -c 'import os,sys,time;print(int(time.time()-os.stat(sys.argv[1]).st_mtime))' "$dir" 2>/dev/null || echo 0)"
+  [ "$age" -ge 30 ]
+}
+
+claim_lock() {
+  mkdir "$1" 2>/dev/null || return 1
+  printf '%s\n' "$$" >"$1/.pid.$$" && mv -f "$1/.pid.$$" "$1/pid"
+  held_locks+=("$1")
+  trap release_locks EXIT
+}
+
+# Takes the lock at $1, clearing it first when it is stale. Returns 1 when another live
+# process holds it.
+try_lock() {
+  claim_lock "$1" && return 0
+  if lock_is_stale "$1"; then
+    rm -rf "$1"
+    claim_lock "$1" && return 0
+  fi
+  return 1
+}
+
+release_lock() {
+  [ "$(cat "$1/pid" 2>/dev/null)" = "$$" ] && rm -rf "$1"
+  return 0
+}
+
+release_locks() {
+  local dir
+  for dir in ${held_locks[@]+"${held_locks[@]}"}; do release_lock "$dir"; done
+}
+
+# Takes the build lock, so two launchers never build into the same app at once.
 acquire_build_lock() {
-  local waited=0 limit="${HQ_RECORDER_LOCK_WAIT:-600}" owner
+  local waited=0 limit="${HQ_RECORDER_LOCK_WAIT:-600}"
   mkdir -p "$state_dir"
-  until mkdir "$lock_dir" 2>/dev/null; do
-    owner="$(cat "$lock_dir/pid" 2>/dev/null || true)"
-    if [ -n "$owner" ] && ! kill -0 "$owner" 2>/dev/null; then
-      rm -rf "$lock_dir"; continue
-    fi
+  until try_lock "$lock_dir"; do
     [ "$waited" -lt "$limit" ] || fail build-busy "Another HQ Capture build is still running. Try again when it finishes."
     sleep 1; waited=$((waited + 1))
   done
-  printf '%s\n' "$$" >"$lock_dir/pid"
-  trap release_build_lock EXIT
 }
 
-release_build_lock() {
-  [ "$(cat "$lock_dir/pid" 2>/dev/null)" = "$$" ] && rm -rf "$lock_dir"
-  return 0
+# Takes the start lock, held from the open check until the new app has written its first
+# status, so two starts never open two apps. While another start holds it, waits briefly and
+# reports already-open as soon as that start's app is open, or busy when the wait runs out.
+acquire_start_lock() {
+  local waited=0 limit="${HQ_RECORDER_START_WAIT:-5}"
+  mkdir -p "$state_dir"
+  until try_lock "$start_lock"; do
+    if app_is_open; then
+      fail already-open "HQ Capture is already open (state: $(current_state)). Stop it before starting another."
+    fi
+    [ "$waited" -lt $((limit * 4)) ] || fail busy "HQ Capture is being opened by another session right now. Run status in a moment to see it."
+    sleep 0.25; waited=$((waited + 1))
+  done
 }
 
 build_app() {
@@ -282,7 +338,7 @@ build_app() {
   acquire_build_lock
   # Another launcher may have finished the same build while this one waited.
   if [ "$force" != true ] && build_is_current; then
-    release_build_lock; trap - EXIT
+    release_lock "$lock_dir"
     return 0
   fi
   local log="$state_dir/build.log" tmp="$state_dir/.build-$$" reason
@@ -314,7 +370,7 @@ build_app() {
   rmdir "$tmp"
   printf '%s\n' "$want" >"$stamp_file"
   built=true
-  release_build_lock; trap - EXIT
+  release_lock "$lock_dir"
   remove_legacy_apps
 }
 
@@ -341,15 +397,28 @@ cmd_build() {
   json ok true app "$app_path" built "$built"
 }
 
+# True when $1 is a running HQ Capture process. Checking the process name as well as that the
+# pid is alive means a pid that macOS has since given to another program does not count.
+is_app_process() {
+  local pid="$1" comm
+  [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null || return 1
+  comm="$(ps -p "$pid" -o comm= 2>/dev/null)" || return 1
+  comm="${comm%"${comm##*[![:space:]]}"}"
+  [ "${comm##*/}" = "$process_name" ]
+}
+
+status_pid() {
+  python3 -I -c 'import json,sys;print(json.load(open(sys.argv[1])).get("pid", ""))' "$status_file" 2>/dev/null || true
+}
+
 # Prints the app's state, mapping a vanished process to "lost".
 current_state() {
   [ -f "$status_file" ] || { echo none; return; }
-  local state pid
+  local state
   state="$(python3 -I -c 'import json,sys;print(json.load(open(sys.argv[1]))["state"])' "$status_file")"
-  pid="$(python3 -I -c 'import json,sys;print(json.load(open(sys.argv[1]))["pid"])' "$status_file")"
   case "$state" in
     closed|saved|failed) echo "$state" ;;
-    *) if kill -0 "$pid" 2>/dev/null; then echo "$state"; else echo lost; fi ;;
+    *) if is_app_process "$(status_pid)"; then echo "$state"; else echo lost; fi ;;
   esac
 }
 
@@ -358,10 +427,7 @@ current_state() {
 app_is_open() {
   case "$(current_state)" in
     awaiting-start|recording|finalizing) return 0 ;;
-    saved|failed)
-      local pid
-      pid="$(python3 -I -c 'import json,sys;print(json.load(open(sys.argv[1])).get("pid", ""))' "$status_file" 2>/dev/null || true)"
-      [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null ;;
+    saved|failed) is_app_process "$(status_pid)" ;;
     *) return 1 ;;
   esac
 }
@@ -373,8 +439,14 @@ status_company() {
 
 # True when HQ Capture's status belongs to a company other than the bound one. A status
 # with no company counts as another company's.
-open_for_other_company() {
+status_for_other_company() {
   [ -f "$status_file" ] && [ "$(status_company)" != "$company" ]
+}
+
+# True when HQ Capture is open for another company. Once that company's app has exited, its
+# status no longer blocks this company and none of it is shown here.
+open_for_other_company() {
+  status_for_other_company && app_is_open
 }
 
 busy_other_company() { printf '{"ok": true, "state": "busy-other-company"}\n'; }
@@ -382,6 +454,7 @@ busy_other_company() { printf '{"ok": true, "state": "busy-other-company"}\n'; }
 cmd_status() {
   resolve_company ""
   if open_for_other_company; then busy_other_company; return; fi
+  if status_for_other_company; then json ok true state none; return; fi
   print_status
 }
 
@@ -420,6 +493,7 @@ cmd_start() {
   done
   resolve_company "$requested"
 
+  acquire_start_lock
   if app_is_open; then
     fail already-open "HQ Capture is already open (state: $(current_state)). Stop it before starting another."
   fi
@@ -442,6 +516,7 @@ cmd_start() {
     sleep 0.25
   done
   [ -f "$status_file" ] || fail no-status "HQ Capture opened but didn't report back within 15 seconds."
+  release_lock "$start_lock"
   print_status
 }
 
@@ -458,11 +533,14 @@ cmd_wait() {
     esac
   done
   resolve_company ""
-  [ -f "$status_file" ] || fail not-open "HQ Capture has not been opened. Run start first."
+  if [ ! -f "$status_file" ] || { status_for_other_company && ! app_is_open; }; then
+    fail not-open "HQ Capture has not been opened. Run start first."
+  fi
   local deadline=$(( $(date +%s) + limit )) last="" now state line
   while :; do
     # Checked on every pass: another company's session may start HQ Capture while this waits.
     if open_for_other_company; then busy_other_company; return 0; fi
+    if status_for_other_company; then json ok true state none; return 0; fi
     state="$(current_state)"
     line="$(python3 -I -c '
 import json, sys
@@ -490,6 +568,7 @@ cmd_stop() {
   if open_for_other_company; then
     fail other-company "HQ Capture is open for another company. Stop it from a session in that company."
   fi
+  if status_for_other_company; then json ok true state none; return; fi
   # A saved or failed app that is still showing its window is asked to quit too, and keeps
   # its saved or failed status as it quits.
   if ! app_is_open; then print_status; return; fi

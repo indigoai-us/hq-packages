@@ -118,11 +118,17 @@ extension AgentCommandsCLI {
         } catch let error as AgentCommandError {
             throw AgentCommandError.refused("\(error) \(unchanged)")
         }
-        guard document != loaded.document,
-              let path = try await SOPReviewWorkflow.autosave(&document, package: package, store: store,
-                                                               syncChecker: syncChecker) else {
-            throw AgentCommandError.refused("Those edits change nothing. \(unchanged)")
+        guard document != loaded.document else { throw AgentCommandError.refused("Those edits change nothing. \(unchanged)") }
+        let saved: String?
+        do {
+            saved = try await SOPReviewWorkflow.autosave(&document, package: package, store: store,
+                                                         syncChecker: syncChecker,
+                                                         expecting: SOPReviewWorkflow.head(of: loaded))
+        } catch SOPReviewError.reviewChanged {
+            throw AgentCommandError.refused("The guide changed since it was loaded. Review the latest version, "
+                                            + "then make the edits again. \(unchanged)")
         }
+        guard let path = saved else { throw AgentCommandError.refused("Those edits change nothing. \(unchanged)") }
         return AgentReviewResult(document, revision: path, saved: true)
     }
 
@@ -229,8 +235,16 @@ extension AgentCommandsCLI {
         } catch let error as SOPReviewError {
             throw AgentCommandError.refused("\(reviewMessage(error)) Nothing was written.")
         }
-        guard let path = try await SOPReviewWorkflow.autosave(&document, package: package, store: store,
-                                                               syncChecker: syncChecker) else {
+        let saved: String?
+        do {
+            saved = try await SOPReviewWorkflow.autosave(&document, package: package, store: store,
+                                                         syncChecker: syncChecker,
+                                                         expecting: SOPReviewWorkflow.head(of: loaded))
+        } catch SOPReviewError.reviewChanged {
+            throw AgentCommandError.refused("The guide changed since it was reviewed. Review the latest version, "
+                                            + "then approve it. Nothing was written.")
+        }
+        guard let path = saved else {
             throw AgentCommandError.refused("This revision is already approved. Nothing was written.")
         }
         return AgentReviewResult(document, revision: path, saved: true)
@@ -277,6 +291,7 @@ extension AgentCommandsCLI {
         case .notApproved, .approvalOutdated: "The newest review revision is not approved."
         case .unreadableImage: "That image could not be read."
         case .exportExists: "That export already exists."
+        case .reviewChanged: "The guide changed since it was loaded. Review the latest version and try again."
         }
     }
 }

@@ -2,7 +2,7 @@
 
 ## 0.3.0
 
-- Vendored HQ Capture from local-screen-recorder 2e42863: middle cuts, guide
+- Vendored HQ Capture from local-screen-recorder ef85eba: middle cuts, guide
   review and approval commands, screenshot frame listing, media length checks,
   the rounded Liquid Glass window style, the window coming back to the front
   on stop and on launch, and roomier controls. App version 0.3.0 (build 3).
@@ -71,6 +71,22 @@
   may still be recording and gives its current status. `finalizing` is still
   reported as success. The skill tells the agent to say this plainly and run
   `status`.
+- `approve-sop`, `review-sop` and `export-sop` refuse when a newer revision
+  of the guide was saved after the one being approved or exported, so an
+  approval never covers an edit the reviewer did not see.
+- Launcher: `start` holds a lock from the open check until the app writes its
+  first status. A second `start` at the same time waits briefly, then reports
+  `already-open` or the new `busy` (exit 1). Only one app opens. The skill
+  tells the agent to wait and run `status` on `busy`.
+- Launcher: a status file whose pid now belongs to a different program no
+  longer counts as HQ Capture being open. The launcher checks the process
+  name as well as the pid.
+- Launcher: the build lock writes its pid in one step. A lock with no pid
+  that is 30 seconds old or more is treated as stale and cleared.
+- Launcher: another company's saved, failed or closed status only blocks this
+  company while that company's app is still running. Once it has quit,
+  `status` returns `none`, `stop` does nothing and `start` proceeds. While it
+  is running, `status` and `wait` still return only `busy-other-company`.
 - Tests: checks that could not fail now fail the suite.
 
 ## 0.2.0

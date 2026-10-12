@@ -53,6 +53,7 @@ cat >"$tmp/stub-open.sh" <<'EOF'
 #!/usr/bin/env bash
 app="$1"; shift; [ "$1" = --args ] && shift
 printf '%s\n' "$@" >"$app.argv"
+echo launched >>"$(dirname "$0")/launches.log"
 python3 -I - "$(dirname "$0")/go.record" "$@" <<'PY' >/dev/null 2>&1 &
 import json, os, sys, time
 go = sys.argv[1]
@@ -128,6 +129,11 @@ export HQ_RECORDER_APP="$tmp/apps/HQ Capture.app"
 export HQ_RECORDER_OPEN="$tmp/stub-open.sh"
 export HQ_RECORDER_COMPILE="$tmp/stub-compile.sh"
 export HQ_RECORDER_LEGACY_HOME="$tmp/legacy"
+# The stub app is a python3 process, so the launcher's process-name check looks for python3's
+# name here instead of LocalScreenRecorder.
+HQ_RECORDER_PROCESS_NAME="$(python3 -I -c 'import os,subprocess; c=subprocess.check_output(["ps","-p",str(os.getpid()),"-o","comm="]).decode().strip(); print(os.path.basename(c))')"
+export HQ_RECORDER_PROCESS_NAME
+launches() { [ -f "$tmp/launches.log" ] && wc -l <"$tmp/launches.log" | tr -d ' ' || echo 0; }
 builds() { [ -f "$tmp/builds.log" ] && wc -l <"$tmp/builds.log" | tr -d ' ' || echo 0; }
 
 pass=0
@@ -423,6 +429,81 @@ expect "stop while finalizing exits 0" "$(HQ_RECORDER_STOP_WAIT=1 code stop)" "0
 kill "$(cat "$tmp/apps/stub.pid")"; sleep 0.2
 rm -f "$tmp/go.record" "$tmp/finalize.stop" "$HQ_RECORDER_HOME"/*/stop.request 2>/dev/null || true
 
+# Two starts at once open one app. The second reports already-open once the first app is open,
+# or busy if the first is still opening it.
+before="$(launches)"
+bash "$R" start >"$tmp/start1.out" 2>/dev/null & s1=$!
+bash "$R" start >"$tmp/start2.out" 2>/dev/null & s2=$!
+wait "$s1" || true; wait "$s2" || true
+expect "two starts at once launch exactly one app" "$(( $(launches) - before ))" "1"
+both="$(cat "$tmp/start1.out" "$tmp/start2.out")"
+expect "one of two starts at once opens the app" "$(grep -c '"state": "awaiting-start"' <<<"$both")" "1"
+expect "the other start reports already-open or busy" "$(grep -cE '"error": "(already-open|busy)"' <<<"$both")" "1"
+[ ! -e "$HQ_RECORDER_HOME/.start.lock" ] && pass=$((pass + 1)) \
+  || { echo "FAIL: start should release its lock" >&2; exit 1; }
+check "stop closes the one app" 'j["state"]=="closed"' "$(run stop)"
+mkdir -p "$HQ_RECORDER_HOME/.start.lock"
+sleep 60 & holder=$!
+echo "$holder" >"$HQ_RECORDER_HOME/.start.lock/pid"
+before="$(launches)"
+check "start reports busy while another start holds the lock" 'j["ok"] is False and j["error"]=="busy"' "$(HQ_RECORDER_START_WAIT=1 run start)"
+expect "a busy start exits 1" "$(HQ_RECORDER_START_WAIT=1 code start)" "1"
+expect "a busy start launches nothing" "$(launches)" "$before"
+kill "$holder" 2>/dev/null || true; wait "$holder" 2>/dev/null || true
+check "start clears a start lock left by a process that exited" 'j["state"]=="awaiting-start"' "$(HQ_RECORDER_START_WAIT=1 run start)"
+check "stop closes it" 'j["state"]=="closed"' "$(run stop)"
+
+# fake_status <company> <state> <pid>: a status.json as the app writes it, with a saved
+# recording and resume prompt.
+fake_status() {
+  python3 -I -c '
+import json, os, sys
+path, company, state, pid, dest = sys.argv[1:]
+os.makedirs(os.path.dirname(path), exist_ok=True)
+json.dump({"schema": 1, "state": state, "company": company, "destination": dest, "pid": int(pid),
+           "recording": "companies/%s/recordings/theirs.hqrec" % company,
+           "resumePrompt": "Continue my HQ Capture recording for %s at %s/theirs.hqrec: show me." % (company, dest),
+           "updatedAt": "2026-01-01T00:00:00Z"}, open(path, "w"))' \
+    "$HQ_RECORDER_HOME/active/status.json" "$1" "$2" "$3" "$hq/companies/$1/recordings"
+}
+sleep 60 & gone=$!
+kill "$gone"; wait "$gone" 2>/dev/null || true
+
+# A status whose pid is now a different program (here this test's shell) is not HQ Capture.
+fake_status acme recording $$
+check "a status naming a live pid that is not HQ Capture is lost" 'j["state"]=="lost"' "$(run status)"
+check "start proceeds over a status naming another program's pid" 'j["state"]=="awaiting-start"' "$(run start)"
+check "stop closes it" 'j["state"]=="closed"' "$(run stop)"
+fake_status acme saved $$
+check "stop on a saved status naming another program's pid is a no-op" 'j["state"]=="saved"' "$(run stop)"
+check "start proceeds over a saved status naming another program's pid" 'j["state"]=="awaiting-start"' "$(run start)"
+check "stop closes it" 'j["state"]=="closed"' "$(run stop)"
+
+# Another company's finished recording, whose app has exited, does not block this company and
+# none of it is shown here.
+for st in saved failed closed; do
+  fake_status other "$st" "$gone"
+  check "status is none over another company's exited $st app" 'j=={"ok": True, "state": "none"}' "$(run status)"
+  check "stop is a no-op over another company's exited $st app" 'j=={"ok": True, "state": "none"}' "$(run stop)"
+  expect "stop over another company's exited $st app exits 0" "$(code stop)" "0"
+  check "wait over another company's exited $st app is not-open" 'j["error"]=="not-open" and "other" not in j["message"]' "$(run wait --timeout 1)"
+done
+fake_status other saved "$gone"
+out="$(run start)"
+check "start proceeds over another company's exited app" 'j["state"]=="awaiting-start" and j["company"]=="acme"' "$out"
+check "start replaced the other company's status" 'j["company"]=="acme" and "resumePrompt" not in j' "$(run status)"
+check "stop closes it" 'j["state"]=="closed"' "$(run stop)"
+# While the other company's saved app is still running, it stays redacted and blocks this company.
+python3 -I -c 'import time; time.sleep(60)' & live=$!
+sleep 0.3
+fake_status other saved "$live"
+check "status is redacted while another company's saved app is running" 'j=={"ok": True, "state": "busy-other-company"}' "$(run status)"
+check "stop is refused while another company's saved app is running" 'j["error"]=="other-company"' "$(run stop)"
+check "start is refused while another company's saved app is running" 'j["error"]=="already-open"' "$(run start)"
+kill "$live" 2>/dev/null || true; wait "$live" 2>/dev/null || true
+check "status is none once that app has exited" 'j=={"ok": True, "state": "none"}' "$(run status)"
+rm -rf "$HQ_RECORDER_HOME/active"
+
 # Build lock: a build waits for a live lock holder and clears a lock left by a dead one.
 mkdir -p "$HQ_RECORDER_HOME/.build.lock"
 sleep 60 & holder=$!
@@ -434,6 +515,13 @@ kill "$holder" 2>/dev/null || true; wait "$holder" 2>/dev/null || true
 check "build clears a lock left by a process that exited" 'j["ok"] and j["built"] is True' "$(HQ_RECORDER_LOCK_WAIT=1 run build --force)"
 [ ! -e "$HQ_RECORDER_HOME/.build.lock" ] && pass=$((pass + 1)) \
   || { echo "FAIL: build should release its lock" >&2; exit 1; }
+# A lock with no pid is waited on while it is new, and cleared once it is older than 30 seconds.
+mkdir -p "$HQ_RECORDER_HOME/.build.lock"
+check "build waits on a new lock with no pid" 'j["error"]=="build-busy"' "$(HQ_RECORDER_LOCK_WAIT=1 run build --force)"
+python3 -I -c 'import os,sys,time; t=time.time()-60; os.utime(sys.argv[1], (t, t))' "$HQ_RECORDER_HOME/.build.lock"
+check "build clears a lock with no pid older than 30 seconds" 'j["ok"] and j["built"] is True' "$(HQ_RECORDER_LOCK_WAIT=1 run build --force)"
+[ ! -e "$HQ_RECORDER_HOME/.build.lock" ] && pass=$((pass + 1)) \
+  || { echo "FAIL: build should release the lock it took over" >&2; exit 1; }
 
 # The build recipe is part of the rebuild hash.
 sed -i.bak 's/-swift-version 6 -O/-swift-version 6 -Osize/' "$R" && rm -f "$R.bak"

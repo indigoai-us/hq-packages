@@ -47,7 +47,9 @@ a `frame --out` path inside another company's folder, and `--company`,
 When HQ Capture is open for another company, `status` and `wait` return only
 `{"ok":true,"state":"busy-other-company"}` and `stop` refuses. Tell the user
 HQ Capture is in use in another company's session and must be finished there
-first. Do not try to find out which company. App exit codes: 0 done, 1 refused (read the message), 2 usage or
+first. Do not try to find out which company. Once that app has quit, `status`
+returns `{"ok":true,"state":"none"}`, `stop` does nothing and `start` opens HQ
+Capture for this company as usual. App exit codes: 0 done, 1 refused (read the message), 2 usage or
 error, 130 cancelled.
 
 ## 1. Confirm the company
@@ -73,6 +75,10 @@ recording for any other company.
    10 minutes pass, run `start` again.
 4. `already-open` means HQ Capture is already open. Show `status` and ask
    whether to keep using it or `stop` it first.
+5. `busy` (exit 1) means another session is opening HQ Capture right now.
+   Tell the user that in one line, wait a few seconds, then run `status`. If
+   it shows the window is open, treat it as `already-open`. If it shows
+   `none`, run `start` again.
 
 ## 3. Wait for the recording
 

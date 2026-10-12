@@ -22,6 +22,8 @@ enum SOPReviewError: Error, Equatable {
     case approvalOutdated
     case unreadableImage
     case exportExists
+    /// A newer revision was saved after the review was read, so acting on the old one could hide it.
+    case reviewChanged
 }
 
 // MARK: - Document
@@ -292,6 +294,28 @@ enum SOPReviewWorkflow {
     /// every review revision, a fresh review copy of it is returned (not saved until edited).
     static func load(package: URL, store: RecordingPackageStore) throws -> SOPReviewLoaded {
         let manifest = try store.readManifest(in: package)
+        let found = try current(manifest: manifest, package: package, store: store)
+        let frames = (try? evidence(manifest: manifest, package: package, store: store)?.frames) ?? []
+        if let review = found.review {
+            return SOPReviewLoaded(document: review.0, revisionPath: review.1, frames: frames)
+        }
+        guard let draft = found.draft else { throw SOPReviewError.noDraft }
+        return SOPReviewLoaded(document: SOPReviewDocument(draft: draft.0, draftPath: draft.1, title: manifest.title),
+                               revisionPath: nil, frames: frames)
+    }
+
+    /// The revision `load` reads a review from: the newest review revision when it is based on the
+    /// newest SOP draft, otherwise that draft. Nil when there is neither.
+    static func head(manifest: RecordingManifest, package: URL, store: RecordingPackageStore) throws -> String? {
+        let found = try current(manifest: manifest, package: package, store: store)
+        return found.review?.1 ?? found.draft?.1
+    }
+
+    /// The revision `loaded` was read from, for `autosave(expecting:)`.
+    static func head(of loaded: SOPReviewLoaded) -> String { loaded.revisionPath ?? loaded.document.basedOn }
+
+    private static func current(manifest: RecordingManifest, package: URL, store: RecordingPackageStore) throws
+        -> (review: (SOPReviewDocument, String)?, draft: (SOPDraftDocument, String)?) {
         var draft: (SOPDraftDocument, String)?
         var review: (SOPReviewDocument, String)?
         for entry in manifest.drafts.reversed() {
@@ -303,13 +327,8 @@ enum SOPReviewWorkflow {
                 break
             }
         }
-        let frames = (try? evidence(manifest: manifest, package: package, store: store)?.frames) ?? []
-        if let review, review.0.basedOn == draft?.1 || draft == nil {
-            return SOPReviewLoaded(document: review.0, revisionPath: review.1, frames: frames)
-        }
-        guard let draft else { throw SOPReviewError.noDraft }
-        return SOPReviewLoaded(document: SOPReviewDocument(draft: draft.0, draftPath: draft.1, title: manifest.title),
-                               revisionPath: nil, frames: frames)
+        if let review, review.0.basedOn == draft?.1 || draft == nil { return (review, draft) }
+        return (nil, draft)
     }
 
     /// Saves the document as a new draft revision when it differs from the newest saved review.
@@ -317,13 +336,26 @@ enum SOPReviewWorkflow {
     /// extraction cannot remove them. The revision is approved only when the document carries
     /// a current approval; every other save is unapproved. Returns the new revision path, or nil
     /// when nothing changed.
+    ///
+    /// `expecting` is the revision the document was read from (see `head(of:)`). When it is given
+    /// and another revision has been saved since, the save throws `reviewChanged` and writes no
+    /// revision, so an edit saved meanwhile stays the newest revision.
     @discardableResult
     static func autosave(_ document: inout SOPReviewDocument, package: URL, store: RecordingPackageStore,
-                         syncChecker: any SyncChecking = HQSyncCLIChecker()) async throws -> String? {
+                         syncChecker: any SyncChecking = HQSyncCLIChecker(),
+                         expecting: String? = nil) async throws -> String? {
         // Check sync before reading the manifest that gets written back, so a save or export that
         // finishes while this one waits is not overwritten with a stale copy.
         let observation = await syncChecker.observe(vaultKey: try store.readManifest(in: package).vaultKey)
         let manifest = try store.readManifest(in: package)
+        let unchanged = { (latest: RecordingManifest) throws in
+            guard let expecting else { return }
+            guard try head(manifest: latest, package: package, store: store) == expecting else {
+                throw SOPReviewError.reviewChanged
+            }
+        }
+        // Checked here so no screenshot is copied for a stale review, and again under the lock.
+        try unchanged(manifest)
         let wasApproved = document.isApproved
         let kept = try keepSelectedScreenshots(&document, manifest: manifest, package: package, store: store)
         let addKept = { (latest: inout RecordingManifest) in
@@ -345,20 +377,21 @@ enum SOPReviewWorkflow {
         var saved = document
         // The revision path is chosen under the package lock, so the history names the revision
         // this save really writes even when another command saved a draft first.
-        try store.appendDraft(source: "\(sourcePrefix):\(approval.rawValue)", approval: approval, in: package,
-                              change: { latest in
-                                  addKept(&latest)
-                                  latest.sync = sync
-                              }, body: { revision in
-                                  path = revision
-                                  saved = document
-                                  saved.history.append(.init(revision: revision, savedAt: SessionStatus.now(),
-                                                             approval: saved.approval.state,
-                                                             steps: saved.steps.count))
-                                  let encoder = JSONEncoder()
-                                  encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-                                  return String(decoding: try encoder.encode(saved), as: UTF8.self)
-                              })
+        try store.mutateManifest(in: package) { latest in
+            try unchanged(latest)
+            let revision = RecordingPackageStore.nextDraftPath(latest)
+            path = revision
+            saved = document
+            saved.history.append(.init(revision: revision, savedAt: SessionStatus.now(),
+                                       approval: saved.approval.state, steps: saved.steps.count))
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            try store.writeDraftRevision(body: String(decoding: try encoder.encode(saved), as: UTF8.self),
+                                         source: "\(sourcePrefix):\(approval.rawValue)", approval: approval,
+                                         to: &latest, in: package)
+            addKept(&latest)
+            latest.sync = sync
+        }
         document = saved
         return path
     }
@@ -472,7 +505,8 @@ enum SOPExporter {
     /// Exports the newest review revision. Refuses unless that saved revision is approved and its
     /// approval still matches its content. Writes `exports/vNNN/` and never replaces an export.
     static func export(package: URL, store: RecordingPackageStore, includeSkill: Bool = true,
-                       syncChecker: any SyncChecking = HQSyncCLIChecker()) async throws -> SOPExportResult {
+                       syncChecker: any SyncChecking = HQSyncCLIChecker(),
+                       beforeListing: @Sendable () async -> Void = {}) async throws -> SOPExportResult {
         // Sync is checked before any file is written; the manifest is saved under the package lock.
         let observation = await syncChecker.observe(vaultKey: try store.readManifest(in: package).vaultKey)
         let manifest = try store.readManifest(in: package)
@@ -535,10 +569,22 @@ enum SOPExporter {
         try store.writeJSON(record, to: "\(folder)/export.json", in: package)
         written.append("\(folder)/export.json")
 
+        // Runs after the files are written and before they are listed; tests save a review here.
+        await beforeListing()
         let sync = RecordingManifest.Sync(observation, at: SessionStatus.now())
-        let saved = try store.mutateManifest(in: package) { latest in
-            latest.exports = (latest.exports ?? []) + written.filter { !(latest.exports ?? []).contains($0) }
-            latest.sync = sync
+        let saved: RecordingManifest
+        do {
+            saved = try store.mutateManifest(in: package) { latest in
+                // A review saved while this export was written would be hidden behind an export of
+                // the older one, so the export is refused and its folder removed.
+                guard try SOPReviewWorkflow.latestReview(manifest: latest, package: package, store: store)?.1
+                    == revisionPath else { throw SOPReviewError.reviewChanged }
+                latest.exports = (latest.exports ?? []) + written.filter { !(latest.exports ?? []).contains($0) }
+                latest.sync = sync
+            }
+        } catch SOPReviewError.reviewChanged {
+            try FileManager.default.removeItem(at: try store.url(for: folder, in: package))
+            throw SOPReviewError.reviewChanged
         }
         return SOPExportResult(folder: folder, sop: sop, skill: skill, images: images, manifest: saved)
     }
@@ -700,6 +746,10 @@ enum ExportSOPCLI {
             return 0
         } catch SOPReviewError.notApproved, SOPReviewError.approvalOutdated {
             FileHandle.standardError.write(Data("SOP export refused: the newest review revision is not approved.\n".utf8))
+            return 1
+        } catch SOPReviewError.reviewChanged {
+            FileHandle.standardError.write(Data(("SOP export refused: the guide changed while it was exported. "
+                + "Review and approve the latest version, then export again. Nothing was exported.\n").utf8))
             return 1
         } catch {
             NSLog("HQ recorder: SOP export failed: \(error)")
