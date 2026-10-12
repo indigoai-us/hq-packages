@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.3.0
+
+- Vendored HQ Capture from local-screen-recorder 862e59e: middle cuts, guide
+  review and approval commands, screenshot frame listing, media length checks,
+  and the updated window style. App version 0.3.0 (build 3).
+- `/record-process` cuts by words: the agent maps "cut where I said um" to
+  `--cut` ranges from the transcript's word times.
+- `/record-process` reviews the drafted guide in chat and applies each change
+  with `review-sop`, shows candidate screenshots with `list-frames`, records
+  approval with `approve-sop --reviewer` only after the user says yes, then
+  exports with `export-sop`.
+- When a saved recording has media issues, the agent tells the user and
+  suggests recording again before editing.
+- Launcher: `run` accepts `review-sop`, `approve-sop` and `list-frames` with
+  the same company and destination checks. `status` and `wait` return `issue`
+  and the recording's `mediaIssues`.
+- Removed the 0.2.0 known gaps: middle cuts and guide review are available.
+
 ## 0.2.0
 
 - The app is now HQ Capture, built as "HQ Capture.app" in

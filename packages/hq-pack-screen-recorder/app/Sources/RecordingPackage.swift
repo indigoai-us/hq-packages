@@ -94,6 +94,8 @@ struct RecordingManifest: Codable, Equatable, Sendable {
     var drafts: [Draft] = []
     var sync = Sync()
     var trim: RecordingProject.TrimRange?
+    /// The ranges the current edit keeps when it has middle cuts. Nil for one range, and in older manifests.
+    var kept: [RecordingProject.TrimRange]?
     var webcam = RecordingProject.WebcamPlacement()
     /// Set when this manifest was migrated from a v1 `project.json`, which is kept unchanged.
     var migratedFrom: String?
@@ -126,6 +128,9 @@ struct RecordingManifest: Codable, Equatable, Sendable {
     /// exports add an object each, so packages written before both kinds existed still decode.
     /// Use `exports` and `videoExports` rather than this list.
     var exportEntries: [ExportEntry]?
+    /// Track files whose real length differs from their place on the timeline by more than 5%,
+    /// found when the recording was saved. Absent when every file matched, and in older manifests.
+    var mediaIssues: [MediaIssue]?
 
     /// Files written by SOP exports (`exports/vNNN/...`). Absent until the first export, and in
     /// older manifests.
@@ -153,9 +158,9 @@ struct RecordingManifest: Codable, Equatable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case version, id, title, company, vaultPath, createdAt, state, stopReason, tracks, timeline, edits,
-             transcripts, screenshots, drafts, sync, trim, webcam, migratedFrom, videoEffects, cameraGaps,
+             transcripts, screenshots, drafts, sync, trim, kept, webcam, migratedFrom, videoEffects, cameraGaps,
              cameraEffects, cameraRecovery, microphoneGaps, microphoneSilence, microphonePeakDBFS,
-             microphoneSilent, pausedRanges, teleprompter, screenEvidence
+             microphoneSilent, pausedRanges, teleprompter, screenEvidence, mediaIssues
         case exportEntries = "exports"
     }
 
@@ -199,6 +204,49 @@ struct RecordingManifest: Codable, Equatable, Sendable {
         var startOffsetSeconds: Double
         var durationSeconds: Double?
         var status: Status
+    }
+
+    /// A saved track file that is not as long as the timeline says. The file is kept as recorded;
+    /// the issue tells the user and the HQ session that it may not line up.
+    struct MediaIssue: Codable, Equatable, Sendable {
+        /// Largest difference, as a share of the timeline length, that still counts as matching.
+        static let tolerance = 0.05
+        /// Differences up to this many seconds always match, so one frame on a short segment never counts.
+        static let slackSeconds = 0.1
+
+        var kind: RecordingProject.Track.Kind
+        var relativePath: String
+        var timelineSeconds: Double
+        var fileSeconds: Double
+        var message: String
+
+        init(kind: RecordingProject.Track.Kind, relativePath: String, timelineSeconds: Double, fileSeconds: Double) {
+            self.kind = kind
+            self.relativePath = relativePath
+            self.timelineSeconds = timelineSeconds
+            self.fileSeconds = fileSeconds
+            message = Self.message(kind, timelineSeconds: timelineSeconds, fileSeconds: fileSeconds)
+        }
+
+        /// An issue when the file length is more than 5% away from the timeline length, else nil.
+        static func check(_ kind: RecordingProject.Track.Kind, path: String, timelineSeconds: Double,
+                          fileSeconds: Double) -> MediaIssue? {
+            guard timelineSeconds.isFinite, fileSeconds.isFinite, timelineSeconds > 0 else { return nil }
+            let difference = abs(fileSeconds - timelineSeconds)
+            guard difference > timelineSeconds * tolerance, difference > slackSeconds else { return nil }
+            return MediaIssue(kind: kind, relativePath: path, timelineSeconds: timelineSeconds, fileSeconds: fileSeconds)
+        }
+
+        static func message(_ kind: RecordingProject.Track.Kind, timelineSeconds: Double, fileSeconds: Double) -> String {
+            let name = switch kind {
+            case .screen: "screen"
+            case .camera: "camera"
+            case .microphone: "narration"
+            }
+            let seconds = { (value: Double) in String(format: "%.1f", value) }
+            return "The \(name) file is \(seconds(fileSeconds)) seconds long but the recording has "
+                + "\(seconds(timelineSeconds)) seconds of it, so it may not line up. The original files are kept."
+        }
     }
 
     /// A range where a system video effect such as Presenter Overlay drew the camera into the
@@ -280,6 +328,8 @@ struct RecordingManifest: Codable, Equatable, Sendable {
         var createdAt: String
         var durationSeconds: Double
         var trim: RecordingProject.TrimRange?
+        /// The kept ranges when the edit had middle cuts. Absent for one range and in older exports.
+        var kept: [RecordingProject.TrimRange]?
         var webcam: RecordingProject.WebcamPlacement
     }
 
@@ -373,6 +423,9 @@ struct EditRevision: Codable, Equatable, Sendable {
     var revision: Int
     var createdAt: String
     var trim: RecordingProject.TrimRange?
+    /// The kept ranges when the edit has middle cuts. Absent for one range, and in revisions
+    /// written before cuts existed, which load as the single `trim` range.
+    var kept: [RecordingProject.TrimRange]?
     var webcam: RecordingProject.WebcamPlacement
 }
 
@@ -523,6 +576,7 @@ struct RecordingPackageStore: Sendable {
                                                   durationSeconds: nil, status: .closed)])
         }
         manifest.trim = project.trim
+        manifest.kept = project.kept
         manifest.webcam = project.webcam
         manifest.migratedFrom = "project.json"
         if !FileManager.default.fileExists(atPath: package.appendingPathComponent(manifest.timeline).path) {
@@ -540,15 +594,20 @@ struct RecordingPackageStore: Sendable {
     }
 
     /// Records an edit decision as a new revision file. Earlier revisions and media are untouched.
-    func appendEdit(trim: RecordingProject.TrimRange?, webcam: RecordingProject.WebcamPlacement,
+    /// `kept` lists the ranges an edit with middle cuts keeps; nil keeps the one `trim` range.
+    func appendEdit(trim: RecordingProject.TrimRange?, kept: [RecordingProject.TrimRange]? = nil,
+                    webcam: RecordingProject.WebcamPlacement,
                     to manifest: inout RecordingManifest, in package: URL) throws {
         var candidate = manifest
         candidate.trim = trim
+        candidate.kept = kept
         candidate.webcam = webcam
-        try RecordingProject(id: manifest.id, title: manifest.title, tracks: [], trim: trim, webcam: webcam).validate()
+        try RecordingProject(id: manifest.id, title: manifest.title, tracks: [], trim: trim, kept: kept,
+                             webcam: webcam).validate()
         let revision = manifest.edits.count + 1
         let path = String(format: "edits/edit-%03d.json", revision)
-        try writeNewJSON(EditRevision(revision: revision, createdAt: SessionStatus.now(), trim: trim, webcam: webcam),
+        try writeNewJSON(EditRevision(revision: revision, createdAt: SessionStatus.now(), trim: trim, kept: kept,
+                                      webcam: webcam),
                          to: path, in: package)
         candidate.edits.append(path)
         try writeManifest(candidate, in: package)
@@ -662,7 +721,7 @@ extension RecordingPackageStore {
         do {
             duration = try await PlaybackLayers.exportVideo(
                 package: package, timeline: timeline, webcam: manifest.webcam, trim: manifest.trim,
-                to: temp, beforeWriting: { seconds in
+                kept: manifest.kept, to: temp, beforeWriting: { seconds in
                     guard hasRoomToExport(seconds: seconds) else { throw PackageError.lowDiskSpace }
                 })
             try beforeCommit?(temp)
@@ -677,7 +736,7 @@ extension RecordingPackageStore {
         var candidate = manifest
         candidate.videoExports = (manifest.videoExports ?? []) + [.init(
             relativePath: path, createdAt: SessionStatus.now(), durationSeconds: duration,
-            trim: manifest.trim, webcam: manifest.webcam)]
+            trim: manifest.trim, kept: manifest.kept, webcam: manifest.webcam)]
         do {
             try writeManifest(candidate, in: package)
         } catch {

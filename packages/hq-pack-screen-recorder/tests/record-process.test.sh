@@ -46,7 +46,9 @@ EOF
 chmod +x "$tmp/stub-compile.sh"
 
 # Stub opener: records the app's argv, writes awaiting-start, switches to recording when
-# go.record appears, and on stop.request saves (if recording) or closes.
+# go.record appears, and on stop.request saves (if recording) or closes. At save, media.issue
+# makes the package manifest list a short narration file and app.issue makes the status carry
+# the app's note about it.
 cat >"$tmp/stub-open.sh" <<'EOF'
 #!/usr/bin/env bash
 app="$1"; shift; [ "$1" = --args ] && shift
@@ -54,6 +56,7 @@ printf '%s\n' "$@" >"$app.argv"
 python3 -I - "$(dirname "$0")/go.record" "$@" <<'PY' >/dev/null 2>&1 &
 import json, os, sys, time
 go = sys.argv[1]
+flags = os.path.dirname(go)
 args = dict(zip(sys.argv[2::2], sys.argv[3::2]))
 ctl = args["--hq-control"]
 def write(state, **extra):
@@ -75,10 +78,19 @@ os.remove(os.path.join(ctl, "stop.request"))
 if recording:
     pkg = os.path.join(args["--destination"], "demo.hqrec")
     os.makedirs(pkg, exist_ok=True)
+    note = ("The narration file is 9.0 seconds long but the recording has 12.0 seconds of it, "
+            "so it may not line up. The original files are kept.")
+    extra = {}
+    if os.path.exists(os.path.join(flags, "media.issue")):
+        with open(os.path.join(pkg, "manifest.json"), "w") as f:
+            json.dump({"schema": 1, "mediaIssues": [{"kind": "microphone", "relativePath": "tracks/microphone-001.m4a",
+                       "timelineSeconds": 12.0, "fileSeconds": 9.0, "message": note}]}, f)
+    if os.path.exists(os.path.join(flags, "app.issue")):
+        extra["issue"] = note
     rel = "companies/%s/recordings/demo.hqrec" % args["--company"]
     prompt = ("Continue my HQ Capture recording for %s at %s: show me what was recorded, then trim, "
               "place the camera, export the video and draft the step-by-step guide." % (args["--company"], pkg))
-    write("saved", recording=rel, durationSeconds=2.0, resumePrompt=prompt, reason="stop-requested")
+    write("saved", recording=rel, durationSeconds=2.0, resumePrompt=prompt, reason="stop-requested", **extra)
 else:
     write("closed")
 PY
@@ -160,6 +172,7 @@ out="$(run wait --timeout 1)"
 check "wait reports recording with pause and duration" \
   'j["state"]=="recording" and j["paused"] is False and j["durationSeconds"]==1.5' "$(head -n 1 <<<"$out")"
 check "stop saves the recording" 'j["state"]=="saved" and j["recording"]=="companies/acme/recordings/demo.hqrec"' "$(run stop)"
+check "a clean save has no issue and no mediaIssues" '"issue" not in j and "mediaIssues" not in j' "$(run status)"
 out="$(run wait --timeout 5)"
 expect "wait exits 0 once saved" "$(code wait --timeout 5)" "0"
 check "wait returns the resume prompt after save" \
@@ -167,6 +180,26 @@ check "wait returns the resume prompt after save" \
 check "stop when saved is a no-op" 'j["state"]=="saved"' "$(run stop)"
 rm -f "$tmp/go.record"
 prompt="$(python3 -I -c 'import json,sys; print(json.loads(sys.argv[1])["resumePrompt"])' "$(last "$out")")"
+
+# Media issues: after a save, status and wait show the app's note and the package's mediaIssues.
+touch "$tmp/media.issue" "$tmp/app.issue"
+check "start opens for a second recording" 'j["state"]=="awaiting-start"' "$(run start)"
+touch "$tmp/go.record"
+sleep 0.5
+check "stop saves the second recording" 'j["state"]=="saved"' "$(run stop)"
+out="$(run wait --timeout 5)"
+check "wait's saved line carries the app's issue note" \
+  'j["event"]=="state" and j["state"]=="saved" and j["issue"].startswith("The narration file is 9.0 seconds long")' "$(head -n 1 <<<"$out")"
+check "wait ends with the mediaIssues from the package" \
+  'j["state"]=="saved" and j["mediaIssues"][0]["kind"]=="microphone" and j["mediaIssues"][0]["fileSeconds"]==9.0 and j["issue"]==j["mediaIssues"][0]["message"]' "$(last "$out")"
+check "status lists each media issue with its file and message" \
+  'j["mediaIssues"][0]["relativePath"]=="tracks/microphone-001.m4a" and "may not line up" in j["mediaIssues"][0]["message"]' "$(run status)"
+python3 -I -c 'import json,sys; p=sys.argv[1]; s=json.load(open(p)); s.pop("issue"); json.dump(s, open(p, "w"))' "$HQ_RECORDER_HOME/active/status.json"
+check "status uses the first media issue as the note when the app gave none" \
+  'j["issue"].startswith("The narration file is 9.0 seconds long") and len(j["mediaIssues"])==1' "$(run status)"
+printf 'not json' >"$hq/companies/acme/recordings/demo.hqrec/manifest.json"
+check "an unreadable manifest leaves status working without mediaIssues" 'j["ok"] and "mediaIssues" not in j' "$(run status)"
+rm -f "$tmp/media.issue" "$tmp/app.issue" "$tmp/go.record" "$hq/companies/acme/recordings/demo.hqrec/manifest.json"
 
 # Rebuild only when the pack's app inputs change.
 out="$(run start)"
@@ -221,6 +254,30 @@ check "run sync-package passes the HQ root" 'j["argv"][0]=="--sync-package" and 
 expect "run passes a refusal exit code through" "$(STUB_EXIT=1 code run export-sop "$pkg")" "1"
 expect "run passes a cancel exit code through" "$(STUB_EXIT=130 code run export-video "$pkg")" "130"
 expect "run exits 0 when the app succeeds" "$(code run frame "$pkg" --at 1 --out /tmp/x.png)" "0"
+
+# run: the guide review, approval and frame list modes pass through like the others.
+out="$(run run review-sop "$pkg" --move 3 1 --reword 2 "Click Save" --drop 4 --json)"
+check "run review-sop passes every change to the app" \
+  "j[\"argv\"]==[\"--review-sop\", \"$real_pkg\", \"--move\", \"3\", \"1\", \"--reword\", \"2\", \"Click Save\", \"--drop\", \"4\", \"--json\"]" "$out"
+out="$(run run --approve-sop "$pkg" --reviewer "Pat Lee" --json)"
+check "run approve-sop passes the reviewer" \
+  "j[\"argv\"]==[\"--approve-sop\", \"$real_pkg\", \"--reviewer\", \"Pat Lee\", \"--json\"]" "$out"
+out="$(run run list-frames "$pkg" --step 2 --json)"
+check "run list-frames passes the step" "j[\"argv\"]==[\"--list-frames\", \"$real_pkg\", \"--step\", \"2\", \"--json\"]" "$out"
+out="$(run run edit "$pkg" --cut 3.2-4.1 --cut 9-9.6 --json)"
+check "run edit passes repeated cuts" \
+  "j[\"argv\"]==[\"--edit\", \"$real_pkg\", \"--cut\", \"3.2-4.1\", \"--cut\", \"9-9.6\", \"--json\"]" "$out"
+check "run review-sop refuses another company's recording" 'j["error"]=="package-outside-company"' \
+  "$(run run review-sop "$hq/companies/other/recordings/theirs.hqrec" --drop 1)"
+check "run approve-sop refuses a symlink to another company's recording" 'j["error"]=="package-outside-company"' \
+  "$(run run approve-sop "$hq/companies/acme/recordings/link.hqrec" --reviewer Pat)"
+check "run list-frames refuses a company override" 'j["error"]=="bad-argument"' "$(run run list-frames "$pkg" --company other)"
+check "run review-sop refuses a destination override" 'j["error"]=="bad-argument"' "$(run run review-sop "$pkg" --destination /tmp)"
+check "run rejects approve-sop given as a second mode" 'j["error"]=="bad-argument"' "$(run run review-sop "$pkg" --approve-sop)"
+check "run rejects list-frames given as a second mode" 'j["error"]=="bad-argument"' "$(run run describe "$pkg" --list-frames)"
+session "other"
+check "run review-sop refuses in a session bound to another company" 'j["error"]=="package-outside-company"' "$(run run review-sop "$pkg" --drop 1)"
+session "acme"
 
 # resume: parses the app's prompt and checks it against the bound company.
 out="$(run resume "$prompt")"

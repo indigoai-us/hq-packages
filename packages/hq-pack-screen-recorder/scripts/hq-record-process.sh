@@ -11,15 +11,17 @@
 #   doctor                        check this Mac can build and run the app
 #   build [--force]               build the app if missing or out of date
 #   start [--company <slug>]      open HQ Capture bound to a company's recordings folder
-#   status                        print status.json with the live state
+#   status                        print status.json with the live state; after a save it adds
+#                                 mediaIssues from the package and keeps the app's issue note
 #   wait [--timeout <seconds>]    block until the state is saved, failed, closed or lost,
-#                                 printing one line per change; exit 3 when still open at timeout
+#                                 printing one line per change (with issue when the app sets
+#                                 one) and the full status last; exit 3 when still open at timeout
 #   stop                          write stop.request and wait for the app to close
 #   run <mode> <package> [args]   run an agent command headless on a saved recording
 #   resume <prompt>               check a pasted resume prompt and print its package
 #
-# run modes: describe, transcribe, edit, export-video, frame, draft-sop, export-sop,
-# extract-screen-evidence, sync-package. run prints the app's own output and exits with
+# run modes: describe, transcribe, edit, export-video, frame, review-sop, approve-sop,
+# list-frames, draft-sop, export-sop, extract-screen-evidence, sync-package. run prints the app's own output and exits with
 # its code (0 done, 1 refused, 2 usage or error, 130 cancelled). A launcher refusal
 # prints {"ok": false, ...} and exits 3 for run and resume, 1 for the other subcommands.
 #
@@ -291,11 +293,24 @@ cmd_status() {
   local state
   state="$(current_state)"
   if [ "$state" = none ]; then json ok true state none; return; fi
+  # After a save, mediaIssues lists the saved package's track files that are not as long as the
+  # recording (from its manifest.json), and issue is the plain note HQ Capture showed.
   python3 -I -c '
-import json, sys
+import json, os, sys
 s = json.load(open(sys.argv[1]))
 s["ok"] = True
 s["state"] = sys.argv[2]
+rec, dest = s.get("recording"), s.get("destination")
+if s["state"] == "saved" and isinstance(rec, str) and isinstance(dest, str) and rec.endswith(".hqrec"):
+    pkg = os.path.join(dest, os.path.basename(rec))
+    try:
+        issues = json.load(open(os.path.join(pkg, "manifest.json"))).get("mediaIssues") or []
+    except (OSError, ValueError):
+        issues = []
+    issues = [i for i in issues if isinstance(i, dict) and isinstance(i.get("message"), str)]
+    if issues:
+        s["mediaIssues"] = issues
+        if not s.get("issue"): s["issue"] = issues[0]["message"]
 print(json.dumps(s))' "$status_file" "$state"
 }
 
@@ -357,7 +372,7 @@ cmd_wait() {
 import json, sys
 s = json.load(open(sys.argv[1]))
 out = {"event": "state", "state": sys.argv[2]}
-for key in ("paused", "durationSeconds", "recording", "reason"):
+for key in ("paused", "durationSeconds", "recording", "reason", "issue"):
     if s.get(key) is not None: out[key] = s[key]
 print(json.dumps(out))' "$status_file" "$state" 2>/dev/null || true)"
     # Print a line when the state, pause or reason changes; duration alone is not a change.
@@ -397,13 +412,13 @@ cmd_run() {
   shift 2
   mode="${mode#--}"
   case "$mode" in
-    describe|transcribe|edit|export-video|frame|draft-sop|export-sop|extract-screen-evidence|sync-package) ;;
-    *) fail bad-mode "Unknown mode: $mode. Use describe, transcribe, edit, export-video, frame, draft-sop, export-sop, extract-screen-evidence or sync-package." ;;
+    describe|transcribe|edit|export-video|frame|review-sop|approve-sop|list-frames|draft-sop|export-sop|extract-screen-evidence|sync-package) ;;
+    *) fail bad-mode "Unknown mode: $mode. Use describe, transcribe, edit, export-video, frame, review-sop, approve-sop, list-frames, draft-sop, export-sop, extract-screen-evidence or sync-package." ;;
   esac
   local arg
   for arg in "$@"; do
     case "$arg" in
-      --describe|--transcribe|--edit|--export-video|--frame|--draft-sop|--export-sop|--extract-screen-evidence|--sync-package|--measure-sync|--check-access|--retrieve-package|--prepare-skill|--register-skill|--review-package|--hq-control|--company|--destination|--hq-root)
+      --describe|--transcribe|--edit|--export-video|--frame|--review-sop|--approve-sop|--list-frames|--draft-sop|--export-sop|--extract-screen-evidence|--sync-package|--measure-sync|--check-access|--retrieve-package|--prepare-skill|--register-skill|--review-package|--hq-control|--company|--destination|--hq-root)
         fail bad-argument "$arg can't be passed to run. Run one mode at a time; the launcher sets the company and folders." ;;
     esac
   done

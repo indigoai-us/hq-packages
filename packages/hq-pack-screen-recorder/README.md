@@ -6,8 +6,10 @@ separate layers and saves them to that company's `recordings/` folder.
 
 HQ Capture only records. When you save, you go back to the HQ session and the
 agent does the rest by conversation: it summarizes what was recorded, trims
-the start or end, places or hides the camera, shows still frames, exports the
-video, and drafts a step-by-step guide from the narration and screen. If the
+the start or end, cuts out parts you name by what you said, places or hides
+the camera, shows still frames, exports the video, drafts a step-by-step guide
+from the narration and screen, applies your review changes to it, and exports
+it once you approve. If the
 session was interrupted, HQ Capture gives you a prompt to paste into a new
 session to pick up the same recording.
 
@@ -17,7 +19,7 @@ binary to download and no notarization step.
 
 ## Status
 
-0.2.0. Verified:
+0.3.0. Verified:
 
 - The pack builds "HQ Capture.app" on a Mac with only Command Line Tools,
   with its icon, ad-hoc signature, and camera and microphone entitlements.
@@ -25,15 +27,11 @@ binary to download and no notarization step.
   `recordings/` folder, and reports `awaiting-start` without recording.
 - `stop` closes the app, and a second start reuses the build.
 - The 0.1.0 app is removed after the new one builds.
-- The launcher passes the agent commands through to the app, keeps them
-  inside the session's company, and checks pasted resume prompts.
-
-Not available yet:
-
-- Cutting a section out of the middle of a recording. An edit keeps one range.
-- Applying review changes to a drafted guide and recording approval from the
-  session. There is no agent command for either, so a drafted guide cannot be
-  exported from the session yet.
+- The launcher passes the agent commands through to the app, including
+  repeated cuts, guide review, frame listing and approval, keeps them inside
+  the session's company, and checks pasted resume prompts.
+- `status` and `wait` report a saved recording's media issues (a layer whose
+  file length does not match the recording).
 
 ## Contents
 

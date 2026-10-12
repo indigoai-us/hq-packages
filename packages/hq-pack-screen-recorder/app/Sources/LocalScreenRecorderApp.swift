@@ -18,8 +18,9 @@ struct LocalScreenRecorderApp: App {
         // `--sync-package`, `--check-access`, `--retrieve-package`, `--prepare-skill` and `--register-skill`
         // go through the HQ CLI and the company vault, then exit.
         if let status = VaultCLI.runIfRequested(CommandLine.arguments) { exit(status) }
-        // `--describe`, `--transcribe`, `--edit`, `--export-video` and `--frame` let the HQ session
-        // agent work with a saved recording, then exit. See AgentCommands.swift.
+        // `--describe`, `--transcribe`, `--edit`, `--export-video`, `--frame`, `--review-sop`,
+        // `--approve-sop` and `--list-frames` let the HQ session agent work with a saved recording
+        // and its SOP review, then exit. See AgentCommands.swift and AgentSOPCommands.swift.
         if let status = AgentCommandsCLI.runIfRequested(CommandLine.arguments) { exit(status) }
     }
 
@@ -27,7 +28,12 @@ struct LocalScreenRecorderApp: App {
         WindowGroup("HQ Capture") {
             WorkspaceView(session: appDelegate.session)
                 .frame(minWidth: 760, minHeight: 520)
+                // The window is glass edge to edge: a clear window background under full-size
+                // content, with the glass drawn by the view.
+                .background { HQWindowGlass() }
+                .containerBackground(.clear, for: .window)
         }
+        .windowStyle(.hiddenTitleBar)
     }
 }
 
@@ -37,6 +43,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         session.begin()
+        if let surface = ScreenshotStage.surface(CommandLine.arguments) {
+            ScreenshotStage.present(surface, session: session)
+        }
     }
 
     /// Quitting while recording finalizes the recording first, so the saved files stay playable.
@@ -107,6 +116,9 @@ final class SessionController {
     /// What to paste back into the HQ session after a save, so editing can continue there even
     /// if that session was interrupted. Also written to status.json.
     private(set) var resumePrompt: String?
+    /// A saved file that doesn't match the length the recording gave it. Shown on the existing
+    /// note for that layer and written to status.json.
+    private var mediaIssue: String?
     let teleprompter = TeleprompterModel()
     @ObservationIgnored private var teleprompterPanel: TeleprompterWindow?
     @ObservationIgnored private let badge = RecordingBadgeWindow()
@@ -316,6 +328,7 @@ final class SessionController {
         stoppedHost = nil
         savedPackage = nil
         resumePrompt = nil
+        mediaIssue = nil
         webcamPlacement = RecordingProject.WebcamPlacement()
         screenPreview.clear()
         effectWarning = nil
@@ -619,6 +632,14 @@ final class SessionController {
         saveStatus = Self.saveStatus(manifest)
         savedPackage = manifest.state == .saved ? await recording.package : nil
         resumePrompt = savedPackage.map { Self.resumePrompt(company: recording.company, package: $0) }
+        if let issue = manifest.mediaIssues?.first {
+            mediaIssue = issue.message
+            switch issue.kind {
+            case .microphone: microphoneNote = issue.message
+            case .camera: cameraNote = issue.message
+            case .screen: stopNote = issue.message
+            }
+        }
         publish(manifest.state == .saved ? .saved : .failed, reason: reason)
     }
 
@@ -655,6 +676,16 @@ final class SessionController {
         publish(.closed, reason: problem)
     }
 
+    /// Screenshot staging only: shows the saved state with a sample prompt. Nothing is recorded
+    /// or written to status.json.
+    func stageSavedForScreenshot() {
+        guard let context else { return }
+        let package = context.destination.appendingPathComponent("sample.hqrec", isDirectory: true)
+        savedPackage = package
+        resumePrompt = Self.resumePrompt(company: context.company, package: package)
+        saveStatus = "Saved on this Mac in the company vault folder. Not synced yet."
+    }
+
     private func publish(_ newState: SessionState, reason: String? = nil) {
         guard let context, let channel else { return }
         state = newState
@@ -665,7 +696,7 @@ final class SessionController {
                                    recording: recordingPath, sync: syncState,
                                    paused: newState == .recording ? isPaused : nil,
                                    durationSeconds: durationSeconds,
-                                   resumePrompt: resumePrompt)
+                                   resumePrompt: resumePrompt, issue: mediaIssue)
         do {
             try channel.write(status)
         } catch {
@@ -676,148 +707,240 @@ final class SessionController {
 
 struct WorkspaceView: View {
     let session: SessionController
+    @Namespace private var glass
+    @Namespace private var stage
+    @State private var copied = false
+    private let access = HQAccessibility()
 
     var body: some View {
         ScrollView {
             content
         }
+        .scrollEdgeEffectStyle(.soft, for: .top)
+        .animation(HQMotion.smooth(access.reduceMotion), value: session.isCapturing)
+        .animation(HQMotion.smooth(access.reduceMotion), value: session.isPaused)
+        .animation(HQMotion.smooth(access.reduceMotion), value: session.isStopping)
+        .animation(HQMotion.smooth(access.reduceMotion), value: session.savedPackage != nil)
+        .animation(HQMotion.smooth(access.reduceMotion), value: session.blockers.count)
+        .animation(HQMotion.smooth(access.reduceMotion), value: session.selection.camera?.uniqueID)
+        .animation(HQMotion.smooth(access.reduceMotion), value: session.selection.microphone?.uniqueID)
     }
 
     private var content: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            HStack(alignment: .center, spacing: 12) {
-                HQWordmark()
-                    .fill(Color.white)
-                    .frame(width: HQWordmark.width(forHeight: 28), height: 28)
-                    .accessibilityHidden(true)
-                Text("Capture")
-                    .font(.system(size: 32, weight: .regular, design: .serif))
-                    .accessibilityLabel("HQ Capture")
-                    .accessibilityIdentifier("workspaceTitle")
-            }
-            Text("Record a process. Keep the original layers.")
-                .font(.system(size: 17))
-            Divider()
+        VStack(alignment: .leading, spacing: 28) {
+            header
             companySection
-            HStack(alignment: .top, spacing: 32) {
-                VStack(alignment: .leading, spacing: 14) {
-                    Text("CAPTURE").font(.system(size: 12)).foregroundStyle(.secondary)
-                    Text("Screen, webcam, and narration")
-                    if session.context != nil { sourceRows }
+            HStack(alignment: .top, spacing: 28) {
+                VStack(alignment: .leading, spacing: 18) {
+                    if session.context != nil {
+                        VStack(alignment: .leading, spacing: 14) { sourceRows }
+                            .padding(16)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .hqGlass()
+                    }
                     Text(captureStatus)
+                        .font(.system(size: 13))
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .contentTransition(.opacity)
                         .accessibilityIdentifier("captureStatus")
-                    if let effectWarning = session.effectWarning {
-                        Text(effectWarning)
-                            .font(.system(size: 12))
-                            .foregroundStyle(.orange)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .accessibilityIdentifier("effectWarning")
-                    }
-                    if let cameraNote = session.cameraNote {
-                        Text(cameraNote)
-                            .font(.system(size: 12))
-                            .foregroundStyle(.orange)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .accessibilityIdentifier("cameraNote")
-                    }
-                    if let microphoneNote = session.microphoneNote {
-                        Text(microphoneNote)
-                            .font(.system(size: 12))
-                            .foregroundStyle(.orange)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .accessibilityIdentifier("microphoneNote")
-                    }
-                    if let stopNote = session.stopNote {
-                        Text(stopNote)
-                            .font(.system(size: 12))
-                            .foregroundStyle(.orange)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .accessibilityIdentifier("stopNote")
-                    }
-                    if let saveStatus = session.saveStatus {
-                        Text(saveStatus)
-                            .foregroundStyle(.secondary)
-                            .accessibilityIdentifier("saveStatus")
-                    }
+                    notes
                     if session.isCapturing || session.durationSeconds != nil { durationRow }
-                    HStack(spacing: 12) {
-                        Button(session.isCapturing ? "Stop recording" : "Start recording") { session.toggleRecording() }
-                            .disabled(session.isCapturing ? session.isStopping : !session.canStart)
-                            .accessibilityIdentifier("recordButton")
-                        if session.isCapturing {
-                            Button(session.isPaused ? "Resume" : "Pause") { session.togglePause() }
-                                .disabled(session.isStopping)
-                                .keyboardShortcut(session.pauseShortcutGlobal
-                                                  ? nil : KeyboardShortcut("p", modifiers: [.command, .option]))
-                                .accessibilityIdentifier("pauseButton")
-                        }
-                        if session.context != nil {
-                            Button(session.teleprompter.isOpen ? "Hide teleprompter" : "Teleprompter") {
-                                session.toggleTeleprompter()
-                            }
-                            .accessibilityIdentifier("teleprompterButton")
-                        }
-                    }
+                    actions
                     if session.isCapturing {
                         Text(PauseHotKey.hint(global: session.pauseShortcutGlobal))
-                            .font(.system(size: 12)).foregroundStyle(.secondary)
-                        CompositionPreview(screen: session.screenPreview, camera: session.cameraCapture?.session,
-                                           placement: session.webcamPlacement, place: session.placeWebcam)
-                            .frame(width: 320, height: 180)
-                        if session.cameraCapture != nil {
-                            Text("Drag the camera bubble to where it should sit. The camera is still saved as its own track.")
-                                .font(.system(size: 12)).foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
+                            .font(.system(size: 12)).foregroundStyle(.tertiary)
                     }
                     if session.savedPackage != nil, !session.isCapturing {
                         savedSection
+                            .transition(access.reduceMotion ? .opacity : .opacity.combined(with: .offset(y: 8)))
                     }
-                }.frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                previewStage
             }
-            Spacer()
-            Divider()
+            Spacer(minLength: 0)
             Text("Development build")
-                .font(.system(size: 13)).foregroundStyle(.secondary)
-        }.padding(32)
-            .accessibilityElement(children: .contain)
+                .font(.system(size: 11)).foregroundStyle(.tertiary)
+        }
+        .padding(.horizontal, 36)
+        .padding(.top, 8)
+        .padding(.bottom, 24)
+        .accessibilityElement(children: .contain)
+    }
+
+    /// The HQ mark, small and quiet, with the window's name.
+    private var header: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            HQWordmark()
+                .fill(Color.primary.opacity(0.55))
+                .frame(width: HQWordmark.width(forHeight: 16), height: 16)
+                .accessibilityHidden(true)
+            Text("Capture")
+                .font(.system(size: 22, weight: .regular, design: .serif))
+                .accessibilityLabel("HQ Capture")
+                .accessibilityIdentifier("workspaceTitle")
+            Text("Record a process. Keep the original layers.")
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    /// The one primary action for the current state, with Pause and the teleprompter beside it.
+    private var actions: some View {
+        GlassEffectContainer(spacing: 10) {
+            HStack(spacing: 10) {
+                Button { session.toggleRecording() } label: {
+                    Label(session.isCapturing ? "Stop recording" : "Start recording",
+                          systemImage: session.isCapturing ? "stop.fill" : "record.circle")
+                        .contentTransition(.symbolEffect(.replace))
+                        .padding(.horizontal, 6)
+                }
+                .font(.system(size: 13, weight: .semibold))
+                .controlSize(.large)
+                .hqGlassButton(prominent: true)
+                .tint(session.isCapturing ? .red : .accentColor)
+                .disabled(session.isCapturing ? session.isStopping : !session.canStart)
+                .accessibilityIdentifier("recordButton")
+                .glassEffectID("record", in: glass)
+                if session.isCapturing {
+                    Button { session.togglePause() } label: {
+                        Label(session.isPaused ? "Resume" : "Pause",
+                              systemImage: session.isPaused ? "play.fill" : "pause.fill")
+                            .contentTransition(.symbolEffect(.replace))
+                    }
+                    .font(.system(size: 13, weight: .medium))
+                    .controlSize(.large)
+                    .hqGlassButton()
+                    .disabled(session.isStopping)
+                    .keyboardShortcut(session.pauseShortcutGlobal
+                                      ? nil : KeyboardShortcut("p", modifiers: [.command, .option]))
+                    .accessibilityIdentifier("pauseButton")
+                    .glassEffectID("pause", in: glass)
+                    .glassEffectTransition(access.reduceMotion ? .identity : .matchedGeometry)
+                }
+                if session.context != nil {
+                    Button { session.toggleTeleprompter() } label: {
+                        Label(session.teleprompter.isOpen ? "Hide teleprompter" : "Teleprompter",
+                              systemImage: "text.justify.left")
+                    }
+                    .font(.system(size: 13, weight: .medium))
+                    .controlSize(.large)
+                    .hqGlassButton()
+                    .accessibilityIdentifier("teleprompterButton")
+                    .glassEffectID("teleprompter", in: glass)
+                }
+            }
+        }
+    }
+
+    /// The camera preview before recording grows into the composition preview while recording.
+    @ViewBuilder private var previewStage: some View {
+        if session.isCapturing {
+            VStack(alignment: .leading, spacing: 8) {
+                CompositionPreview(screen: session.screenPreview, camera: session.cameraCapture?.session,
+                                   placement: session.webcamPlacement, place: session.placeWebcam)
+                    .frame(width: 320, height: 180)
+                    .clipShape(.rect(cornerRadius: HQRadius.card, style: .continuous))
+                    .matchedGeometryEffect(id: "preview", in: stage)
+                if session.cameraCapture != nil {
+                    Text("Drag the camera bubble to where it should sit. The camera is still saved as its own track.")
+                        .font(.system(size: 12)).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(width: 320)
+            .transition(.opacity)
+        } else if session.context != nil, session.selection.camera != nil,
+                  !session.blockers.contains(where: { $0.row == .camera }) {
+            CameraPreview(session: session.preview.session)
+                .frame(width: 256, height: 144)
+                .background(.black)
+                .clipShape(.rect(cornerRadius: HQRadius.card, style: .continuous))
+                .overlay(HQDispersionRim(shape: .rect(cornerRadius: HQRadius.card, style: .continuous)))
+                .matchedGeometryEffect(id: "preview", in: stage)
+                .accessibilityIdentifier("cameraPreview")
+                .transition(.opacity)
+        }
+    }
+
+    @ViewBuilder private var notes: some View {
+        ForEach([("effectWarning", session.effectWarning), ("cameraNote", session.cameraNote),
+                 ("microphoneNote", session.microphoneNote), ("stopNote", session.stopNote)], id: \.0) { id, note in
+            if let note {
+                Text(note)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier(id)
+            }
+        }
+        if let saveStatus = session.saveStatus {
+            Text(saveStatus)
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+                .accessibilityIdentifier("saveStatus")
+        }
     }
 
     /// After a save: where to go next, and the prompt to paste back into the HQ session.
     @ViewBuilder private var savedSection: some View {
-        Text(SessionController.savedNote)
-            .accessibilityIdentifier("savedNote")
-        if let prompt = session.resumePrompt {
-            Text(prompt)
-                .font(.system(size: 12, design: .monospaced))
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(10)
-                .overlay(Rectangle().stroke(Color.secondary.opacity(0.5), lineWidth: 1))
-                .accessibilityIdentifier("resumePrompt")
-            HStack(spacing: 12) {
-                Button("Copy") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(prompt, forType: .string)
+        VStack(alignment: .leading, spacing: 12) {
+            Text(SessionController.savedNote)
+                .font(.system(size: 13))
+                .accessibilityIdentifier("savedNote")
+            if let prompt = session.resumePrompt {
+                Text(prompt)
+                    .font(.system(size: 12, design: .monospaced))
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+                    .background(Color.primary.opacity(0.06),
+                                in: .rect(cornerRadius: HQRadius.inset, style: .continuous))
+                    .accessibilityIdentifier("resumePrompt")
+                GlassEffectContainer(spacing: 10) {
+                    HStack(spacing: 10) {
+                        Button {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(prompt, forType: .string)
+                            copied = true
+                            Task { @MainActor in
+                                try? await Task.sleep(for: .seconds(1.6))
+                                copied = false
+                            }
+                        } label: {
+                            Label("Copy", systemImage: copied ? "checkmark" : "doc.on.doc")
+                                .contentTransition(.symbolEffect(.replace))
+                        }
+                        .controlSize(.large)
+                        .hqGlassButton(prominent: true)
+                        .accessibilityIdentifier("copyResumePrompt")
+                        Button { session.revealSavedRecording() } label: {
+                            Label("Show recording", systemImage: "folder")
+                        }
+                        .controlSize(.large)
+                        .hqGlassButton()
+                        .accessibilityIdentifier("showRecording")
+                    }
+                    .animation(HQMotion.snappy(access.reduceMotion), value: copied)
                 }
-                .accessibilityIdentifier("copyResumePrompt")
-                Button("Show recording") { session.revealSavedRecording() }
-                    .accessibilityIdentifier("showRecording")
             }
         }
+        .padding(16)
+        .hqGlass()
     }
 
     /// Recorded time and state. Paused time is left out.
     private var durationRow: some View {
         TimelineView(.periodic(from: .now, by: 0.5)) { _ in
             HStack(spacing: 8) {
-                Rectangle()
-                    .fill(session.isCapturing && !session.isPaused ? Color.red : Color.gray)
+                Circle()
+                    .fill(session.isCapturing && !session.isPaused ? Color.red : Color.secondary)
                     .frame(width: 8, height: 8)
                 Text(durationLabel)
                     .font(.system(size: 13, weight: .medium).monospacedDigit())
+                    .contentTransition(.numericText())
                     .accessibilityIdentifier("recordingDuration")
             }
         }
@@ -830,28 +953,43 @@ struct WorkspaceView: View {
         return "Recorded \(time)"
     }
 
+    /// One quiet line: the company the recording saves to and its vault folder.
     @ViewBuilder private var companySection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("SAVES TO").font(.system(size: 12)).foregroundStyle(.secondary)
             if let context = session.context {
-                Text(context.company)
-                    .accessibilityIdentifier("companyName")
-                Text(context.destination.path)
-                    .font(.system(size: 13)).foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-                    .accessibilityIdentifier("destinationPath")
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Image(systemName: "building.2")
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
+                    Text(context.company)
+                        .font(.system(size: 13, weight: .medium))
+                        .accessibilityIdentifier("companyName")
+                    Text(context.destination.path)
+                        .font(.system(size: 12)).foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .textSelection(.enabled)
+                        .help(context.destination.path)
+                        .accessibilityIdentifier("destinationPath")
+                }
                 if let problem = session.problem {
                     Text(Self.problemMessage(problem))
+                        .font(.system(size: 13))
                         .foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("destinationProblem")
                     if problem != "destination-outside-company-recordings" {
                         Button("Check again") { session.recheckDestination() }
+                            .hqGlassButton()
                             .accessibilityIdentifier("recheckDestination")
                     }
                 }
             } else {
                 Text("Open the recorder with /record-process from an HQ company session. Recordings save to that company's vault.")
+                    .font(.system(size: 13))
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("missingCompany")
             }
         }
@@ -877,45 +1015,57 @@ struct WorkspaceView: View {
     /// Screen, camera and microphone pickers, each with its own permission note and repair.
     @ViewBuilder private var sourceRows: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Picker("Screen", selection: Binding(
-                get: { session.selection.screen?.tag ?? "" },
-                set: { tag in session.chooseScreen(screens.first { $0.tag == tag }) })) {
-                ForEach(screens.filter { $0.kind == .display }, id: \.tag) { Text($0.title).tag($0.tag) }
-                let windows = screens.filter { $0.kind == .window }
-                if !windows.isEmpty { Divider() }
-                ForEach(windows, id: \.tag) { Text($0.title).tag($0.tag) }
-                if session.selection.screen == nil { Text("Choose a screen").tag("") }
+            sourceRow("display") {
+                Picker("Screen", selection: Binding(
+                    get: { session.selection.screen?.tag ?? "" },
+                    set: { tag in session.chooseScreen(screens.first { $0.tag == tag }) })) {
+                    ForEach(screens.filter { $0.kind == .display }, id: \.tag) { Text($0.title).tag($0.tag) }
+                    let windows = screens.filter { $0.kind == .window }
+                    if !windows.isEmpty { Divider() }
+                    ForEach(windows, id: \.tag) { Text($0.title).tag($0.tag) }
+                    if session.selection.screen == nil { Text("Choose a screen").tag("") }
+                }
+                .help("Required. One whole display or one window.")
+                .accessibilityIdentifier("screenPicker")
             }
-            .accessibilityIdentifier("screenPicker")
-            Text("Required. One whole display or one window.").font(.system(size: 12)).foregroundStyle(.secondary)
             blockerNotes(.screen)
         }
         VStack(alignment: .leading, spacing: 6) {
-            devicePicker("Camera", id: "cameraPicker", devices: session.available.cameras,
-                         chosen: session.selection.camera, choose: session.chooseCamera)
-            if session.selection.camera != nil, !session.isCapturing,
-               !session.blockers.contains(where: { $0.row == .camera }) {
-                CameraPreview(session: session.preview.session)
-                    .frame(width: 192, height: 108)
-                    .background(.black)
-                    .accessibilityIdentifier("cameraPreview")
+            sourceRow("video") {
+                devicePicker("Camera", id: "cameraPicker", devices: session.available.cameras,
+                             chosen: session.selection.camera, choose: session.chooseCamera)
             }
             blockerNotes(.camera)
         }
-        VStack(alignment: .leading, spacing: 6) {
-            devicePicker("Microphone", id: "microphonePicker", devices: session.available.microphones,
-                         chosen: session.selection.microphone, choose: session.chooseMicrophone)
+        VStack(alignment: .leading, spacing: 8) {
+            sourceRow("mic") {
+                devicePicker("Microphone", id: "microphonePicker", devices: session.available.microphones,
+                             chosen: session.selection.microphone, choose: session.chooseMicrophone)
+            }
             if session.selection.microphone != nil, !session.blockers.contains(where: { $0.row == .microphone }) {
-                TimelineView(.periodic(from: .now, by: 0.1)) { _ in
+                TimelineView(.periodic(from: .now, by: 0.05)) { _ in
                     // -60 dBFS and below shows empty, 0 dBFS full.
                     let level = session.microphoneCapture?.level.map(Float.init) ?? session.preview.microphoneLevel ?? -60
-                    ProgressView(value: Double(max(0, min(60, level + 60))), total: 60)
-                        .frame(width: 192)
-                }.accessibilityIdentifier("microphoneLevel")
+                    LevelMeter(fraction: Double(max(0, min(60, level + 60))) / 60, reduceMotion: access.reduceMotion)
+                }
+                .padding(.leading, 30)
+                .accessibilityIdentifier("microphoneLevel")
+                .transition(.opacity)
             }
             blockerNotes(.microphone)
         }
         if session.problem != nil { blockerNotes(.destination) }
+    }
+
+    private func sourceRow(_ symbol: String, @ViewBuilder picker: () -> some View) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: symbol)
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(.secondary)
+                .frame(width: 20)
+                .accessibilityHidden(true)
+            picker()
+        }
     }
 
     /// The picked screen stays listed after it disappears, so the picker shows what is missing.
@@ -951,6 +1101,8 @@ struct WorkspaceView: View {
                 .accessibilityIdentifier("captureBlocker-\(blocker.reason)")
             if let title = Self.repairTitle(blocker.repair) {
                 Button(title) { Task { await session.repair(blocker) } }
+                    .controlSize(.small)
+                    .hqGlassButton()
                     .accessibilityIdentifier("repair-\(blocker.reason)")
             }
         }
@@ -974,5 +1126,26 @@ struct WorkspaceView: View {
         default:
             "This company folder can't be written to. Check that it exists and that you have access, then run /record-process again."
         }
+    }
+}
+
+/// The microphone level as a thin bar that eases between readings.
+private struct LevelMeter: View {
+    let fraction: Double
+    let reduceMotion: Bool
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.primary.opacity(0.08))
+                Capsule()
+                    .fill(Color.primary.opacity(0.6))
+                    .frame(width: geometry.size.width * fraction)
+                    .animation(reduceMotion ? nil : .smooth(duration: 0.12), value: fraction)
+            }
+        }
+        .frame(width: 192, height: 4)
+        .accessibilityLabel("Microphone level")
+        .accessibilityValue("\(Int(fraction * 100)) percent")
     }
 }

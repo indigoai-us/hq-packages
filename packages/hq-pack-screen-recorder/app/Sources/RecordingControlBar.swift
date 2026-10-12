@@ -32,6 +32,9 @@ final class ControlBarModel {
     }
 
     private(set) var phase: Phase = .hidden
+    /// True while the bar is on screen. The view scales and fades with it, so the panel can stay
+    /// ordered in until the hide animation has finished.
+    var presented = false
     private var teleprompterFlag = false
     /// The session's teleprompter. When set, the bar follows it directly, so closing the
     /// teleprompter from its own window also updates the bar.
@@ -69,7 +72,7 @@ final class ControlBarModel {
 
 /// Where the bar sits: where it was last dragged on that display, or top center by default.
 enum ControlBarPlacement {
-    static let size = CGSize(width: 388, height: 32)
+    static let size = CGSize(width: 420, height: 48)
     static let topMargin: CGFloat = 12
 
     /// The bar frame on a screen. A saved origin is used only while the whole bar still fits on
@@ -131,10 +134,23 @@ final class RecordingControlBarWindow: NSObject, NSWindowDelegate {
                                                      visibleFrame: screen.visibleFrame), display: true)
             placing = false
         }
+        let wasShown = model.presented && panel.isVisible
+        if !wasShown { model.presented = false }
         panel.orderFrontRegardless()
+        guard !wasShown else { return }
+        // Let the panel draw the collapsed state once, then spring it in.
+        DispatchQueue.main.async { [model] in model.presented = true }
     }
 
-    func hide() { panel?.orderOut(nil) }
+    func hide() {
+        guard let panel else { return }
+        model.presented = false
+        // The panel stays ordered in until the view has faded out, unless it was shown again.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self, weak panel] in
+            guard let self, !self.model.presented else { return }
+            panel?.orderOut(nil)
+        }
+    }
 
     func windowDidMove(_ notification: Notification) {
         guard !placing, let panel, let screen = panel.screen,
@@ -162,43 +178,81 @@ final class RecordingControlBarWindow: NSObject, NSWindowDelegate {
 
 struct ControlBarView: View {
     let model: ControlBarModel
+    @Namespace private var glass
+    private let access = HQAccessibility()
 
     var body: some View {
-        HStack(spacing: 14) {
-            Rectangle()
-                .fill(model.phase == .paused ? Color.clear : Color.orange)
-                .overlay(Rectangle().stroke(Color.orange, lineWidth: 1.5))
-                .frame(width: 8, height: 8)
+        GlassEffectContainer(spacing: 8) {
+            HStack(spacing: 6) {
+                status
+                if model.phase != .hidden {
+                    button(model.pauseTitle, symbol: model.phase == .paused ? "play.fill" : "pause.fill",
+                           action: .pauseResume, id: "controlBarPause", prominent: model.phase == .paused)
+                    button("Stop", symbol: "stop.fill", action: .stop, id: "controlBarStop",
+                           prominent: model.phase == .recording, showsTitle: true)
+                    button(model.teleprompterTitle, symbol: model.teleprompterOpen ? "text.alignleft" : "text.justify.left",
+                           action: .teleprompter, id: "controlBarTeleprompter", prominent: false)
+                }
+            }
+            .padding(5)
+            // The whole bar is one capsule of clear glass; the status and buttons sit on it.
+            .hqGlass(in: Capsule(), clear: true)
+            .glassEffectID("bar", in: glass)
+        }
+        .tint(model.phase == .paused ? .orange : .red)
+        .padding(4)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .scaleEffect(model.presented || access.reduceMotion ? 1 : 0.86)
+        .opacity(model.presented ? 1 : 0)
+        .animation(HQMotion.smooth(access.reduceMotion), value: model.phase)
+        .animation(HQMotion.appear(access.reduceMotion), value: model.presented)
+        .animation(HQMotion.snappy(access.reduceMotion), value: model.teleprompterOpen)
+        .gesture(WindowDragGesture())
+    }
+
+    private var status: some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(model.phase == .recording ? Color.red : Color.clear)
+                .overlay(Circle().strokeBorder(model.phase == .hidden ? Color.secondary
+                                               : model.phase == .paused ? Color.orange : Color.red,
+                                               lineWidth: 1.5))
+                .frame(width: 9, height: 9)
                 .accessibilityLabel(model.statusTitle)
                 .accessibilityIdentifier("controlBarStatus")
             TimelineView(.periodic(from: .now, by: 0.5)) { _ in
                 Text(RecordingDuration.text(model.elapsed() ?? 0))
-                    .font(.system(size: 12).monospacedDigit())
-                    .foregroundStyle(model.phase == .paused ? Color.orange : Color.white)
+                    .font(.system(size: 13, weight: .semibold).monospacedDigit())
+                    .foregroundStyle(model.phase == .paused ? AnyShapeStyle(Color.orange) : AnyShapeStyle(.primary))
+                    .contentTransition(.numericText())
                     .accessibilityIdentifier("controlBarElapsed")
             }
-            .frame(width: 52, alignment: .leading)
-            button(model.pauseTitle, action: .pauseResume, id: "controlBarPause")
-                .frame(width: 54)
-            button("Stop", action: .stop, id: "controlBarStop")
-            button(model.teleprompterTitle, action: .teleprompter, id: "controlBarTeleprompter")
-                .frame(width: 112)
+            .frame(width: 46, alignment: .leading)
         }
-        .padding(.horizontal, 12)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.black.opacity(0.85))
-        .overlay(Rectangle().stroke(Color.white.opacity(0.2), lineWidth: 1))
-        .gesture(WindowDragGesture())
+        .padding(.leading, 12)
+        .padding(.trailing, 4)
+        .frame(maxHeight: .infinity)
+        .glassEffectID("status", in: glass)
     }
 
-    private func button(_ title: String, action: ControlBarAction, id: String) -> some View {
-        Button(title) { model.perform(action) }
-            .buttonStyle(.plain)
-            .font(.system(size: 12, weight: .regular))
-            .foregroundStyle(.white)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 3)
-            .overlay(Rectangle().stroke(Color.white.opacity(0.35), lineWidth: 1))
-            .accessibilityIdentifier(id)
+    private func button(_ title: String, symbol: String, action: ControlBarAction, id: String,
+                        prominent: Bool, showsTitle: Bool = false) -> some View {
+        Button { model.perform(action) } label: {
+            HStack(spacing: 6) {
+                Image(systemName: symbol)
+                    .contentTransition(.symbolEffect(.replace))
+                if showsTitle { Text(title) }
+            }
+            .font(.system(size: 12, weight: .semibold))
+            .frame(minWidth: 16, minHeight: 20)
+        }
+        .hqGlassButton(prominent: prominent, circle: !showsTitle)
+        .controlSize(.regular)
+        .accessibilityLabel(title)
+        .help(title)
+        .accessibilityIdentifier(id)
+        .glassEffectID(id, in: glass)
+        .glassEffectTransition(access.reduceMotion ? .identity : .matchedGeometry)
+        .transition(.opacity)
     }
 }

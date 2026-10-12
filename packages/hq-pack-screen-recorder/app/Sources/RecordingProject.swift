@@ -7,6 +7,9 @@ struct RecordingProject: Codable, Equatable, Sendable {
     var title: String
     var tracks: [Track]
     var trim: TrimRange?
+    /// The ranges an edit with middle cuts keeps, in order. Nil when the edit keeps one range,
+    /// which `trim` then describes. When set, `trim` spans from the first start to the last end.
+    var kept: [TrimRange]?
     var webcam = WebcamPlacement()
 
     struct Track: Codable, Equatable, Sendable {
@@ -31,6 +34,14 @@ struct RecordingProject: Codable, Equatable, Sendable {
         if let trim {
             guard trim.start.isFinite, trim.end.isFinite, trim.start >= 0, trim.end > trim.start
             else { throw ProjectError.invalidTrim }
+        }
+        if let kept {
+            guard kept.count > 1, let first = kept.first, let last = kept.last,
+                  trim == TrimRange(start: first.start, end: last.end) else { throw ProjectError.invalidTrim }
+            for (index, range) in kept.enumerated() {
+                guard range.start.isFinite, range.end.isFinite, range.start >= 0, range.end > range.start,
+                      index == 0 || range.start > kept[index - 1].end else { throw ProjectError.invalidTrim }
+            }
         }
         guard webcam.x.isFinite, webcam.y.isFinite, webcam.width.isFinite,
               (0...1).contains(webcam.x), (0...1).contains(webcam.y),

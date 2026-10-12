@@ -85,6 +85,127 @@ struct TrimEditor: Equatable, Sendable {
     }
 }
 
+/// The ordered ranges of the recording an edit keeps. An edit without middle cuts keeps one range
+/// (its trim); each middle cut splits a kept range in two. Playback, frames, export and
+/// transcription all play the kept ranges back to back, on every track alike.
+enum KeptRanges {
+    typealias Range = RecordingProject.TrimRange
+
+    enum CutError: Error, Equatable {
+        /// A cut is not a finite time range with its start before its end.
+        case invalidCut
+        /// Two cuts share some time.
+        case overlapping
+        /// A cut is not entirely inside one kept range: it starts or ends outside the recording,
+        /// past the in or out point, or inside time an earlier cut already removed.
+        case outsideKept
+        /// The cuts remove everything the edit kept.
+        case nothingLeft
+        /// A cut leaves a piece shorter than `TrimEditor.minimumLength`.
+        case pieceTooShort
+    }
+
+    /// The ranges an edit keeps, checked against a recording of `duration` seconds. Nil `kept`
+    /// means the single `trim` range, which is how edits saved before middle cuts load.
+    static func resolve(trim: Range?, kept: [Range]?, duration: Double) throws -> [Range] {
+        guard let kept else { return [try TrimEditor.check(trim, duration: duration)] }
+        guard duration.isFinite, duration >= TrimEditor.minimumLength else { throw TrimEditor.TrimError.emptyRecording }
+        guard !kept.isEmpty else { throw TrimEditor.TrimError.tooShort }
+        var result: [Range] = []
+        for (index, range) in kept.enumerated() {
+            guard range.start.isFinite, range.end.isFinite, range.start >= 0,
+                  index == 0 || range.start > kept[index - 1].end else { throw TrimEditor.TrimError.invalidRange }
+            guard range.end <= duration + TrimEditor.tolerance else { throw TrimEditor.TrimError.outsideRecording }
+            let clamped = Range(start: range.start, end: min(range.end, duration))
+            guard clamped.end - clamped.start >= TrimEditor.minimumLength else { throw TrimEditor.TrimError.tooShort }
+            result.append(clamped)
+        }
+        return result
+    }
+
+    /// The kept ranges with new in and out points. Moving a point outward lengthens the first or
+    /// last range; moving it inward drops whatever falls outside. The middle cuts stay where they are.
+    static func bounded(_ ranges: [Range], start: Double, end: Double) throws -> [Range] {
+        guard !ranges.isEmpty else { throw TrimEditor.TrimError.tooShort }
+        var result = ranges
+        result[0].start = min(result[0].start, start)
+        result[result.count - 1].end = max(result[result.count - 1].end, end)
+        result = result.compactMap { range in
+            let clipped = Range(start: max(range.start, start), end: min(range.end, end))
+            return clipped.end > clipped.start ? clipped : nil
+        }
+        guard !result.isEmpty else { throw TrimEditor.TrimError.tooShort }
+        guard result.allSatisfy({ $0.end - $0.start >= TrimEditor.minimumLength }) else { throw CutError.pieceTooShort }
+        return result
+    }
+
+    /// The kept ranges with each cut removed. Every cut must lie inside one kept range and no two
+    /// cuts may share time. A cut that covers a whole kept range removes it.
+    static func cutting(_ cuts: [Range], from ranges: [Range]) throws -> [Range] {
+        let sorted = cuts.sorted { $0.start < $1.start }
+        for (index, cut) in sorted.enumerated() {
+            guard cut.start.isFinite, cut.end.isFinite, cut.start < cut.end else { throw CutError.invalidCut }
+            if index > 0, cut.start < sorted[index - 1].end { throw CutError.overlapping }
+        }
+        for cut in sorted where !ranges.contains(where: { cut.start >= $0.start && cut.end <= $0.end }) {
+            throw CutError.outsideKept
+        }
+        var result: [Range] = []
+        for range in ranges {
+            var start = range.start
+            for cut in sorted where cut.start >= range.start && cut.end <= range.end {
+                if cut.start > start { result.append(Range(start: start, end: cut.start)) }
+                start = cut.end
+            }
+            if range.end > start { result.append(Range(start: start, end: range.end)) }
+        }
+        guard !result.isEmpty else { throw CutError.nothingLeft }
+        guard result.allSatisfy({ $0.end - $0.start >= TrimEditor.minimumLength }) else { throw CutError.pieceTooShort }
+        return result
+    }
+
+    /// How kept ranges are saved: one range is a trim, nil when it is the whole recording, and
+    /// several are the outer bounds as the trim plus the ranges themselves.
+    static func normalize(_ ranges: [Range], duration: Double)
+        -> (trim: Range?, kept: [Range]?) {
+        guard let first = ranges.first, let last = ranges.last else { return (nil, nil) }
+        if ranges.count == 1 { return (first.start <= 0 && first.end >= duration ? nil : first, nil) }
+        return (Range(start: first.start, end: last.end), ranges)
+    }
+
+    /// Seconds of recording the ranges keep.
+    static func total(_ ranges: [Range]) -> Double {
+        ranges.reduce(0) { $0 + ($1.end - $1.start) }
+    }
+
+    /// Where a moment of the recording lands in the edited video, or nil when it is cut out.
+    static func editedTime(recording seconds: Double, in ranges: [Range]) -> Double? {
+        var offset = 0.0
+        for range in ranges {
+            if seconds >= range.start && seconds <= range.end { return offset + seconds - range.start }
+            offset += range.end - range.start
+        }
+        return nil
+    }
+
+    /// The moment of the recording shown at `seconds` into the edited video, or nil past its end.
+    /// A moment exactly on a join maps to the start of the later range, which is what plays there;
+    /// pass `ending: true` for the end of a span, which then maps to the end of the earlier range.
+    static func recordingTime(edited seconds: Double, in ranges: [Range], ending: Bool = false) -> Double? {
+        guard seconds.isFinite, seconds >= 0 else { return nil }
+        var offset = 0.0
+        for (index, range) in ranges.enumerated() {
+            let length = range.end - range.start
+            let last = index == ranges.count - 1
+            if seconds < offset + length || ((ending || last) && seconds <= offset + length) {
+                return range.start + seconds - offset
+            }
+            offset += length
+        }
+        return nil
+    }
+}
+
 /// One saved recording open for trimming. Every change appends an edit revision through the
 /// package store, so undo and reopening show the same range and the media files stay as recorded.
 struct TrimDocument: Sendable {
@@ -115,7 +236,7 @@ struct TrimDocument: Sendable {
     /// A placement that isn't valid is refused and nothing is saved.
     mutating func setWebcam(_ webcam: RecordingProject.WebcamPlacement) throws {
         guard webcam != manifest.webcam else { return }
-        try store.appendEdit(trim: editor.range, webcam: webcam, to: &manifest, in: package)
+        try store.appendEdit(trim: manifest.trim, kept: manifest.kept, webcam: webcam, to: &manifest, in: package)
     }
 
     /// Writes a shareable MP4 of the current trim and camera placement into the package's exports
@@ -136,13 +257,19 @@ struct TrimDocument: Sendable {
         manifest = saved
     }
 
-    /// Saves the edited range as a new revision, keeping the current webcam placement. Nothing
-    /// changes in memory when the save fails.
+    /// Saves the edited range as a new revision, keeping the current webcam placement and any
+    /// middle cuts inside the new range. Nothing changes in memory when the save fails.
     private mutating func change(_ edit: (inout TrimEditor) throws -> Void) throws {
         var next = editor
         try edit(&next)
         if next.range != editor.range {
-            try store.appendEdit(trim: next.range, webcam: manifest.webcam, to: &manifest, in: package)
+            var trim = next.range
+            var kept: [RecordingProject.TrimRange]?
+            if let current = manifest.kept {
+                let ranges = try KeptRanges.bounded(current, start: next.start, end: next.end)
+                (trim, kept) = KeptRanges.normalize(ranges, duration: next.duration)
+            }
+            try store.appendEdit(trim: trim, kept: kept, webcam: manifest.webcam, to: &manifest, in: package)
         }
         editor = next
     }

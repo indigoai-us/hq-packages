@@ -6,6 +6,7 @@
 
 import AVFoundation
 import CoreMedia
+import os
 import Foundation
 
 enum MicrophoneTrackEvent: Sendable {
@@ -348,14 +349,24 @@ final class MicrophoneFeed: Sendable {
     }
 }
 
-/// Writes one microphone segment as fragmented AAC. The encoder settings come from the first
-/// buffer, so any input sample rate works. Fragments are flushed every second, so a crash or a
-/// low-disk stop loses at most the last fragment.
+/// Writes one microphone segment as fragmented AAC. Fragments are flushed every second, so a
+/// crash or a low-disk stop loses at most the last fragment.
+///
+/// The writer input reads every buffer in the format it was opened with, and a microphone can
+/// change format after the first buffer (another app or the camera reconfiguring the device).
+/// Audio read in the wrong format is written at the wrong length, so the writer is opened with
+/// one fixed format, 48 kHz Float32 with the first buffer's channel count (one or two), and every
+/// buffer in another format is converted to it first.
 final class AudioTrackWriter: FrameWriting, @unchecked Sendable {
+    static let sampleRate = 48_000.0
     let url: URL
     private let lock = NSLock()
     private var writer: AVAssetWriter?
     private var input: AVAssetWriterInput?
+    /// The format the writer input reads. Every appended buffer is in this format.
+    private var target: AVAudioFormat?
+    /// Converters to `target`, one per source format, so a resampler keeps its state across buffers.
+    private var converters: [(source: CMAudioFormatDescription, converter: AVAudioConverter)] = []
     private var setupError: String?
     private var firstHostPTS: Double?
     private var endHostPTS: Double?
@@ -387,12 +398,80 @@ final class AudioTrackWriter: FrameWriting, @unchecked Sendable {
             firstHostPTS = hostPTS
         }
         guard writer.status == .writing else { return }
-        if input.isReadyForMoreMediaData, input.append(buffer) {
+        guard let written = matching(buffer) else {
+            dropped += 1
+            return
+        }
+        if input.isReadyForMoreMediaData, input.append(written) {
             buffers += 1
             endHostPTS = hostPTS + Self.seconds(of: buffer)
         } else {
             dropped += 1
         }
+    }
+
+    /// The buffer in the writer's format: as is when it already matches, else converted. Nil when
+    /// it can't be converted.
+    private func matching(_ buffer: CMSampleBuffer) -> CMSampleBuffer? {
+        guard let target, let source = CMSampleBufferGetFormatDescription(buffer) else { return nil }
+        if CMFormatDescriptionEqual(source, otherFormatDescription: target.formatDescription) { return buffer }
+        guard let converter = converter(from: source, to: target) else { return nil }
+        let frames = AVAudioFrameCount(CMSampleBufferGetNumSamples(buffer))
+        guard frames > 0,
+              let pcm = AVAudioPCMBuffer(pcmFormat: converter.inputFormat, frameCapacity: frames) else { return nil }
+        pcm.frameLength = frames
+        guard CMSampleBufferCopyPCMDataIntoAudioBufferList(
+            buffer, at: 0, frameCount: Int32(frames), into: pcm.mutableAudioBufferList) == noErr else { return nil }
+        let capacity = AVAudioFrameCount(
+            (Double(frames) * target.sampleRate / converter.inputFormat.sampleRate).rounded(.up)) + 64
+        guard let out = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: capacity) else { return nil }
+        // The converter calls the input block on this thread before `convert` returns. The buffer
+        // is handed over once; a later call is told there is no more input yet, which keeps the
+        // resampler's state for the next buffer.
+        let pending = OSAllocatedUnfairLock<AVAudioPCMBuffer?>(uncheckedState: pcm)
+        var error: NSError?
+        let status = converter.convert(to: out, error: &error) { _, inputStatus in
+            let next = pending.withLockUnchecked { buffer in
+                defer { buffer = nil }
+                return buffer
+            }
+            inputStatus.pointee = next == nil ? .noDataNow : .haveData
+            return next
+        }
+        guard status != .error, out.frameLength > 0 else {
+            if let error { NSLog("HQ recorder: could not convert microphone audio: \(error)") }
+            return nil
+        }
+        return Self.sampleBuffer(out, at: CMSampleBufferGetPresentationTimeStamp(buffer))
+    }
+
+    private func converter(from source: CMAudioFormatDescription, to target: AVAudioFormat) -> AVAudioConverter? {
+        if let known = converters.first(where: { CMFormatDescriptionEqual($0.source, otherFormatDescription: source) }) {
+            return known.converter
+        }
+        guard let converter = AVAudioConverter(from: AVAudioFormat(cmAudioFormatDescription: source), to: target)
+        else { return nil }
+        converter.downmix = true
+        converters.append((source, converter))
+        return converter
+    }
+
+    /// A sample buffer holding `pcm`, starting at `pts`.
+    static func sampleBuffer(_ pcm: AVAudioPCMBuffer, at pts: CMTime) -> CMSampleBuffer? {
+        var timing = CMSampleTimingInfo(duration: CMTime(value: 1, timescale: CMTimeScale(pcm.format.sampleRate)),
+                                        presentationTimeStamp: pts, decodeTimeStamp: .invalid)
+        var sample: CMSampleBuffer?
+        guard CMSampleBufferCreate(allocator: nil, dataBuffer: nil, dataReady: false, makeDataReadyCallback: nil,
+                                   refcon: nil, formatDescription: pcm.format.formatDescription,
+                                   sampleCount: CMItemCount(pcm.frameLength), sampleTimingEntryCount: 1,
+                                   sampleTimingArray: &timing, sampleSizeEntryCount: 0, sampleSizeArray: nil,
+                                   sampleBufferOut: &sample) == noErr,
+              let sample,
+              CMSampleBufferSetDataBufferFromAudioBufferList(sample, blockBufferAllocator: nil,
+                                                             blockBufferMemoryAllocator: nil, flags: 0,
+                                                             bufferList: pcm.audioBufferList) == noErr
+        else { return nil }
+        return sample
     }
 
     /// Non-nil once the writer can't take more audio.
@@ -405,16 +484,20 @@ final class AudioTrackWriter: FrameWriting, @unchecked Sendable {
     }
 
     private func open(for buffer: CMSampleBuffer) throws {
-        guard let format = CMSampleBufferGetFormatDescription(buffer),
-              let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(format)?.pointee,
+        guard let source = CMSampleBufferGetFormatDescription(buffer),
+              let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(source)?.pointee,
               asbd.mSampleRate > 0 else { throw AudioWriterError.unsupportedFormat }
         let channels = max(1, min(2, Int(asbd.mChannelsPerFrame)))
+        guard let opened = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: Self.sampleRate,
+                                         channels: AVAudioChannelCount(channels), interleaved: true)
+        else { throw AudioWriterError.unsupportedFormat }
+        let format = opened.formatDescription
         var layout = AudioChannelLayout()
         layout.mChannelLayoutTag = channels == 1 ? kAudioChannelLayoutTag_Mono : kAudioChannelLayoutTag_Stereo
         let next = try AVAssetWriter(outputURL: url, fileType: .m4a)
         let settings: [String: Any] = [
             AVFormatIDKey: kAudioFormatMPEG4AAC,
-            AVSampleRateKey: min(asbd.mSampleRate, 48_000),
+            AVSampleRateKey: Self.sampleRate,
             AVNumberOfChannelsKey: channels,
             AVChannelLayoutKey: Data(bytes: &layout, count: MemoryLayout<AudioChannelLayout>.size),
         ]
@@ -425,6 +508,7 @@ final class AudioTrackWriter: FrameWriting, @unchecked Sendable {
         next.add(audio)
         writer = next
         input = audio
+        target = opened
     }
 
     static func seconds(of buffer: CMSampleBuffer) -> Double {

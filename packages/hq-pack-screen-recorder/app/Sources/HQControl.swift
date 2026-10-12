@@ -71,6 +71,8 @@ struct SessionStatus: Codable, Equatable, Sendable {
     /// After a save, a prompt to paste into any HQ session to pick the recording up again.
     /// Kept on later updates such as closed, so an interrupted session can still read it.
     var resumePrompt: String? = nil
+    /// After a save, a plain note when a track file is not as long as the recording says.
+    var issue: String? = nil
 }
 
 /// File-based control channel shared with the HQ session.

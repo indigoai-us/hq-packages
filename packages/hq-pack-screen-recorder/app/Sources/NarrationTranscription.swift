@@ -31,7 +31,10 @@ struct NarrationTranscript: Codable, Equatable, Sendable {
     var onDeviceOnly: Bool
     /// The edit revision whose range was transcribed. 0 means no edit had been saved yet.
     var editRevision: Int
+    /// The outer bounds of what was transcribed, on the recording timeline.
     var range: RecordingProject.TrimRange
+    /// The kept ranges when the edit had middle cuts; the cut-out time was not transcribed.
+    var kept: [RecordingProject.TrimRange]?
     var segments: [TranscriptSegment]
     var words: [TranscriptWord]
 }
@@ -113,22 +116,31 @@ enum NarrationTranscription {
         guard document.timeline.entries.contains(where: { $0.kind == .microphone }) else {
             throw TranscriptionError.noNarration
         }
-        let kept = try TrimEditor.check(document.editor.range, duration: document.editor.duration)
-        progress("preparing narration audio from \(format(kept.start))s to \(format(kept.end))s")
+        let ranges = try KeptRanges.resolve(trim: document.manifest.trim, kept: document.manifest.kept,
+                                            duration: document.editor.duration)
+        let outer = RecordingProject.TrimRange(start: ranges[0].start, end: ranges[ranges.count - 1].end)
+        progress("preparing narration audio from \(format(outer.start))s to \(format(outer.end))s"
+                 + (ranges.count > 1 ? " with \(ranges.count - 1) cut(s)" : ""))
         let audio = FileManager.default.temporaryDirectory
             .appendingPathComponent("hq-capture-narration-\(UUID().uuidString).m4a")
         defer { try? FileManager.default.removeItem(at: audio) }
         try await writeNarration(package: package, timeline: document.timeline, webcam: document.manifest.webcam,
-                                 trim: document.editor.range, to: audio)
+                                 trim: document.manifest.trim, kept: document.manifest.kept, to: audio)
         let result = try await engine.transcribe(audio: audio, locale: locale, progress: progress)
+        // Times in the transcribed audio are edited time; map them back onto the recording.
+        func onRecording(_ seconds: Double, ending: Bool) -> Double {
+            KeptRanges.recordingTime(edited: seconds, in: ranges, ending: ending) ?? outer.end
+        }
         let segments = result.segments.map { segment in
-            TranscriptSegment(start: segment.start + kept.start, end: segment.end + kept.start, text: segment.text,
-                              words: segment.words.map { .init(start: $0.start + kept.start,
-                                                               end: $0.end + kept.start, text: $0.text) })
+            TranscriptSegment(start: onRecording(segment.start, ending: false),
+                              end: onRecording(segment.end, ending: true), text: segment.text,
+                              words: segment.words.map { .init(start: onRecording($0.start, ending: false),
+                                                               end: onRecording($0.end, ending: true), text: $0.text) })
         }
         var manifest = document.manifest
         let transcript = NarrationTranscript(createdAt: SessionStatus.now(), locale: result.locale, onDeviceOnly: true,
-                                             editRevision: manifest.edits.count, range: kept,
+                                             editRevision: manifest.edits.count, range: outer,
+                                             kept: ranges.count > 1 ? ranges : nil,
                                              segments: segments, words: segments.flatMap(\.words))
         try store.ensureDirectory(folder, in: package)
         let path = try nextPath(manifest: manifest, package: package, store: store)
@@ -160,8 +172,10 @@ enum NarrationTranscription {
     /// Writes only the microphone track of the kept range to an audio file.
     private static func writeNarration(package: URL, timeline: RecordingTimeline,
                                        webcam: RecordingProject.WebcamPlacement,
-                                       trim: RecordingProject.TrimRange?, to destination: URL) async throws {
-        let playback = try await PlaybackLayers.trimmed(package: package, timeline: timeline, webcam: webcam, trim: trim)
+                                       trim: RecordingProject.TrimRange?, kept: [RecordingProject.TrimRange]?,
+                                       to destination: URL) async throws {
+        let playback = try await PlaybackLayers.trimmed(package: package, timeline: timeline, webcam: webcam,
+                                                        trim: trim, kept: kept)
         guard playback.tracks[.microphone] != nil else { throw TranscriptionError.noNarration }
         for kind in [RecordingProject.Track.Kind.screen, .camera] {
             if let track = playback.tracks[kind] { playback.composition.removeTrack(track) }

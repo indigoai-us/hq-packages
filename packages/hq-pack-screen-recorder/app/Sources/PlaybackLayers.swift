@@ -24,10 +24,14 @@ enum PlaybackLayers {
         try await layers(package: package, timeline: timeline, webcam: webcam).composition
     }
 
+    /// The recording lasts as long as its screen. A camera or narration file that runs past the
+    /// end of the screen is cut there, so one long file can't stretch the whole recording. A
+    /// recording without a screen layer lasts as long as its longest layer.
     static func layers(package: URL, timeline: RecordingTimeline,
                        webcam: RecordingProject.WebcamPlacement) async throws -> sending Playback {
         let composition = AVMutableComposition()
         var tracks: [RecordingProject.Track.Kind: AVMutableCompositionTrack] = [:]
+        var screenEnd: CMTime?
         for entry in visibleEntries(timeline, webcam: webcam) {
             // Narration is the audio of the microphone segments; screen and camera are video.
             let media: AVMediaType = entry.kind == .microphone ? .audio : .video
@@ -39,8 +43,12 @@ enum PlaybackLayers {
                 ?? composition.addMutableTrack(withMediaType: media, preferredTrackID: kCMPersistentTrackID_Invalid)
             guard let track else { continue }
             tracks[entry.kind] = track
-            try track.insertTimeRange(range, of: source,
-                                      at: CMTime(seconds: entry.startOffsetSeconds, preferredTimescale: 600))
+            let start = CMTime(seconds: entry.startOffsetSeconds, preferredTimescale: 600)
+            try track.insertTimeRange(range, of: source, at: start)
+            if entry.kind == .screen { screenEnd = max(screenEnd ?? .zero, start + range.duration) }
+        }
+        if let screenEnd, composition.duration > screenEnd {
+            composition.removeTimeRange(CMTimeRange(start: screenEnd, end: composition.duration))
         }
         return Playback(composition: composition, tracks: tracks)
     }
@@ -55,19 +63,25 @@ enum PlaybackLayers {
         return try await layers(package: package, timeline: timeline, webcam: shown)
     }
 
-    /// The layers cut to the trim range, every track by the same amount so they stay in sync.
-    /// A range that is invalid, too short or past the end is refused, so nothing downstream can
-    /// play or export an empty or wrong-length result as a success.
+    /// The layers cut to the kept ranges, played back to back. Every gap is removed from all tracks
+    /// at once, so screen, camera and narration stay in sync. `kept` nil keeps the one `trim`
+    /// range. Ranges that are invalid, too short or past the end are refused, so nothing
+    /// downstream can play or export an empty or wrong-length result as a success.
     static func trimmed(package: URL, timeline: RecordingTimeline, webcam: RecordingProject.WebcamPlacement,
-                        trim: RecordingProject.TrimRange?) async throws -> sending Playback {
+                        trim: RecordingProject.TrimRange?,
+                        kept: [RecordingProject.TrimRange]? = nil) async throws -> sending Playback {
         let playback = try await layers(package: package, timeline: timeline, webcam: webcam)
         let total = playback.composition.duration
-        let kept = try TrimEditor.check(trim, duration: total.seconds)
-        let end = CMTime(seconds: kept.end, preferredTimescale: 600)
-        if end < total { playback.composition.removeTimeRange(CMTimeRange(start: end, end: total)) }
-        if kept.start > 0 {
-            playback.composition.removeTimeRange(CMTimeRange(
-                start: .zero, end: CMTime(seconds: kept.start, preferredTimescale: 600)))
+        let ranges = try KeptRanges.resolve(trim: trim, kept: kept, duration: total.seconds)
+        func time(_ seconds: Double) -> CMTime { CMTime(seconds: seconds, preferredTimescale: 600) }
+        // Remove from the end backwards so each earlier gap keeps its recorded position.
+        if let last = ranges.last, time(last.end) < total {
+            playback.composition.removeTimeRange(CMTimeRange(start: time(last.end), end: total))
+        }
+        for index in ranges.indices.reversed() {
+            let gapStart = index == 0 ? CMTime.zero : time(ranges[index - 1].end)
+            let gapEnd = time(ranges[index].start)
+            if gapEnd > gapStart { playback.composition.removeTimeRange(CMTimeRange(start: gapStart, end: gapEnd)) }
         }
         return playback
     }
@@ -121,8 +135,9 @@ enum PlaybackLayers {
     /// wrong length is deleted and reported as a failure. An existing file at `destination` is
     /// refused and left alone. Returns the exported duration in seconds.
     static func exportTrimmed(package: URL, timeline: RecordingTimeline, webcam: RecordingProject.WebcamPlacement,
-                              trim: RecordingProject.TrimRange?, to destination: URL) async throws -> Double {
-        try await export(package: package, timeline: timeline, webcam: webcam, trim: trim, to: destination,
+                              trim: RecordingProject.TrimRange?, kept: [RecordingProject.TrimRange]? = nil,
+                              to destination: URL) async throws -> Double {
+        try await export(package: package, timeline: timeline, webcam: webcam, trim: trim, kept: kept, to: destination,
                          composed: false)
     }
 
@@ -130,8 +145,9 @@ enum PlaybackLayers {
     /// placement, exactly as the editor's player shows it, plus the narration. A hidden camera
     /// leaves only the screen. The recorded files are only read.
     static func exportComposed(package: URL, timeline: RecordingTimeline, webcam: RecordingProject.WebcamPlacement,
-                               trim: RecordingProject.TrimRange?, to destination: URL) async throws -> Double {
-        try await export(package: package, timeline: timeline, webcam: webcam, trim: trim, to: destination,
+                               trim: RecordingProject.TrimRange?, kept: [RecordingProject.TrimRange]? = nil,
+                              to destination: URL) async throws -> Double {
+        try await export(package: package, timeline: timeline, webcam: webcam, trim: trim, kept: kept, to: destination,
                          composed: true)
     }
 
@@ -140,9 +156,10 @@ enum PlaybackLayers {
     /// it is known and before any file is written, so a caller can refuse, for example when the
     /// disk is too full. The file is checked for duration and codecs and deleted when it fails.
     static func exportVideo(package: URL, timeline: RecordingTimeline, webcam: RecordingProject.WebcamPlacement,
-                            trim: RecordingProject.TrimRange?, to destination: URL,
+                            trim: RecordingProject.TrimRange?, kept: [RecordingProject.TrimRange]? = nil,
+                            to destination: URL,
                             beforeWriting: (@Sendable (Double) throws -> Void)? = nil) async throws -> Double {
-        try await export(package: package, timeline: timeline, webcam: webcam, trim: trim, to: destination,
+        try await export(package: package, timeline: timeline, webcam: webcam, trim: trim, kept: kept, to: destination,
                          composed: true, fileType: .mp4, beforeWriting: beforeWriting)
     }
 
@@ -162,13 +179,15 @@ enum PlaybackLayers {
     }
 
     private static func export(package: URL, timeline: RecordingTimeline, webcam: RecordingProject.WebcamPlacement,
-                               trim: RecordingProject.TrimRange?, to destination: URL,
+                               trim: RecordingProject.TrimRange?, kept: [RecordingProject.TrimRange]? = nil,
+                            to destination: URL,
                                composed: Bool, fileType: AVFileType = .mov,
                                beforeWriting: (@Sendable (Double) throws -> Void)? = nil) async throws -> Double {
         guard !FileManager.default.fileExists(atPath: destination.path) else {
             throw CocoaError(.fileWriteFileExists, userInfo: [NSFilePathErrorKey: destination.path])
         }
-        let playback = try await trimmed(package: package, timeline: timeline, webcam: webcam, trim: trim)
+        let playback = try await trimmed(package: package, timeline: timeline, webcam: webcam, trim: trim,
+                                          kept: kept)
         let expected = playback.composition.duration.seconds
         let video = composed ? videoComposition(playback, webcam: webcam) : nil
         if composed && video == nil { throw TrimEditor.TrimError.emptyRecording }

@@ -1,5 +1,5 @@
 name: hq-pack-screen-recorder
-version: 0.2.0
+version: 0.3.0
 publisher: '@indigoai-us'
 access: public
 description: 'HQ Capture for HQ: /record-process records a process on your Mac from a company session, with screen, camera and narration as separate layers saved to that company''s recordings folder. The agent in the session then summarizes, trims, places the camera, exports the video and drafts a step-by-step guide. The app is built on your Mac from source in this pack; capture, transcription and drafting run on the Mac.'

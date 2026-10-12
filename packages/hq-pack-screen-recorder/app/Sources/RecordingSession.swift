@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 
 /// Something that writes one media segment and can be closed when the recording stops.
@@ -299,6 +300,8 @@ actor RecordingSession {
                 if let seconds = durations[path] { manifest.tracks[t].segments[s].durationSeconds = seconds }
             }
         }
+        let issues = await Self.mediaIssues(in: manifest, package: package)
+        manifest.mediaIssues = issues.isEmpty ? nil : issues
         try store.writeJSON(store.timeline(for: manifest, originHostTime: originHostTime),
                             to: manifest.timeline, in: package)
         if manifest.drafts.isEmpty {
@@ -309,6 +312,28 @@ actor RecordingSession {
         try store.writeManifest(manifest, in: package)
         self.manifest = manifest
         return manifest
+    }
+
+    /// Closed segments whose saved file is more than 5% longer or shorter than the time the
+    /// recording gave them. A file that can't be read is left to the missing-file check.
+    static func mediaIssues(in manifest: RecordingManifest, package: URL) async -> [RecordingManifest.MediaIssue] {
+        var issues: [RecordingManifest.MediaIssue] = []
+        for track in manifest.tracks {
+            for segment in track.segments where segment.status == .closed {
+                guard let timeline = segment.durationSeconds else { continue }
+                let asset = AVURLAsset(url: package.appendingPathComponent(segment.relativePath))
+                guard let file = try? await asset.load(.duration).seconds, file.isFinite else {
+                    NSLog("HQ recorder: could not read the length of \(segment.relativePath)")
+                    continue
+                }
+                if let issue = RecordingManifest.MediaIssue.check(track.kind, path: segment.relativePath,
+                                                                  timelineSeconds: timeline, fileSeconds: file) {
+                    NSLog("HQ recorder: \(issue.message)")
+                    issues.append(issue)
+                }
+            }
+        }
+        return issues
     }
 
     /// Re-reads sync state for a saved package, for retry after offline or failed sync.

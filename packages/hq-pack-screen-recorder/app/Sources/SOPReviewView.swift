@@ -202,9 +202,7 @@ final class SOPReviewModel {
 
     /// Frames that fall inside the step, or the nearest ones when none do.
     func frames(for step: SOPReviewDocument.Step) -> [ScreenEvidence.Frame] {
-        let inside = frames.filter { $0.timelineSeconds >= step.evidence.start - 0.5 && $0.timelineSeconds <= step.evidence.end + 0.5 }
-        if !inside.isEmpty { return inside }
-        return Array(frames.sorted { abs($0.timelineSeconds - step.evidence.start) < abs($1.timelineSeconds - step.evidence.start) }.prefix(4))
+        SOPReviewWorkflow.frames(for: step, in: frames)
     }
 
     /// Approval, shown on its own line apart from where the files are stored.

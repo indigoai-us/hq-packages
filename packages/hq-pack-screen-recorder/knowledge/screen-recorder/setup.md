@@ -45,8 +45,10 @@ opens. The folder follows the company vault's normal access rules, and the
 agent uploads a recording only when you agree (`sync-package`).
 
 A `.hqrec` recording keeps the screen, camera and microphone as separate
-layers that are never changed. Each edit (trim, camera placement) is saved as
-a new revision inside the recording, and exports are written next to it.
+layers that are never changed. Each edit (trim, cuts, camera placement) is
+saved as a new revision inside the recording, and exports are written next to
+it. Guide review changes and approval are saved the same way, as new draft
+revisions.
 
 ## After you save
 
@@ -54,19 +56,25 @@ When you press Stop, HQ Capture shows "Saved. Go back to your HQ session to
 edit and turn this into a guide." The agent in that session then:
 
 1. summarizes the recording: length, what was said, pauses and filler words;
-2. trims the start or end, moves, resizes or hides the camera, and shows
-   still frames before export;
+2. trims the start or end, cuts out parts you name by what you said (for
+   example "cut where I said um"), moves, resizes or hides the camera, and
+   shows still frames before export;
 3. exports the video and offers to show it in Finder;
-4. drafts a step-by-step guide from your narration and the screen, for you to
-   review in chat;
-5. uploads the recording to the company vault when you agree.
+4. drafts a step-by-step guide from your narration and the screen, then
+   applies your review changes from the chat: reorder, reword, drop or
+   restore steps, pick or crop a different screenshot, rename the guide, and
+   add or remove prerequisites;
+5. records your approval under your name only after you say yes, then exports
+   the guide;
+6. uploads the recording to the company vault when you agree.
 
-Cutting a section out of the middle of a recording is not supported yet. An
-edit keeps one range from a start point to an end point.
+Any change after approval clears it, so the guide has to be approved again
+before it can be exported.
 
-Applying review changes to a drafted guide and recording your approval have
-no agent command yet, so a drafted guide cannot be exported from the session
-in this version. The draft stays saved in the recording.
+If a recorded layer came out shorter or longer than the recording (for
+example the narration file is a few seconds short), HQ Capture keeps the
+original files and lists the problem in the recording. The agent tells you
+which layer is affected and suggests recording again before editing.
 
 ## If the session was interrupted
 
@@ -96,12 +104,17 @@ The HQ session and the app talk through files in
   (`awaiting-start`, `recording`, `finalizing`, `saved`, `failed`, `closed`),
   `company`, `destination`, `pid`, `updatedAt`, `paused` and
   `durationSeconds` while recording, `recording` and `resumePrompt` once
-  saved, and `reason` when it failed or was stopped.
+  saved, `reason` when it failed or was stopped, and `issue` when a saved
+  layer may not line up.
 - `stop.request` is created by `hq-record-process.sh stop`. The app watches
   for it, finishes a recording in progress, saves it, and closes.
 
 `status` reports `lost` when the app process is gone without writing a final
-state.
+state. For a saved recording, `status` and `wait` also return `mediaIssues`
+from the recording's `manifest.json`: one entry per layer whose file length
+does not match the recording, with `kind`, `relativePath`, `timelineSeconds`,
+`fileSeconds` and `message`. When the app did not set `issue`, it is filled
+from the first media issue's message.
 
 The agent's editing commands (`hq-record-process.sh run <mode> <recording>`)
 run the same app headless, without a window. They work only on recordings

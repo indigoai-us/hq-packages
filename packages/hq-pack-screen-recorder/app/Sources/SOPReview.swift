@@ -372,6 +372,14 @@ enum SOPReviewWorkflow {
         return nil
     }
 
+    /// The screen frames a step's screenshot can be picked from: those inside the step's evidence,
+    /// or the nearest ones when none are.
+    static func frames(for step: SOPReviewDocument.Step, in frames: [ScreenEvidence.Frame]) -> [ScreenEvidence.Frame] {
+        let inside = frames.filter { $0.timelineSeconds >= step.evidence.start - 0.5 && $0.timelineSeconds <= step.evidence.end + 0.5 }
+        if !inside.isEmpty { return inside }
+        return Array(frames.sorted { abs($0.timelineSeconds - step.evidence.start) < abs($1.timelineSeconds - step.evidence.start) }.prefix(4))
+    }
+
     static func evidence(manifest: RecordingManifest, package: URL, store: RecordingPackageStore) throws -> ScreenEvidence? {
         guard let path = manifest.screenEvidence else { return nil }
         return try JSONDecoder().decode(ScreenEvidence.self, from: Data(contentsOf: store.url(for: path, in: package)))

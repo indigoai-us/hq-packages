@@ -37,7 +37,8 @@ refusals print `{"ok":false,"error":...,"message":...}` and exit 1 (3 for
 `run` and `resume`, so they never collide with the app's own codes).
 
 `run` modes: `describe`, `transcribe`, `edit`, `export-video`, `frame`,
-`extract-screen-evidence`, `draft-sop`, `export-sop`, `sync-package`. The
+`extract-screen-evidence`, `draft-sop`, `review-sop`, `list-frames`,
+`approve-sop`, `export-sop`, `sync-package`. The
 launcher refuses a package outside the bound company's `recordings/` folder
 and refuses `--company`, `--destination`, `--hq-root` or a second mode in the
 arguments. App exit codes: 0 done, 1 refused (read the message), 2 usage or
@@ -76,13 +77,23 @@ seconds) and exits:
   line (`recording`, `paused`, `durationSeconds`) and run `wait` again. Keep
   re-arming while the state is `awaiting-start`, `recording` or `finalizing`.
 - **0, state `saved`:** go to step 4. The status carries `recording` (the
-  package path relative to HQ) and `resumePrompt`.
+  package path relative to HQ) and `resumePrompt`. It can also carry `issue`
+  and `mediaIssues` (see below).
 - **0, state `closed`:** the user closed the app without saving. Say so.
 - **0, state `failed` or `lost`:** report `reason` plainly. Recorded files
   that were saved stay in the company's `recordings/` folder.
 
 If the user asks you to stop, run `stop`; a recording in progress is finished
 and saved (`reason: "stop-requested"`).
+
+**Media issues.** When the saved status (from `wait` or `status`) has an
+`issue` or a `mediaIssues` list, a recorded file came out shorter or longer
+than the recording, so a layer may not line up. Each `mediaIssues` entry has
+`kind` (`screen`, `camera` or `microphone`), `relativePath`, `timelineSeconds`,
+`fileSeconds` and a plain `message`. Before any edit, tell the user in plain
+words which layer is affected (repeat `message`; the original files are kept)
+and suggest recording again. Continue with the summary and edits only if the
+user wants to keep this recording.
 
 ## 4. On save: summarize
 
@@ -115,6 +126,7 @@ Edits combine: an edit with only `--camera` keeps the current trim.
 
 ```bash
 bash "$R" run edit "<package>" --in 4.2 --out 181.5 --json   # keep 4.2s..181.5s
+bash "$R" run edit "<package>" --cut 37.9-39.4 --cut 92-95.3 --json   # remove two middle parts
 bash "$R" run edit "<package>" --camera 0.8,0.8,0.18 --json
 bash "$R" run edit "<package>" --camera-hidden true --json
 ```
@@ -123,10 +135,21 @@ bash "$R" run edit "<package>" --camera-hidden true --json
   (`start`/`end` in seconds). To drop everything before a phrase, use
   `--in` at that phrase's first word `start`; to drop everything after, use
   `--out` at the last kept word's `end`. Leave about 0.3 seconds of margin.
-- **Cut out a middle part.** Not supported yet: an edit keeps one range, and
-  `--cut` is refused with exit 1. If the unwanted part is close to the start
-  or end, offer to trim to it instead. Otherwise tell the user plainly that
-  removing a section from the middle isn't available yet.
+- **Cut by words.** For "cut where I said um", "remove the part where I
+  looked for the file" or "drop the false start before 'open Settings'", find
+  the words in the transcript. Run `describe --json` after `transcribe`; its
+  transcript `words` each have `text`, `start` and `end` in seconds on the
+  recording timeline, which is the timeline `--cut` uses. For each match:
+  - one word or phrase: `--cut <first word start - 0.1>-<last word end + 0.1>`,
+  - a stretch between two phrases: from the end of the last word to keep to
+    the start of the next word to keep.
+  Pass every cut in one `edit` (repeat `--cut`). Don't let a margin reach
+  into a neighbouring word you keep. When a phrase occurs more than once,
+  list the times and ask which ones to cut. Cuts must sit inside the kept
+  range, must not overlap, and each piece left between them must be at least
+  0.1 seconds; repeat the app's refusal message plainly if it says otherwise.
+  A cut is relative to the current edit: cuts already made stay, and a new
+  `edit` with `--cut` adds to them.
 - **Camera.** `x,y` is the top-left corner of the camera bubble and `w` its
   width, all as fractions of the screen (0 to 1). The bubble keeps a 16:9
   shape and is pulled back inside the screen, so `1,1,w` sits flush in the
@@ -142,8 +165,9 @@ bash "$R" run edit "<package>" --camera-hidden true --json
   | larger | keep x,y, width `0.3` |
 
   Hide it with `--camera-hidden true`; show it again with `false`.
-- After each edit, report `keptStart`, `keptEnd`, `keptSeconds` and the
-  camera placement from the result, in plain words.
+- After each edit, report `keptStart`, `keptEnd`, `keptSeconds`, the kept
+  pieces (`kept`, one start and end per piece) and the camera placement from
+  the result, in plain words.
 
 ## 6. Preview, then export the video
 
@@ -153,7 +177,12 @@ outside the package, to a temporary folder:
 
 ```bash
 bash "$R" run frame "<package>" --at 5 --out /tmp/hq-capture-preview-1.png --json
+bash "$R" run frame "<package>" --edited-at 30 --out /tmp/hq-capture-preview-2.png --json
 ```
+
+`--at` is a time on the recording timeline. `--edited-at` is a time in the
+edited video, after the trim and cuts, which is easier for checking around a
+cut.
 
 Show the stills to the user (delegate image viewing to a sub-agent when the
 session already holds several images) and ask whether to export. Then:
@@ -180,18 +209,62 @@ bash "$R" run draft-sop "<package>"
   message plainly. Do not write the missing steps yourself and do not invent
   steps from the video; offer to record again with more narration. A partial
   draft can be retried with `--retry-failed`.
-- Collect the user's changes in chat: reorder, reword, drop a step, or pick a
-  different screenshot. Never present the draft as approved.
+- Never present the draft as approved.
 
-**Current limit:** HQ Capture has no command yet to apply review changes to a
-draft or to record the user's approval, and `export-sop` only exports an
-approved draft (exit 1 otherwise). Tell the user the draft is saved in the
-recording, list the changes they asked for, and say the guide can be
-finalized once that review step is available. Do not edit the draft files by
-hand.
+### Review the guide in chat
 
-When a draft is approved, `bash "$R" run export-sop "<package>"` writes the
-guide (exit 0); exit 1 means it is not approved.
+Run `bash "$R" run review-sop "<package>" --json` with no changes to read the
+current review: numbered steps with `id`, `instruction`, `screenshot`,
+`crop` and `flags`, plus `removed` steps and `prerequisites`. Show it as a
+numbered list. Then apply each change the user asks for with `review-sop`,
+one `review-sop` call per request (several flags in one call is fine):
+
+| User says | Flags |
+|---|---|
+| move step 3 to the top | `--move 3 1` |
+| reword step 2 | `--reword 2 "Click Save in the toolbar"` |
+| drop step 4 | `--drop 4` |
+| bring back the step I dropped | `--restore step-4` (the id from `removed`) |
+| use a different screenshot for step 2 | `--screenshot 2 <image from list-frames>` |
+| no screenshot for step 5 | `--omit-screenshot 5` |
+| crop step 1's screenshot to the top left | `--crop 1 0,0,0.5,0.5` |
+| rename the guide | `--title "Send an invoice"` |
+| add / remove a prerequisite | `--prerequisite add "Admin access"` / `--prerequisite remove pre-1` |
+
+A step is named by its current number or its id (`step-2`). Numbers change
+after a move or a drop, so re-read the result before the next change. Crop
+values are fractions of the screenshot from 0 to 1 (x, y, width, height).
+Every change saves a new revision and clears any earlier approval. If the
+app refuses, repeat its message plainly; nothing was written.
+
+To pick a screenshot, list the candidate frames for that step:
+
+```bash
+bash "$R" run list-frames "<package>" --step 2 --json
+```
+
+Each frame has `image` (a path inside the package), `timelineSeconds`,
+`width` and `height`. Show two or three candidates to the user (delegate
+image viewing to a sub-agent when the session already holds several
+images), then pass the chosen `image` to `--screenshot`. No frames means
+`extract-screen-evidence` has not run or found nothing.
+
+### Approve and export
+
+When the user is happy, ask plainly whether they approve the guide as shown.
+Only after they say yes, run, with their name as the reviewer:
+
+```bash
+bash "$R" run approve-sop "<package>" --reviewer "<the user's name>" --json
+bash "$R" run export-sop "<package>"
+```
+
+Use the user's name from the session or from what they told you; if you
+don't know it, ask. Never approve on the user's behalf without that yes.
+`approve-sop` approves the newest revision exactly as it is. `export-sop`
+writes the guide (exit 0); exit 1 means the newest revision is not approved,
+for example because a change came after the approval. Report the exported
+path.
 
 ## 8. Sync
 

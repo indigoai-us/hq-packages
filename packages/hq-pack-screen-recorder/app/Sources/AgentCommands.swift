@@ -22,7 +22,11 @@ enum AgentCommand: Equatable, Sendable {
     case transcribe(locale: String?)
     case edit(AgentEditRequest)
     case exportVideo
-    case frame(at: Double, out: URL)
+    /// `at` is on the recording timeline, or on the edited video when `edited` is true.
+    case frame(at: Double, out: URL, edited: Bool = false)
+    case reviewSOP([SOPReviewEdit])
+    case approveSOP(reviewer: String, revision: String?)
+    case listFrames(step: String?)
 }
 
 /// The changes `--edit` asks for. Nil fields keep the current value.
@@ -35,7 +39,7 @@ struct AgentEditRequest: Equatable, Sendable {
 
     var start: Double?
     var end: Double?
-    /// `--cut a-b` values. The edit model keeps one range, so any cut is refused.
+    /// `--cut start-end` values, in seconds on the recording timeline. Each one removes that time.
     var cuts: [String] = []
     var camera: Camera?
     var cameraHidden: Bool?
@@ -55,16 +59,22 @@ enum AgentCommandError: Error, Equatable, CustomStringConvertible {
 }
 
 enum AgentCommandsCLI {
-    static let modes = ["--describe", "--transcribe", "--edit", "--export-video", "--frame"]
+    static let modes = ["--describe", "--transcribe", "--edit", "--export-video", "--frame", "--review-sop",
+                        "--approve-sop", "--list-frames"]
     static let jsonFlag = "--json"
 
     static let usage = """
         usage:
           --describe <package> [--json]
           --transcribe <package> [--locale <id>] [--json]
-          --edit <package> [--in <seconds>] [--out <seconds>] [--camera <x,y,width>] [--camera-hidden true|false] [--json]
+          --edit <package> [--in <seconds>] [--out <seconds>] [--cut <start>-<end>]... [--camera <x,y,width>] [--camera-hidden true|false] [--json]
           --export-video <package> [--json]
-          --frame <package> --at <seconds> --out <file.png> [--json]
+          --frame <package> (--at <seconds> | --edited-at <seconds>) --out <file.png> [--json]
+          --review-sop <package> [--move <step> <position>] [--reword <step> <text>] [--drop <step>] [--restore <step-id>]
+                [--screenshot <step> <frame-image>] [--omit-screenshot <step>] [--crop <step> <x,y,w,h>] [--title <text>]
+                [--prerequisite add|remove <text>]... [--json]
+          --approve-sop <package> --reviewer <name> [--revision <drafts/draft-NNN.json>] [--json]
+          --list-frames <package> [--step <step>] [--json]
         """
 
     /// Options each mode takes, besides `--json`. Each one takes a value.
@@ -73,7 +83,9 @@ enum AgentCommandsCLI {
         "--transcribe": ["--locale"],
         "--edit": ["--in", "--out", "--cut", "--camera", "--camera-hidden"],
         "--export-video": [],
-        "--frame": ["--at", "--out"],
+        "--frame": ["--at", "--edited-at", "--out"],
+        "--approve-sop": ["--reviewer", "--revision"],
+        "--list-frames": ["--step"],
     ]
 
     // MARK: Parsing
@@ -88,6 +100,7 @@ enum AgentCommandsCLI {
         guard present.count == 1 else {
             throw AgentCommandError.usage("Use one agent command at a time, not \(present.joined(separator: " and ")).")
         }
+        if mode == "--review-sop" { return try parseReview(rest) }
         let allowed = options[mode] ?? []
         var package: URL?
         var values: [String: [String]] = [:]
@@ -130,20 +143,38 @@ enum AgentCommandsCLI {
             request.start = try values["--in"]?.first.map { try seconds($0, option: "--in") }
             request.end = try values["--out"]?.first.map { try seconds($0, option: "--out") }
             request.cuts = values["--cut"] ?? []
+            _ = try request.cuts.map(cut)
             request.camera = try values["--camera"]?.first.map(camera)
             request.cameraHidden = try values["--camera-hidden"]?.first.map(flag)
             command = .edit(request)
+        case "--approve-sop":
+            guard let reviewer = values["--reviewer"]?.first?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !reviewer.isEmpty else {
+                throw AgentCommandError.usage("--approve-sop needs --reviewer <name>.")
+            }
+            command = .approveSOP(reviewer: reviewer, revision: values["--revision"]?.first)
+        case "--list-frames":
+            command = .listFrames(step: values["--step"]?.first)
         default:
-            guard let at = values["--at"]?.first else { throw AgentCommandError.usage("--frame needs --at <seconds>.") }
+            let at = values["--at"]?.first
+            let editedAt = values["--edited-at"]?.first
             guard let out = values["--out"]?.first, !out.isEmpty else {
                 throw AgentCommandError.usage("--frame needs --out <file.png>.")
             }
-            command = .frame(at: try seconds(at, option: "--at"), out: URL(fileURLWithPath: out))
+            switch (at, editedAt) {
+            case (let at?, nil):
+                command = .frame(at: try seconds(at, option: "--at"), out: URL(fileURLWithPath: out))
+            case (nil, let editedAt?):
+                command = .frame(at: try seconds(editedAt, option: "--edited-at"), out: URL(fileURLWithPath: out),
+                                 edited: true)
+            default:
+                throw AgentCommandError.usage("--frame needs one of --at <seconds> or --edited-at <seconds>.")
+            }
         }
         return AgentInvocation(command: command, package: package, json: json)
     }
 
-    private static func seconds(_ text: String, option: String) throws -> Double {
+    static func seconds(_ text: String, option: String) throws -> Double {
         guard let value = Double(text), value.isFinite else {
             throw AgentCommandError.usage("\(option) needs a number of seconds, not \(text).")
         }
@@ -203,10 +234,12 @@ enum AgentCommandsCLI {
 
     /// Runs one command, prints its result and returns the exit code.
     static func run(_ invocation: AgentInvocation,
-                    engine: any NarrationTranscribing = OnDeviceNarrationTranscriber()) async -> Int32 {
+                    engine: any NarrationTranscribing = OnDeviceNarrationTranscriber(),
+                    syncChecker: any SyncChecking = HQSyncCLIChecker()) async -> Int32 {
         do {
             let store = try store(for: invocation.package)
-            let report = try await execute(invocation, store: store, engine: engine, progress: { line in
+            let report = try await execute(invocation, store: store, engine: engine, syncChecker: syncChecker,
+                                           progress: { line in
                 FileHandle.standardError.write(Data("progress: \(line)\n".utf8))
             })
             if invocation.json {
@@ -242,7 +275,7 @@ enum AgentCommandsCLI {
     }
 
     static func execute(_ invocation: AgentInvocation, store: RecordingPackageStore,
-                        engine: any NarrationTranscribing,
+                        engine: any NarrationTranscribing, syncChecker: any SyncChecking = HQSyncCLIChecker(),
                         progress: @escaping @Sendable (String) -> Void) async throws -> AgentReport {
         let package = invocation.package
         switch invocation.command {
@@ -255,8 +288,15 @@ enum AgentCommandsCLI {
             return .edit(try await edit(request, package: package, store: store))
         case .exportVideo:
             return .export(try await exportVideo(package: package, store: store))
-        case .frame(let at, let out):
-            return .frame(try await frame(at: at, out: out, package: package, store: store))
+        case .frame(let at, let out, let edited):
+            return .frame(try await frame(at: at, out: out, edited: edited, package: package, store: store))
+        case .reviewSOP(let edits):
+            return .review(try await reviewSOP(edits, package: package, store: store, syncChecker: syncChecker))
+        case .approveSOP(let reviewer, let revision):
+            return .review(try await approveSOP(reviewer: reviewer, revision: revision, package: package,
+                                                store: store, syncChecker: syncChecker))
+        case .listFrames(let step):
+            return .frames(try listFrames(step: step, package: package, store: store))
         }
     }
 
@@ -266,6 +306,8 @@ enum AgentCommandsCLI {
         case let error as AgentCommandError: return error.description
         case let error as TranscriptionError: return error.description
         case let error as TrimEditor.TrimError: return trimMessage(error)
+        case let error as KeptRanges.CutError: return cutMessage(error)
+        case let error as SOPReviewError: return reviewMessage(error)
         case PackageError.outsideCompanyRecordings, PackageError.invalidCompany:
             return "The package must be inside companies/<company>/recordings."
         case PackageError.notAPackage: return "That folder is not a recording package."
@@ -291,17 +333,24 @@ enum AgentCommandsCLI {
     static func edit(_ request: AgentEditRequest, package: URL,
                      store: RecordingPackageStore) async throws -> AgentEditResult {
         let unchanged = "No revision was written."
-        guard request.cuts.isEmpty else {
-            throw AgentCommandError.refused("Cutting out a middle range (--cut) is not supported. An edit keeps one "
-                                            + "range, set with --in and --out. \(unchanged)")
+        guard request.start != nil || request.end != nil || !request.cuts.isEmpty || request.camera != nil
+                || request.cameraHidden != nil else {
+            throw AgentCommandError.usage("--edit needs --in, --out, --cut, --camera or --camera-hidden.")
         }
-        guard request.start != nil || request.end != nil || request.camera != nil || request.cameraHidden != nil else {
-            throw AgentCommandError.usage("--edit needs --in, --out, --camera or --camera-hidden.")
-        }
+        let cuts = try request.cuts.map(cut)
         let document = try await TrimDocument.open(package, store: store)
         let duration = document.editor.duration
-        let start = request.start ?? document.editor.start
-        let end = request.end ?? document.editor.end
+        var manifest = document.manifest
+        let current: [RecordingProject.TrimRange]
+        do {
+            current = try KeptRanges.resolve(trim: manifest.trim, kept: manifest.kept, duration: duration)
+        } catch let error as TrimEditor.TrimError {
+            NSLog("HQ recorder: saved edit does not fit the recording: \(error)")
+            throw AgentCommandError.refused("The saved edit does not fit the recording: \(trimMessage(error)) "
+                                            + unchanged)
+        }
+        let start = request.start ?? current[0].start
+        let end = request.end ?? current[current.count - 1].end
         if end == start {
             throw AgentCommandError.refused("The start and end are both \(format(start))s, so nothing would be kept. "
                                             + unchanged)
@@ -310,15 +359,19 @@ enum AgentCommandsCLI {
             throw AgentCommandError.refused("The end (\(format(end))s) comes before the start (\(format(start))s). "
                                             + unchanged)
         }
-        let kept: RecordingProject.TrimRange
+        var ranges: [RecordingProject.TrimRange]
         do {
-            kept = try TrimEditor.check(.init(start: start, end: end), duration: duration)
+            let outer = try TrimEditor.check(.init(start: start, end: end), duration: duration)
+            ranges = try KeptRanges.bounded(current, start: outer.start, end: outer.end)
+            ranges = try KeptRanges.cutting(cuts, from: ranges)
         } catch let error as TrimEditor.TrimError {
             NSLog("HQ recorder: agent edit refused: \(error)")
             throw AgentCommandError.refused("\(trimMessage(error)) The recording is \(format(duration))s long. \(unchanged)")
+        } catch let error as KeptRanges.CutError {
+            NSLog("HQ recorder: agent cut refused: \(error)")
+            throw AgentCommandError.refused("\(cutMessage(error)) \(unchanged)")
         }
-        let trim: RecordingProject.TrimRange? = kept.start <= 0 && kept.end >= duration ? nil : kept
-        var manifest = document.manifest
+        let (trim, kept) = KeptRanges.normalize(ranges, duration: duration)
         var webcam = manifest.webcam
         if let camera = request.camera {
             guard (0...1).contains(camera.x), (0...1).contains(camera.y), camera.width > 0, camera.width <= 1 else {
@@ -330,14 +383,35 @@ enum AgentCommandsCLI {
             webcam.width = camera.width
         }
         if let hidden = request.cameraHidden { webcam.visible = !hidden }
-        guard trim != manifest.trim || webcam != manifest.webcam else {
+        guard trim != manifest.trim || kept != manifest.kept || webcam != manifest.webcam else {
             throw AgentCommandError.refused("That is already the current edit. \(unchanged)")
         }
-        try store.appendEdit(trim: trim, webcam: webcam, to: &manifest, in: package)
-        let kept2 = trim ?? .init(start: 0, end: duration)
+        try store.appendEdit(trim: trim, kept: kept, webcam: webcam, to: &manifest, in: package)
         return AgentEditResult(revision: manifest.edits.count, path: manifest.edits.last ?? "", trim: trim,
-                               keptStart: kept2.start, keptEnd: kept2.end, keptSeconds: kept2.end - kept2.start,
-                               durationSeconds: duration, webcam: webcam)
+                               kept: ranges, keptStart: ranges[0].start, keptEnd: ranges[ranges.count - 1].end,
+                               keptSeconds: KeptRanges.total(ranges), durationSeconds: duration, webcam: webcam)
+    }
+
+    /// A `--cut start-end` value in seconds on the recording timeline, such as `12.5-14`.
+    static func cut(_ text: String) throws -> RecordingProject.TrimRange {
+        let parts = text.split(separator: "-", omittingEmptySubsequences: false)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+        guard parts.count == 2, let start = Double(parts[0]), let end = Double(parts[1]),
+              start.isFinite, end.isFinite else {
+            throw AgentCommandError.usage("--cut needs a start and end in seconds, such as --cut 12.5-14, not \(text).")
+        }
+        return .init(start: start, end: end)
+    }
+
+    static func cutMessage(_ error: KeptRanges.CutError) -> String {
+        switch error {
+        case .invalidCut: "A cut needs a start before its end, such as --cut 12.5-14."
+        case .overlapping: "Two cuts overlap. Give each stretch of time in one cut only."
+        case .outsideKept: "Each cut must fall inside what the edit keeps: after the start, before the end, "
+            + "and not over time an earlier cut already removed."
+        case .nothingLeft: "The cuts remove everything, so nothing would be kept."
+        case .pieceTooShort: "Each piece left between cuts has to be at least a tenth of a second."
+        }
     }
 
     // MARK: --export-video
@@ -348,12 +422,14 @@ enum AgentCommandsCLI {
         let export = manifest.videoExports?.last
         return AgentExportResult(path: url.path, relativePath: export?.relativePath ?? url.lastPathComponent,
                                  durationSeconds: export?.durationSeconds ?? 0, trim: export?.trim,
-                                 webcam: export?.webcam ?? manifest.webcam)
+                                 kept: export?.kept, webcam: export?.webcam ?? manifest.webcam)
     }
 
     // MARK: --frame
 
-    static func frame(at seconds: Double, out: URL, package: URL,
+    /// Renders the frame at `seconds` on the recording timeline, or, when `edited` is true, at
+    /// `seconds` into the edited video (after the start trim and any cuts).
+    static func frame(at seconds: Double, out: URL, edited: Bool = false, package: URL,
                       store: RecordingPackageStore) async throws -> AgentFrameResult {
         let target = out.standardizedFileURL
         guard target.pathExtension.lowercased() == "png" else {
@@ -374,11 +450,30 @@ enum AgentCommandsCLI {
         }
         let document = try await TrimDocument.open(package, store: store)
         let duration = document.editor.duration
-        guard seconds >= 0, seconds < duration else {
-            throw AgentCommandError.refused("--at must be from 0 to under \(format(duration))s, the length of the recording.")
+        let recordingSeconds: Double
+        if edited {
+            let ranges: [RecordingProject.TrimRange]
+            do {
+                ranges = try KeptRanges.resolve(trim: document.manifest.trim, kept: document.manifest.kept,
+                                                duration: duration)
+            } catch let error as TrimEditor.TrimError {
+                throw AgentCommandError.refused("The saved edit does not fit the recording: \(trimMessage(error))")
+            }
+            let length = KeptRanges.total(ranges)
+            guard seconds >= 0, seconds < length,
+                  let mapped = KeptRanges.recordingTime(edited: seconds, in: ranges, ending: false) else {
+                throw AgentCommandError.refused("--edited-at must be from 0 to under \(format(length))s, the length of "
+                                                + "the edited video.")
+            }
+            recordingSeconds = min(mapped, duration - 0.001)
+        } else {
+            guard seconds >= 0, seconds < duration else {
+                throw AgentCommandError.refused("--at must be from 0 to under \(format(duration))s, the length of the recording.")
+            }
+            recordingSeconds = seconds
         }
         let image = try await renderFrame(package: package, timeline: document.timeline,
-                                          webcam: document.manifest.webcam, at: seconds)
+                                          webcam: document.manifest.webcam, at: recordingSeconds)
         let temp = folder.appendingPathComponent(".\(target.lastPathComponent).tmp-\(UUID().uuidString)")
         do {
             guard let destination = CGImageDestinationCreateWithURL(temp as CFURL, "public.png" as CFString, 1, nil)
@@ -398,7 +493,8 @@ enum AgentCommandsCLI {
             }
             throw error
         }
-        return AgentFrameResult(path: target.path, atSeconds: seconds, width: image.width, height: image.height)
+        return AgentFrameResult(path: target.path, atSeconds: recordingSeconds,
+                                editedSeconds: edited ? seconds : nil, width: image.width, height: image.height)
     }
 
     /// One still of the screen with the camera drawn at its saved placement, at a time on the
@@ -440,16 +536,18 @@ enum AgentCommandsCLI {
         } catch {
             NSLog("HQ recorder: could not measure the recording for --describe: \(error)")
         }
-        var kept: RecordingProject.TrimRange?
+        var ranges: [RecordingProject.TrimRange]?
         if let duration {
             do {
-                kept = try TrimEditor.check(manifest.trim, duration: duration)
+                ranges = try KeptRanges.resolve(trim: manifest.trim, kept: manifest.kept, duration: duration)
             } catch {
-                NSLog("HQ recorder: saved trim does not fit the recording: \(error)")
+                NSLog("HQ recorder: saved edit does not fit the recording: \(error)")
             }
         }
+        let kept = ranges.map { RecordingProject.TrimRange(start: $0[0].start, end: $0[$0.count - 1].end) }
         let edit = AgentDescription.Edit(revisions: manifest.edits.count, path: manifest.edits.last, trim: manifest.trim,
-                                         kept: kept, keptSeconds: kept.map { $0.end - $0.start }, webcam: manifest.webcam)
+                                         kept: kept, keptRanges: ranges, keptSeconds: ranges.map(KeptRanges.total),
+                                         webcam: manifest.webcam)
         return AgentDescription(
             package: try RecordingsRoot.canonical(package).path, company: manifest.company, title: manifest.title,
             state: manifest.state.rawValue, stopReason: manifest.stopReason, createdAt: manifest.createdAt,
@@ -513,6 +611,8 @@ enum AgentReport: Encodable, Sendable {
     case edit(AgentEditResult)
     case export(AgentExportResult)
     case frame(AgentFrameResult)
+    case review(AgentReviewResult)
+    case frames(AgentFramesResult)
 
     func encode(to encoder: Encoder) throws {
         switch self {
@@ -521,6 +621,8 @@ enum AgentReport: Encodable, Sendable {
         case .edit(let value): try value.encode(to: encoder)
         case .export(let value): try value.encode(to: encoder)
         case .frame(let value): try value.encode(to: encoder)
+        case .review(let value): try value.encode(to: encoder)
+        case .frames(let value): try value.encode(to: encoder)
         }
     }
 
@@ -533,8 +635,8 @@ enum AgentReport: Encodable, Sendable {
             lines.append("length: " + (d.durationSeconds.map { "\(f($0))s" } ?? "unknown"))
             lines.append("tracks: " + d.tracks.map { "\($0.kind.rawValue) (\($0.segments.count) segments)" }
                 .joined(separator: ", "))
-            if let kept = d.edit.kept {
-                lines.append("edit \(d.edit.revisions): keeps \(f(kept.start))s to \(f(kept.end))s")
+            if let ranges = d.edit.keptRanges {
+                lines.append("edit \(d.edit.revisions): keeps " + AgentReport.rangeText(ranges))
             }
             let camera = d.edit.webcam
             lines.append(camera.visible ? "camera: x \(camera.x), y \(camera.y), width \(camera.width)" : "camera: hidden")
@@ -546,13 +648,24 @@ enum AgentReport: Encodable, Sendable {
         case .transcribe(let t):
             return ["saved \(t.path)", "\(t.segments) phrases, \(t.words) words, \(t.locale)"]
         case .edit(let e):
-            return ["saved \(e.path)", "keeps \(f(e.keptStart))s to \(f(e.keptEnd))s of \(f(e.durationSeconds))s",
+            return ["saved \(e.path)", "keeps \(AgentReport.rangeText(e.kept)) of \(f(e.durationSeconds))s",
                     e.webcam.visible ? "camera: x \(e.webcam.x), y \(e.webcam.y), width \(e.webcam.width)" : "camera: hidden"]
         case .export(let e):
             return [e.path]
         case .frame(let fr):
             return [fr.path]
+        case .review(let r):
+            return r.lines
+        case .frames(let fr):
+            return fr.lines
         }
+    }
+
+    /// "2.00s to 9.00s", or for several ranges "0.00s to 3.00s, 5.00s to 9.00s (7.00s in all)".
+    static func rangeText(_ ranges: [RecordingProject.TrimRange]) -> String {
+        let f = AgentCommandsCLI.format
+        let parts = ranges.map { "\(f($0.start))s to \(f($0.end))s" }.joined(separator: ", ")
+        return ranges.count > 1 ? "\(parts) (\(f(KeptRanges.total(ranges)))s in all)" : parts
     }
 }
 
@@ -560,6 +673,8 @@ struct AgentEditResult: Codable, Equatable, Sendable {
     var revision: Int
     var path: String
     var trim: RecordingProject.TrimRange?
+    /// The ranges the edit keeps, in order; one range when there are no middle cuts.
+    var kept: [RecordingProject.TrimRange]
     var keptStart: Double
     var keptEnd: Double
     var keptSeconds: Double
@@ -572,12 +687,17 @@ struct AgentExportResult: Codable, Equatable, Sendable {
     var relativePath: String
     var durationSeconds: Double
     var trim: RecordingProject.TrimRange?
+    /// The kept ranges when the edit had middle cuts.
+    var kept: [RecordingProject.TrimRange]?
     var webcam: RecordingProject.WebcamPlacement
 }
 
 struct AgentFrameResult: Codable, Equatable, Sendable {
     var path: String
+    /// The time of the frame on the recording timeline.
     var atSeconds: Double
+    /// The time in the edited video, when the frame was asked for with `--edited-at`.
+    var editedSeconds: Double?
     var width: Int
     var height: Int
 }
@@ -597,8 +717,10 @@ struct AgentDescription: Codable, Equatable, Sendable {
         var revisions: Int
         var path: String?
         var trim: RecordingProject.TrimRange?
-        /// The range the current edit keeps; nil when the recording could not be measured.
+        /// The outer bounds of what the current edit keeps; nil when the recording could not be measured.
         var kept: RecordingProject.TrimRange?
+        /// Each range the current edit keeps, in order; more than one when there are middle cuts.
+        var keptRanges: [RecordingProject.TrimRange]?
         var keptSeconds: Double?
         var webcam: RecordingProject.WebcamPlacement
     }

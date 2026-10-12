@@ -27,6 +27,8 @@ final class TrimModel {
     /// The last finished export, for Show in Finder.
     private(set) var lastExport: URL?
     private var exportTask: Task<Void, Never>?
+    /// Jumps over the cut-out time while the kept ranges play.
+    private var cutObserver: Any?
 
     var duration: Double { document.editor.duration }
     var start: Double { document.editor.start }
@@ -94,22 +96,58 @@ final class TrimModel {
         let seconds = min(max(0, fraction), 1) * duration
         position = seconds
         player.currentItem?.forwardPlaybackEndTime = .invalid
+        stopSkippingCuts()
         player.seek(to: CMTime(seconds: seconds, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
     }
 
-    /// Plays only the kept range.
+    /// The ranges the saved edit keeps, in order. One range when there are no middle cuts.
+    var keptRanges: [RecordingProject.TrimRange] {
+        do {
+            return try KeptRanges.resolve(trim: document.manifest.trim, kept: document.manifest.kept, duration: duration)
+        } catch {
+            NSLog("HQ recorder: saved edit does not fit the recording: \(error)")
+            return [.init(start: start, end: end)]
+        }
+    }
+
+    /// Plays only the kept ranges, jumping over any middle cuts.
     func playTrimmed() {
-        player.currentItem?.forwardPlaybackEndTime = CMTime(seconds: end, preferredTimescale: 600)
-        position = start
-        player.seek(to: CMTime(seconds: start, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
+        let ranges = keptRanges
+        stopSkippingCuts()
+        player.currentItem?.forwardPlaybackEndTime = CMTime(seconds: ranges[ranges.count - 1].end, preferredTimescale: 600)
+        if ranges.count > 1 {
+            let ends = ranges.dropLast().map { NSValue(time: CMTime(seconds: $0.end, preferredTimescale: 600)) }
+            cutObserver = player.addBoundaryTimeObserver(forTimes: ends, queue: .main) { [weak self] in
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    let now = self.player.currentTime().seconds
+                    guard let next = ranges.first(where: { $0.start > now - 0.05 && $0.start > ranges[0].start }) else { return }
+                    self.player.seek(to: CMTime(seconds: next.start, preferredTimescale: 600),
+                                     toleranceBefore: .zero, toleranceAfter: .zero)
+                }
+            }
+        }
+        position = ranges[0].start
+        player.seek(to: CMTime(seconds: ranges[0].start, preferredTimescale: 600), toleranceBefore: .zero,
+                    toleranceAfter: .zero)
         player.play()
     }
 
+    private func stopSkippingCuts() {
+        if let cutObserver { player.removeTimeObserver(cutObserver) }
+        cutObserver = nil
+    }
+
     /// "Keeps 0:01.2 to 0:04.5 (3.3 s) of 0:10.0", or the whole length when nothing is trimmed.
+    /// With middle cuts: "Keeps 0:01.2 to 0:09.0 with 1 cut (6.3 s) of 0:10.0".
     var rangeText: String {
-        let kept = String(format: "%.1f", end - start)
-        guard isTrimmed else { return "Keeps the whole recording (\(kept) s)" }
-        return "Keeps \(Self.clock(start)) to \(Self.clock(end)) (\(kept) s) of \(Self.clock(duration))"
+        let ranges = keptRanges
+        let kept = String(format: "%.1f", KeptRanges.total(ranges))
+        guard isTrimmed || ranges.count > 1 else { return "Keeps the whole recording (\(kept) s)" }
+        let cuts = ranges.count - 1
+        let cutText = cuts == 0 ? "" : " with \(cuts) cut\(cuts == 1 ? "" : "s")"
+        return "Keeps \(Self.clock(ranges[0].start)) to \(Self.clock(ranges[cuts].end))\(cutText) (\(kept) s) of "
+            + Self.clock(duration)
     }
 
     static func clock(_ seconds: Double) -> String {
