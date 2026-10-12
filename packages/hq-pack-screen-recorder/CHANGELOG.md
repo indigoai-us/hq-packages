@@ -2,9 +2,10 @@
 
 ## 0.3.0
 
-- Vendored HQ Capture from local-screen-recorder 862e59e: middle cuts, guide
+- Vendored HQ Capture from local-screen-recorder 295ff3c: middle cuts, guide
   review and approval commands, screenshot frame listing, media length checks,
-  and the updated window style. App version 0.3.0 (build 3).
+  the rounded Liquid Glass window style, the window coming back to the front
+  on stop and on launch, and roomier controls. App version 0.3.0 (build 3).
 - `/record-process` cuts by words: the agent maps "cut where I said um" to
   `--cut` ranges from the transcript's word times.
 - `/record-process` reviews the drafted guide in chat and applies each change

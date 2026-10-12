@@ -72,7 +72,7 @@ final class ControlBarModel {
 
 /// Where the bar sits: where it was last dragged on that display, or top center by default.
 enum ControlBarPlacement {
-    static let size = CGSize(width: 420, height: 48)
+    static let size = CGSize(width: 420, height: 56)
     static let topMargin: CGFloat = 12
 
     /// The bar frame on a screen. A saved origin is used only while the whole bar still fits on
@@ -182,8 +182,8 @@ struct ControlBarView: View {
     private let access = HQAccessibility()
 
     var body: some View {
-        GlassEffectContainer(spacing: 8) {
-            HStack(spacing: 6) {
+        GlassEffectContainer(spacing: 10) {
+            HStack(spacing: 10) {
                 status
                 if model.phase != .hidden {
                     button(model.pauseTitle, symbol: model.phase == .paused ? "play.fill" : "pause.fill",
@@ -194,13 +194,15 @@ struct ControlBarView: View {
                            action: .teleprompter, id: "controlBarTeleprompter", prominent: false)
                 }
             }
-            .padding(5)
+            .padding(.vertical, 7)
+            .padding(.leading, 7)
+            .padding(.trailing, 9)
             // The whole bar is one capsule of clear glass; the status and buttons sit on it.
             .hqGlass(in: Capsule(), clear: true)
             .glassEffectID("bar", in: glass)
         }
         .tint(model.phase == .paused ? .orange : .red)
-        .padding(4)
+        .padding(6)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .scaleEffect(model.presented || access.reduceMotion ? 1 : 0.86)
         .opacity(model.presented ? 1 : 0)
@@ -211,7 +213,7 @@ struct ControlBarView: View {
     }
 
     private var status: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 10) {
             Circle()
                 .fill(model.phase == .recording ? Color.red : Color.clear)
                 .overlay(Circle().strokeBorder(model.phase == .hidden ? Color.secondary
@@ -222,15 +224,15 @@ struct ControlBarView: View {
                 .accessibilityIdentifier("controlBarStatus")
             TimelineView(.periodic(from: .now, by: 0.5)) { _ in
                 Text(RecordingDuration.text(model.elapsed() ?? 0))
-                    .font(.system(size: 13, weight: .semibold).monospacedDigit())
+                    .font(.system(size: 13, weight: .medium).monospacedDigit())
                     .foregroundStyle(model.phase == .paused ? AnyShapeStyle(Color.orange) : AnyShapeStyle(.primary))
                     .contentTransition(.numericText())
                     .accessibilityIdentifier("controlBarElapsed")
             }
-            .frame(width: 46, alignment: .leading)
+            .frame(width: 50, alignment: .leading)
         }
-        .padding(.leading, 12)
-        .padding(.trailing, 4)
+        .padding(.leading, 10)
+        .padding(.trailing, 8)
         .frame(maxHeight: .infinity)
         .glassEffectID("status", in: glass)
     }
@@ -243,8 +245,10 @@ struct ControlBarView: View {
                     .contentTransition(.symbolEffect(.replace))
                 if showsTitle { Text(title) }
             }
-            .font(.system(size: 12, weight: .semibold))
-            .frame(minWidth: 16, minHeight: 20)
+            .font(.system(size: 12, weight: .medium))
+            // With the glass button's own padding this keeps every button at least 28 pt.
+            .frame(minWidth: 24, minHeight: 24)
+            .padding(.horizontal, showsTitle ? 4 : 0)
         }
         .hqGlassButton(prominent: prominent, circle: !showsTitle)
         .controlSize(.regular)

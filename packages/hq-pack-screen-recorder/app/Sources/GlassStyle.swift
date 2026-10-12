@@ -24,8 +24,11 @@ enum HQMotion {
 
     /// The spring a surface appears with: scale and opacity together.
     static func appear(_ reduceMotion: Bool) -> Animation {
-        reduceMotion ? .easeInOut(duration: 0.18) : .spring(response: 0.42, dampingFraction: 0.78)
+        reduceMotion ? .easeInOut(duration: 0.18) : .spring(appearSpring)
     }
+
+    /// The spring behind `appear`, for keyframe animations.
+    static let appearSpring = Spring(response: 0.42, dampingRatio: 0.78)
 
     /// True when the system or the launch flag asks for Reduce Motion. For AppKit callers.
     @MainActor static var reduceMotion: Bool {

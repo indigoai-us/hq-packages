@@ -23,7 +23,7 @@ final class NeverCapturedPanel: NSPanel {
 
 /// Where the Recording badge sits: the far lower-right corner of the recorded screen.
 enum RecordingBadgePlacement {
-    static let size = CGSize(width: 124, height: 32)
+    static let size = CGSize(width: 136, height: 38)
     static let margin: CGFloat = 6
 
     /// The badge frame in screen coordinates for a screen whose full frame is `screenFrame`.
@@ -130,9 +130,10 @@ final class RecordingBadgeWindow {
                     .contentTransition(.opacity)
                     .accessibilityIdentifier("recordingBadgeLabel")
             }
+            .padding(.horizontal, 14)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .hqGlass(in: Capsule(), clear: true)
-            .padding(2)
+            .padding(3)
             .animation(HQMotion.smooth(access.reduceMotion), value: model.paused)
         }
     }

@@ -45,6 +45,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         session.begin()
         if let surface = ScreenshotStage.surface(CommandLine.arguments) {
             ScreenshotStage.present(surface, session: session)
+        } else if session.context != nil {
+            // HQ launched the recorder, or it relaunched after Quit & Reopen: put it on top.
+            session.focus.bringForwardWhenReady(.launch)
         }
     }
 
@@ -127,6 +130,10 @@ final class SessionController {
     @ObservationIgnored private let controlBar = RecordingControlBarWindow()
     /// The control bar's state, for the bar itself and for tests.
     var controlBarModel: ControlBarModel { controlBar.model }
+    /// Brings the main window forward at launch and when a recording stops.
+    @ObservationIgnored let focus: WindowFocusCoordinator
+    /// Counts how often the window was brought forward. The window plays its arrival on each change.
+    private(set) var windowArrivals = 0
     /// True while Option-Command-P is registered system-wide. When it isn't, the Pause button
     /// carries the shortcut instead.
     private(set) var pauseShortcutGlobal = false
@@ -146,8 +153,10 @@ final class SessionController {
     }
 
     init(arguments: [String], store: SelectionStore = SelectionStore(defaults: .standard),
-         bindings: LaunchBindingStore = LaunchBindingStore(defaults: .standard), now: Date = Date()) {
+         bindings: LaunchBindingStore = LaunchBindingStore(defaults: .standard), now: Date = Date(),
+         focusHost: WindowFocusHost = AppKitFocusHost()) {
         self.store = store
+        focus = WindowFocusCoordinator(host: focusHost)
         // A plain relaunch shortly after an HQ launch (Quit & Reopen) keeps the same binding.
         let arguments = bindings.resolve(arguments, now: now)
         do {
@@ -160,6 +169,7 @@ final class SessionController {
         controlBar.model.target = self
         controlBar.model.teleprompter = teleprompter
         controlBar.model.elapsed = { [weak self] in self?.durationSeconds }
+        focus.onBringForward = { [weak self] _ in self?.windowArrivals += 1 }
     }
 
     func begin() {
@@ -508,6 +518,9 @@ final class SessionController {
         pauseShortcutGlobal = false
         badge.hide()
         controlBar.hide()
+        // Every stop (the bar, the window, stop.request, a system stop) brings the window back
+        // while it saves, so the saved state and the resume prompt are in view.
+        if WindowFocusCoordinator.surfacesWindow(afterStop: reason) { focus.bringForward(.stop) }
         if let capture { await capture.stop() }
         capture = nil
         if let cameraCapture { await cameraCapture.stop() }
@@ -705,6 +718,12 @@ final class SessionController {
     }
 }
 
+/// The window's scale and opacity while it settles in after being brought forward.
+struct WindowArrival {
+    var scale: CGFloat = 1
+    var opacity: Double = 1
+}
+
 struct WorkspaceView: View {
     let session: SessionController
     @Namespace private var glass
@@ -724,6 +743,20 @@ struct WorkspaceView: View {
         .animation(HQMotion.smooth(access.reduceMotion), value: session.blockers.count)
         .animation(HQMotion.smooth(access.reduceMotion), value: session.selection.camera?.uniqueID)
         .animation(HQMotion.smooth(access.reduceMotion), value: session.selection.microphone?.uniqueID)
+        // When the window is brought forward it settles in on the glass spring. With Reduce
+        // Motion it only fades.
+        .keyframeAnimator(initialValue: WindowArrival(), trigger: session.windowArrivals) { view, arrival in
+            view.scaleEffect(arrival.scale).opacity(arrival.opacity)
+        } keyframes: { _ in
+            KeyframeTrack(\.scale) {
+                MoveKeyframe(access.reduceMotion ? 1 : 0.97)
+                SpringKeyframe(1, duration: 0.42, spring: HQMotion.appearSpring)
+            }
+            KeyframeTrack(\.opacity) {
+                MoveKeyframe(0.7)
+                LinearKeyframe(1, duration: access.reduceMotion ? 0.18 : 0.3)
+            }
+        }
     }
 
     private var content: some View {
@@ -731,10 +764,10 @@ struct WorkspaceView: View {
             header
             companySection
             HStack(alignment: .top, spacing: 28) {
-                VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 20) {
                     if session.context != nil {
-                        VStack(alignment: .leading, spacing: 14) { sourceRows }
-                            .padding(16)
+                        VStack(alignment: .leading, spacing: 16) { sourceRows }
+                            .padding(20)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .hqGlass()
                     }
@@ -788,15 +821,15 @@ struct WorkspaceView: View {
 
     /// The one primary action for the current state, with Pause and the teleprompter beside it.
     private var actions: some View {
-        GlassEffectContainer(spacing: 10) {
-            HStack(spacing: 10) {
+        GlassEffectContainer(spacing: 14) {
+            HStack(spacing: 14) {
                 Button { session.toggleRecording() } label: {
                     Label(session.isCapturing ? "Stop recording" : "Start recording",
                           systemImage: session.isCapturing ? "stop.fill" : "record.circle")
                         .contentTransition(.symbolEffect(.replace))
-                        .padding(.horizontal, 6)
+                        .padding(.horizontal, 8)
                 }
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 13, weight: .medium))
                 .controlSize(.large)
                 .hqGlassButton(prominent: true)
                 .tint(session.isCapturing ? .red : .accentColor)
@@ -885,7 +918,7 @@ struct WorkspaceView: View {
 
     /// After a save: where to go next, and the prompt to paste back into the HQ session.
     @ViewBuilder private var savedSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 14) {
             Text(SessionController.savedNote)
                 .font(.system(size: 13))
                 .accessibilityIdentifier("savedNote")
@@ -895,12 +928,12 @@ struct WorkspaceView: View {
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(12)
+                    .padding(14)
                     .background(Color.primary.opacity(0.06),
                                 in: .rect(cornerRadius: HQRadius.inset, style: .continuous))
                     .accessibilityIdentifier("resumePrompt")
-                GlassEffectContainer(spacing: 10) {
-                    HStack(spacing: 10) {
+                GlassEffectContainer(spacing: 14) {
+                    HStack(spacing: 14) {
                         Button {
                             NSPasteboard.general.clearContents()
                             NSPasteboard.general.setString(prompt, forType: .string)
@@ -927,7 +960,7 @@ struct WorkspaceView: View {
                 }
             }
         }
-        .padding(16)
+        .padding(20)
         .hqGlass()
     }
 
@@ -1014,7 +1047,7 @@ struct WorkspaceView: View {
 
     /// Screen, camera and microphone pickers, each with its own permission note and repair.
     @ViewBuilder private var sourceRows: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             sourceRow("display") {
                 Picker("Screen", selection: Binding(
                     get: { session.selection.screen?.tag ?? "" },
@@ -1030,7 +1063,7 @@ struct WorkspaceView: View {
             }
             blockerNotes(.screen)
         }
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             sourceRow("video") {
                 devicePicker("Camera", id: "cameraPicker", devices: session.available.cameras,
                              chosen: session.selection.camera, choose: session.chooseCamera)
@@ -1048,7 +1081,7 @@ struct WorkspaceView: View {
                     let level = session.microphoneCapture?.level.map(Float.init) ?? session.preview.microphoneLevel ?? -60
                     LevelMeter(fraction: Double(max(0, min(60, level + 60))) / 60, reduceMotion: access.reduceMotion)
                 }
-                .padding(.leading, 30)
+                .padding(.leading, 34)
                 .accessibilityIdentifier("microphoneLevel")
                 .transition(.opacity)
             }
@@ -1058,11 +1091,11 @@ struct WorkspaceView: View {
     }
 
     private func sourceRow(_ symbol: String, @ViewBuilder picker: () -> some View) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
             Image(systemName: symbol)
                 .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(.secondary)
-                .frame(width: 20)
+                .frame(width: 22)
                 .accessibilityHidden(true)
             picker()
         }
@@ -1101,7 +1134,7 @@ struct WorkspaceView: View {
                 .accessibilityIdentifier("captureBlocker-\(blocker.reason)")
             if let title = Self.repairTitle(blocker.repair) {
                 Button(title) { Task { await session.repair(blocker) } }
-                    .controlSize(.small)
+                    .controlSize(.regular)
                     .hqGlassButton()
                     .accessibilityIdentifier("repair-\(blocker.reason)")
             }
