@@ -1035,11 +1035,10 @@ enum SOPDraftWorkflow {
     }
 
     private static func save(_ document: SOPDraftDocument, package: URL, store: RecordingPackageStore) throws -> SOPDraftResult {
-        var manifest = try store.readManifest(in: package)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let body = String(decoding: try encoder.encode(document), as: UTF8.self)
-        try store.appendDraft(body: body, source: "\(sourcePrefix):\(document.source)", to: &manifest, in: package)
+        let manifest = try store.appendDraft(source: "\(sourcePrefix):\(document.source)", in: package) { _ in body }
         return SOPDraftResult(document: document, draftPath: manifest.drafts.last?.relativePath ?? "", manifest: manifest)
     }
 }

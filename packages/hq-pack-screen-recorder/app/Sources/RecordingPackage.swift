@@ -503,6 +503,9 @@ struct RecordingPackageStore: Sendable {
     static let manifestName = "manifest.json"
     /// Hidden, so vault sync leaves it out.
     static let ownerName = ".owner.json"
+    /// Locked while `manifest.json` is read, changed and saved. Hidden, so vault sync and its
+    /// change check leave it out.
+    static let lockName = ".manifest.lock"
     /// A recording whose owner cannot be identified (no owner file, or another Mac) is only
     /// recovered once nothing in the package has changed for this long.
     static let unknownOwnerStaleSeconds: TimeInterval = 24 * 60 * 60
@@ -556,12 +559,44 @@ struct RecordingPackageStore: Sendable {
                                          createdAt: SessionStatus.now(), state: .recording)
         try writeJSON(owner, to: Self.ownerName, in: package)
         try writeJSON(RecordingTimeline(), to: "timeline.json", in: package)
-        try writeManifest(manifest, in: package)
+        try withPackageLock(package) { try storeManifest(manifest, in: package) }
         return (package, manifest)
     }
 
-    /// Validates, then replaces `manifest.json` with a temp-file write and rename.
-    func writeManifest(_ manifest: RecordingManifest, in package: URL) throws {
+    /// Runs `body` while holding an exclusive lock on the package's `.manifest.lock`. A holder in
+    /// another process or task makes this wait; it does not fail. The kernel releases the lock
+    /// when the holder exits, so a crashed writer never leaves the package locked. The lock is
+    /// not reentrant: `body` must not lock the same package again.
+    func withPackageLock<T>(_ package: URL, _ body: () throws -> T) throws -> T {
+        let path = try url(for: Self.lockName, in: package).path
+        let fd = Darwin.open(path, O_RDWR | O_CREAT | O_CLOEXEC, 0o644)
+        guard fd >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        defer { close(fd) }
+        while flock(fd, LOCK_EX) != 0 {
+            guard errno == EINTR else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        }
+        return try body()
+    }
+
+    /// The one way to change `manifest.json`. Under the package lock, reads the newest manifest,
+    /// applies `change` and saves the result, so a change another command saved meanwhile is kept.
+    /// `change` should set only the fields its command owns. Slow work (frames, export,
+    /// transcription, upload) belongs before the call, not inside `change`. Returns the saved
+    /// manifest.
+    @discardableResult
+    func mutateManifest(in package: URL, _ change: (inout RecordingManifest) throws -> Void) throws -> RecordingManifest {
+        try withPackageLock(package) {
+            let latest = try readManifest(in: package)
+            var manifest = latest
+            try change(&manifest)
+            if manifest != latest { try storeManifest(manifest, in: package) }
+            return manifest
+        }
+    }
+
+    /// Validates, then replaces `manifest.json` with a temp-file write and rename. The caller
+    /// holds the package lock.
+    private func storeManifest(_ manifest: RecordingManifest, in package: URL) throws {
         try manifest.validate()
         guard manifest.company == root.company else { throw PackageError.companyMismatch }
         try writeJSON(manifest, to: Self.manifestName, in: package)
@@ -612,49 +647,55 @@ struct RecordingPackageStore: Sendable {
     func open(_ package: URL) throws -> RecordingManifest {
         let package = try root.contain(package)
         let manifestURL = package.appendingPathComponent(Self.manifestName)
-        var manifest: RecordingManifest
-        var changed = false
-        if FileManager.default.fileExists(atPath: manifestURL.path) {
-            manifest = try readManifest(in: package)
-        } else if FileManager.default.fileExists(atPath: package.appendingPathComponent("project.json").path) {
-            manifest = try migrate(ProjectStore().load(from: package), package: package)
-            changed = true
-        } else {
-            throw PackageError.notAPackage
-        }
-        // Segments, exports, transcripts, drafts and screenshots must all stay inside the package.
-        for path in manifest.allReferences { _ = try url(for: path, in: package) }
-        // Paused recordings keep the recording state. Nothing is changed while the owner may be live.
-        if manifest.state == .recording || manifest.state == .finalizing, !ownerIsGone(in: package) {
-            throw PackageError.stillRecording
-        }
-        for t in manifest.tracks.indices {
-            for s in manifest.tracks[t].segments.indices {
-                let segment = manifest.tracks[t].segments[s]
-                let exists = FileManager.default.fileExists(
-                    atPath: package.appendingPathComponent(segment.relativePath).path)
-                if !exists, segment.status != .missing {
-                    manifest.tracks[t].segments[s].status = .missing
-                    changed = true
-                } else if exists, segment.status == .missing {
-                    manifest.tracks[t].segments[s].status = .closed
-                    changed = true
-                }
+        let projectURL = package.appendingPathComponent("project.json")
+        guard FileManager.default.fileExists(atPath: manifestURL.path)
+            || FileManager.default.fileExists(atPath: projectURL.path) else { throw PackageError.notAPackage }
+        // Read, repair and save under the package lock, so a repair never replaces a newer manifest.
+        return try withPackageLock(package) {
+            var manifest: RecordingManifest
+            var changed = false
+            if FileManager.default.fileExists(atPath: manifestURL.path) {
+                manifest = try readManifest(in: package)
+            } else if FileManager.default.fileExists(atPath: projectURL.path) {
+                manifest = try migrate(ProjectStore().load(from: package), package: package)
+                changed = true
+            } else {
+                throw PackageError.notAPackage
             }
-        }
-        if manifest.state == .recording || manifest.state == .finalizing {
-            manifest.state = .interrupted
-            manifest.stopReason = manifest.stopReason ?? "not-finalized"
+            // Segments, exports, transcripts, drafts and screenshots must all stay inside the package.
+            for path in manifest.allReferences { _ = try url(for: path, in: package) }
+            // Paused recordings keep the recording state. Nothing is changed while the owner may be live.
+            if manifest.state == .recording || manifest.state == .finalizing, !ownerIsGone(in: package) {
+                throw PackageError.stillRecording
+            }
             for t in manifest.tracks.indices {
-                for s in manifest.tracks[t].segments.indices
-                where manifest.tracks[t].segments[s].status == .recording {
-                    manifest.tracks[t].segments[s].status = .closed
+                for s in manifest.tracks[t].segments.indices {
+                    let segment = manifest.tracks[t].segments[s]
+                    let exists = FileManager.default.fileExists(
+                        atPath: package.appendingPathComponent(segment.relativePath).path)
+                    if !exists, segment.status != .missing {
+                        manifest.tracks[t].segments[s].status = .missing
+                        changed = true
+                    } else if exists, segment.status == .missing {
+                        manifest.tracks[t].segments[s].status = .closed
+                        changed = true
+                    }
                 }
             }
-            changed = true
+            if manifest.state == .recording || manifest.state == .finalizing {
+                manifest.state = .interrupted
+                manifest.stopReason = manifest.stopReason ?? "not-finalized"
+                for t in manifest.tracks.indices {
+                    for s in manifest.tracks[t].segments.indices
+                    where manifest.tracks[t].segments[s].status == .recording {
+                        manifest.tracks[t].segments[s].status = .closed
+                    }
+                }
+                changed = true
+            }
+            if changed { try storeManifest(manifest, in: package) }
+            return manifest
         }
-        if changed { try writeManifest(manifest, in: package) }
-        return manifest
     }
 
     private func migrate(_ project: RecordingProject, package: URL) throws -> RecordingManifest {
@@ -686,37 +727,61 @@ struct RecordingPackageStore: Sendable {
 
     /// Records an edit decision as a new revision file. Earlier revisions and media are untouched.
     /// `kept` lists the ranges an edit with middle cuts keeps; nil keeps the one `trim` range.
+    /// `manifest` becomes the newest saved manifest, including changes other commands saved.
     func appendEdit(trim: RecordingProject.TrimRange?, kept: [RecordingProject.TrimRange]? = nil,
                     webcam: RecordingProject.WebcamPlacement,
                     to manifest: inout RecordingManifest, in package: URL) throws {
-        var candidate = manifest
-        candidate.trim = trim
-        candidate.kept = kept
-        candidate.webcam = webcam
         try RecordingProject(id: manifest.id, title: manifest.title, tracks: [], trim: trim, kept: kept,
                              webcam: webcam).validate()
-        let revision = manifest.edits.count + 1
-        let path = String(format: "edits/edit-%03d.json", revision)
-        try writeNewJSON(EditRevision(revision: revision, createdAt: SessionStatus.now(), trim: trim, kept: kept,
-                                      webcam: webcam),
-                         to: path, in: package)
-        candidate.edits.append(path)
-        try writeManifest(candidate, in: package)
-        manifest = candidate
+        manifest = try mutateManifest(in: package) { latest in
+            let revision = latest.edits.count + 1
+            let path = String(format: "edits/edit-%03d.json", revision)
+            try writeNewJSON(EditRevision(revision: revision, createdAt: SessionStatus.now(), trim: trim, kept: kept,
+                                          webcam: webcam),
+                             to: path, in: package)
+            latest.trim = trim
+            latest.kept = kept
+            latest.webcam = webcam
+            latest.edits.append(path)
+        }
     }
 
-    /// Saves an SOP draft revision, unapproved unless the review action approved it.
+    /// Saves an SOP draft revision, unapproved unless the review action approved it. `manifest`
+    /// becomes the newest saved manifest, whose last draft is this one.
     func appendDraft(body: String, source: String, approval: DraftRevision.Approval = .unapproved,
                      to manifest: inout RecordingManifest, in package: URL) throws {
-        var candidate = manifest
+        manifest = try appendDraft(source: source, approval: approval, in: package) { _ in body }
+    }
+
+    /// Saves an SOP draft revision under the package lock. `body` gets the revision's path, so a
+    /// body that names its own revision stays right when another command saved a draft first.
+    /// `change` sets any other field the command owns. Returns the saved manifest.
+    @discardableResult
+    func appendDraft(source: String, approval: DraftRevision.Approval = .unapproved, in package: URL,
+                     change: (inout RecordingManifest) throws -> Void = { _ in },
+                     body: (String) throws -> String) throws -> RecordingManifest {
+        try mutateManifest(in: package) { latest in
+            try writeDraftRevision(body: body(Self.nextDraftPath(latest)), source: source, approval: approval,
+                                   to: &latest, in: package)
+            try change(&latest)
+        }
+    }
+
+    /// The path the next draft revision will be saved at.
+    static func nextDraftPath(_ manifest: RecordingManifest) -> String {
+        String(format: "drafts/draft-%03d.json", manifest.drafts.count + 1)
+    }
+
+    /// Writes a draft revision and adds it to `manifest` without saving the manifest. Only for use
+    /// inside a `mutateManifest` change.
+    func writeDraftRevision(body: String, source: String, approval: DraftRevision.Approval = .unapproved,
+                            to manifest: inout RecordingManifest, in package: URL) throws {
         let revision = manifest.drafts.count + 1
-        let path = String(format: "drafts/draft-%03d.json", revision)
+        let path = Self.nextDraftPath(manifest)
         try writeNewJSON(DraftRevision(revision: revision, createdAt: SessionStatus.now(), approval: approval,
                                        source: source, body: body),
                          to: path, in: package)
-        candidate.drafts.append(.init(relativePath: path, approval: approval))
-        try writeManifest(candidate, in: package)
-        manifest = candidate
+        manifest.drafts.append(.init(relativePath: path, approval: approval))
     }
 
     /// Absolute URL for a package-relative path, refused when it would leave the package or the
@@ -850,18 +915,18 @@ extension RecordingPackageStore {
             removeIfPresent(temp)
             throw Task.isCancelled ? CancellationError() : error
         }
-        var candidate = manifest
-        candidate.videoExports = (manifest.videoExports ?? []) + [.init(
+        let entry = RecordingManifest.Export(
             relativePath: path, createdAt: SessionStatus.now(), durationSeconds: duration,
-            trim: manifest.trim, kept: manifest.kept, webcam: manifest.webcam)]
+            trim: manifest.trim, kept: manifest.kept, webcam: manifest.webcam)
+        let saved: RecordingManifest
         do {
-            try writeManifest(candidate, in: package)
+            saved = try mutateManifest(in: package) { $0.videoExports = ($0.videoExports ?? []) + [entry] }
         } catch {
             NSLog("HQ recorder: could not record the export in the manifest: \(error)")
             removeIfPresent(target)
             throw error
         }
-        return (target, candidate)
+        return (target, saved)
     }
 
     private func removeIfPresent(_ url: URL) {

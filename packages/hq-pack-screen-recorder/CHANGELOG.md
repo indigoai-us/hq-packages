@@ -2,7 +2,7 @@
 
 ## 0.3.0
 
-- Vendored HQ Capture from local-screen-recorder 4b93d76: middle cuts, guide
+- Vendored HQ Capture from local-screen-recorder bb790ed: middle cuts, guide
   review and approval commands, screenshot frame listing, media length checks,
   the rounded Liquid Glass window style, the window coming back to the front
   on stop and on launch, and roomier controls. App version 0.3.0 (build 3).
@@ -22,6 +22,12 @@
   open. `start` refuses with `already-open`, `build` will not replace it, and
   `stop` asks it to quit and waits for it to exit. A saved or failed status
   whose app has already quit works as before.
+- Saves from different commands no longer overwrite each other's changes to a
+  recording. Each save locks the recording, re-reads the newest manifest and
+  changes only its own fields. A save waits while another process holds the
+  lock.
+- Extracting screen frames again keeps every frame that a saved guide draft or
+  an exported guide uses. Only frames nothing uses are deleted.
 - `/record-process` cuts by words: the agent maps "cut where I said um" to
   `--cut` ranges from the transcript's word times.
 - `/record-process` reviews the drafted guide in chat and applies each change

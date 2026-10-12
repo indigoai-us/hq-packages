@@ -137,7 +137,7 @@ enum NarrationTranscription {
                               words: segment.words.map { .init(start: onRecording($0.start, ending: false),
                                                                end: onRecording($0.end, ending: true), text: $0.text) })
         }
-        var manifest = document.manifest
+        let manifest = document.manifest
         let transcript = NarrationTranscript(createdAt: SessionStatus.now(), locale: result.locale, onDeviceOnly: true,
                                              editRevision: manifest.edits.count, range: outer,
                                              kept: ranges.count > 1 ? ranges : nil,
@@ -145,9 +145,10 @@ enum NarrationTranscription {
         try store.ensureDirectory(folder, in: package)
         let path = try nextPath(manifest: manifest, package: package, store: store)
         try store.writeJSON(transcript, to: path, in: package)
-        manifest.transcripts.append(path)
         do {
-            try store.writeManifest(manifest, in: package)
+            try store.mutateManifest(in: package) { latest in
+                if !latest.transcripts.contains(path) { latest.transcripts.append(path) }
+            }
         } catch {
             NSLog("HQ recorder: could not list the transcript in the manifest: \(error)")
             try? FileManager.default.removeItem(at: store.url(for: path, in: package))

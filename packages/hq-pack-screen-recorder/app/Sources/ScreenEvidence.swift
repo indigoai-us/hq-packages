@@ -278,7 +278,7 @@ enum ScreenEvidenceExtractor {
                         recognizer: any ScreenTextRecognizing = VisionTextRecognizer(),
                         syncChecker: any SyncChecking = HQSyncCLIChecker()) async throws -> ScreenEvidenceResult {
         let options = options.bounded
-        var manifest = try store.readManifest(in: package)
+        let manifest = try store.readManifest(in: package)
         guard manifest.state == .saved || manifest.state == .interrupted else { throw PackageError.stillRecording }
 
         var durations: [String: Double] = [:]
@@ -349,12 +349,21 @@ enum ScreenEvidenceExtractor {
         try store.writeJSON(evidence, to: evidencePath, in: package)
 
         let newImages = Set(images.map(\.path))
-        let stale = manifest.screenshots.filter { $0.hasPrefix(imagePrefix) && !newImages.contains($0) }
-        manifest.screenshots = manifest.screenshots.filter { !$0.hasPrefix(imagePrefix) } + images.map(\.path)
-        manifest.screenEvidence = evidencePath
-        // New files in the package: the last sync result no longer covers them.
-        manifest.sync = .init(await syncChecker.observe(vaultKey: manifest.vaultKey), at: SessionStatus.now())
-        try store.writeManifest(manifest, in: package)
+        // New files in the package: the last sync result no longer covers them. Checked before the
+        // package lock is taken, so a slow check never holds up another command's save.
+        let sync = RecordingManifest.Sync(await syncChecker.observe(vaultKey: manifest.vaultKey), at: SessionStatus.now())
+        var stale: [String] = []
+        let saved = try store.mutateManifest(in: package) { latest in
+            // A frame that a saved draft revision or an exported guide still uses is kept, along
+            // with its manifest entry. Only frames nothing points at are removed.
+            let referenced = referencedScreenshots(latest, in: package, store: store)
+            let old = latest.screenshots.filter { $0.hasPrefix(imagePrefix) && !newImages.contains($0) }
+            stale = referenced.map { keep in old.filter { !keep.contains($0) } } ?? []
+            latest.screenshots = latest.screenshots.filter { !stale.contains($0) && !newImages.contains($0) }
+                + images.map(\.path)
+            latest.screenEvidence = evidencePath
+            latest.sync = sync
+        }
         for path in stale {
             do {
                 try FileManager.default.removeItem(at: store.url(for: path, in: package))
@@ -362,7 +371,40 @@ enum ScreenEvidenceExtractor {
                 NSLog("HQ recorder: could not remove old screenshot \(path): \(error)")
             }
         }
-        return ScreenEvidenceResult(evidence: evidence, evidencePath: evidencePath, manifest: manifest)
+        return ScreenEvidenceResult(evidence: evidence, evidencePath: evidencePath, manifest: saved)
+    }
+
+    /// Every `screenshots/` path named in any saved draft revision or exported guide record, or nil when
+    /// one of them cannot be read. On nil the caller keeps every old frame, since it cannot tell
+    /// which ones are still in use.
+    static func referencedScreenshots(_ manifest: RecordingManifest, in package: URL,
+                                      store: RecordingPackageStore) -> Set<String>? {
+        var found: Set<String> = []
+        func collect(_ value: Any) {
+            switch value {
+            case let text as String where text.hasPrefix("screenshots/"): found.insert(text)
+            case let list as [Any]: list.forEach(collect)
+            case let object as [String: Any]: object.values.forEach(collect)
+            default: break
+            }
+        }
+        let records = (manifest.exports ?? []).filter { $0.hasSuffix("/export.json") }
+        do {
+            for path in manifest.drafts.map(\.relativePath) {
+                let draft = try JSONDecoder().decode(DraftRevision.self,
+                                                     from: Data(contentsOf: store.url(for: path, in: package)))
+                // A recording-stopped placeholder has an empty body and names no screenshot.
+                guard !draft.body.isEmpty else { continue }
+                collect(try JSONSerialization.jsonObject(with: Data(draft.body.utf8), options: [.fragmentsAllowed]))
+            }
+            for path in records {
+                collect(try JSONSerialization.jsonObject(with: Data(contentsOf: store.url(for: path, in: package))))
+            }
+        } catch {
+            NSLog("HQ recorder: could not read the drafts and exports that use screenshots, keeping every old frame: \(error)")
+            return nil
+        }
+        return found
     }
 }
 

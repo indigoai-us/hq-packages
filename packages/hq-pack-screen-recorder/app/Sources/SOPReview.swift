@@ -323,9 +323,12 @@ enum SOPReviewWorkflow {
         // Check sync before reading the manifest that gets written back, so a save or export that
         // finishes while this one waits is not overwritten with a stale copy.
         let observation = await syncChecker.observe(vaultKey: try store.readManifest(in: package).vaultKey)
-        var manifest = try store.readManifest(in: package)
+        let manifest = try store.readManifest(in: package)
         let wasApproved = document.isApproved
-        try keepSelectedScreenshots(&document, manifest: &manifest, package: package, store: store)
+        let kept = try keepSelectedScreenshots(&document, manifest: manifest, package: package, store: store)
+        let addKept = { (latest: inout RecordingManifest) in
+            latest.screenshots += kept.filter { !latest.screenshots.contains($0) }
+        }
         if wasApproved, !document.isApproved {
             // Only the image paths moved to the kept copies; the reviewer approved these images.
             document.approval.contentHash = document.contentHash()
@@ -333,18 +336,30 @@ enum SOPReviewWorkflow {
         if let last = try latestReview(manifest: manifest, package: package, store: store),
            last.0.withoutHistory == document.withoutHistory {
             document.history = last.0.history
+            if !kept.isEmpty { try store.mutateManifest(in: package, addKept) }
             return nil
         }
         let approval: DraftRevision.Approval = document.isApproved ? .approved : .unapproved
-        let path = String(format: "drafts/draft-%03d.json", manifest.drafts.count + 1)
-        document.history.append(.init(revision: path, savedAt: SessionStatus.now(),
-                                      approval: document.approval.state, steps: document.steps.count))
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        let body = String(decoding: try encoder.encode(document), as: UTF8.self)
-        manifest.sync = .init(observation, at: SessionStatus.now())
-        try store.appendDraft(body: body, source: "\(sourcePrefix):\(approval.rawValue)", approval: approval,
-                              to: &manifest, in: package)
+        let sync = RecordingManifest.Sync(observation, at: SessionStatus.now())
+        var path = ""
+        var saved = document
+        // The revision path is chosen under the package lock, so the history names the revision
+        // this save really writes even when another command saved a draft first.
+        try store.appendDraft(source: "\(sourcePrefix):\(approval.rawValue)", approval: approval, in: package,
+                              change: { latest in
+                                  addKept(&latest)
+                                  latest.sync = sync
+                              }, body: { revision in
+                                  path = revision
+                                  saved = document
+                                  saved.history.append(.init(revision: revision, savedAt: SessionStatus.now(),
+                                                             approval: saved.approval.state,
+                                                             steps: saved.steps.count))
+                                  let encoder = JSONEncoder()
+                                  encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+                                  return String(decoding: try encoder.encode(saved), as: UTF8.self)
+                              })
+        document = saved
         return path
     }
 
@@ -352,12 +367,10 @@ enum SOPReviewWorkflow {
     static func importScreenshot(from url: URL, package: URL, store: RecordingPackageStore) throws -> String {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
               let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { throw SOPReviewError.unreadableImage }
-        var manifest = try store.readManifest(in: package)
         let path = importedPrefix + "imported-\(UUID().uuidString.lowercased()).png"
         try store.ensureDirectory("screenshots/review", in: package)
         try store.writeData(try ScreenEvidenceExtractor.png(image), to: path, in: package)
-        manifest.screenshots.append(path)
-        try store.writeManifest(manifest, in: package)
+        try store.mutateManifest(in: package) { $0.screenshots.append(path) }
         return path
     }
 
@@ -389,8 +402,10 @@ enum SOPReviewWorkflow {
         try JSONDecoder().decode(DraftRevision.self, from: Data(contentsOf: store.url(for: path, in: package)))
     }
 
-    private static func keepSelectedScreenshots(_ document: inout SOPReviewDocument, manifest: inout RecordingManifest,
-                                                package: URL, store: RecordingPackageStore) throws {
+    /// Copies each step's picked screen frame to a kept review copy and points the step at it.
+    /// Returns the kept copies the manifest does not list yet; the caller adds them under the lock.
+    private static func keepSelectedScreenshots(_ document: inout SOPReviewDocument, manifest: RecordingManifest,
+                                                package: URL, store: RecordingPackageStore) throws -> [String] {
         var added: [String] = []
         for i in document.steps.indices {
             guard case .frame(let image, let time) = document.steps[i].screenshot.source,
@@ -407,9 +422,7 @@ enum SOPReviewWorkflow {
                 document.steps[i].screenshot.drafted = .frame(image: kept, timelineSeconds: time)
             }
         }
-        guard !added.isEmpty else { return }
-        manifest.screenshots += Array(Set(added)).sorted()
-        try store.writeManifest(manifest, in: package)
+        return Array(Set(added)).sorted()
     }
 }
 
@@ -459,9 +472,9 @@ enum SOPExporter {
     /// approval still matches its content. Writes `exports/vNNN/` and never replaces an export.
     static func export(package: URL, store: RecordingPackageStore, includeSkill: Bool = true,
                        syncChecker: any SyncChecking = HQSyncCLIChecker()) async throws -> SOPExportResult {
-        // As in autosave: no suspension between reading the manifest and writing it back.
+        // Sync is checked before any file is written; the manifest is saved under the package lock.
         let observation = await syncChecker.observe(vaultKey: try store.readManifest(in: package).vaultKey)
-        var manifest = try store.readManifest(in: package)
+        let manifest = try store.readManifest(in: package)
         guard let latest = try SOPReviewWorkflow.latestReview(manifest: manifest, package: package, store: store)
         else { throw SOPReviewError.notApproved }
         let (document, revisionPath, savedApproval) = latest
@@ -519,10 +532,12 @@ enum SOPExporter {
         try store.writeJSON(record, to: "\(folder)/export.json", in: package)
         written.append("\(folder)/export.json")
 
-        manifest.exports = (manifest.exports ?? []) + written
-        manifest.sync = .init(observation, at: SessionStatus.now())
-        try store.writeManifest(manifest, in: package)
-        return SOPExportResult(folder: folder, sop: sop, skill: skill, images: images, manifest: manifest)
+        let sync = RecordingManifest.Sync(observation, at: SessionStatus.now())
+        let saved = try store.mutateManifest(in: package) { latest in
+            latest.exports = (latest.exports ?? []) + written.filter { !(latest.exports ?? []).contains($0) }
+            latest.sync = sync
+        }
+        return SOPExportResult(folder: folder, sop: sop, skill: skill, images: images, manifest: saved)
     }
 
     /// Reads a package image, crops it when asked, and returns PNG data.

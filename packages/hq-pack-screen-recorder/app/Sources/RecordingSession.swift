@@ -86,19 +86,20 @@ actor RecordingSession {
     /// Adds a segment for `kind` and returns where its writer must write.
     func beginSegment(_ kind: RecordingProject.Track.Kind, startOffsetSeconds: Double,
                       fileExtension: String = "mov") throws -> URL {
-        guard var manifest, let package, manifest.state == .recording else { throw PackageError.notRecording }
-        if !manifest.tracks.contains(where: { $0.kind == kind }) {
-            manifest.tracks.append(.init(kind: kind, segments: []))
+        guard let manifest, let package, manifest.state == .recording else { throw PackageError.notRecording }
+        var url = package
+        self.manifest = try store.mutateManifest(in: package) { manifest in
+            if !manifest.tracks.contains(where: { $0.kind == kind }) {
+                manifest.tracks.append(.init(kind: kind, segments: []))
+            }
+            let index = manifest.tracks.firstIndex { $0.kind == kind }!
+            let number = manifest.tracks[index].segments.count + 1
+            let path = String(format: "media/%@/segment-%03d.%@", kind.rawValue, number, fileExtension)
+            url = try store.url(for: path, in: package)
+            manifest.tracks[index].segments.append(.init(relativePath: path, startOffsetSeconds: startOffsetSeconds,
+                                                         durationSeconds: nil, status: .recording))
+            if kind == .camera { manifest.cameraRecovery = .keepScreenResumeInNewSegment }
         }
-        let index = manifest.tracks.firstIndex { $0.kind == kind }!
-        let number = manifest.tracks[index].segments.count + 1
-        let path = String(format: "media/%@/segment-%03d.%@", kind.rawValue, number, fileExtension)
-        let url = try store.url(for: path, in: package)
-        manifest.tracks[index].segments.append(.init(relativePath: path, startOffsetSeconds: startOffsetSeconds,
-                                                     durationSeconds: nil, status: .recording))
-        if kind == .camera { manifest.cameraRecovery = .keepScreenResumeInNewSegment }
-        try store.writeManifest(manifest, in: package)
-        self.manifest = manifest
         return url
     }
 
@@ -123,39 +124,39 @@ actor RecordingSession {
         guard let entry = writers.first(where: { $0.path == path }) else { return }
         let seconds = await entry.writer.finishSegment()
         writers.removeAll { $0.writer === entry.writer }
-        guard var manifest, manifest.state == .recording else { return }
-        for t in manifest.tracks.indices {
-            for s in manifest.tracks[t].segments.indices where manifest.tracks[t].segments[s].relativePath == path {
-                let exists = FileManager.default.fileExists(atPath: package.appendingPathComponent(path).path)
-                manifest.tracks[t].segments[s].status = exists ? .closed : .missing
-                manifest.tracks[t].segments[s].durationSeconds = seconds
+        guard let manifest, manifest.state == .recording else { return }
+        let exists = FileManager.default.fileExists(atPath: package.appendingPathComponent(path).path)
+        self.manifest = try store.mutateManifest(in: package) { manifest in
+            for t in manifest.tracks.indices {
+                for s in manifest.tracks[t].segments.indices
+                where manifest.tracks[t].segments[s].relativePath == path {
+                    manifest.tracks[t].segments[s].status = exists ? .closed : .missing
+                    manifest.tracks[t].segments[s].durationSeconds = seconds
+                }
             }
         }
-        try store.writeManifest(manifest, in: package)
-        self.manifest = manifest
     }
 
     /// Marks the start of a range where a system video effect is drawn into the screen frames.
     /// Does nothing when a range is already open.
     func beginVideoEffect(_ kind: RecordingManifest.VideoEffectRange.Kind, atOffset offset: Double) throws {
-        guard var manifest, let package, manifest.state == .recording else { throw PackageError.notRecording }
-        var effects = manifest.videoEffects ?? []
-        if effects.last.map({ $0.endOffsetSeconds == nil }) == true { return }
-        effects.append(.init(kind: kind, startOffsetSeconds: max(0, offset), endOffsetSeconds: nil, flattened: true))
-        manifest.videoEffects = effects
-        try store.writeManifest(manifest, in: package)
-        self.manifest = manifest
+        try update { manifest in
+            var effects = manifest.videoEffects ?? []
+            if effects.last.map({ $0.endOffsetSeconds == nil }) == true { return }
+            effects.append(.init(kind: kind, startOffsetSeconds: max(0, offset), endOffsetSeconds: nil,
+                                 flattened: true))
+            manifest.videoEffects = effects
+        }
     }
 
     /// Closes the open video effect range, if any.
     func endVideoEffect(atOffset offset: Double) throws {
-        guard var manifest, let package, manifest.state == .recording else { throw PackageError.notRecording }
-        guard var effects = manifest.videoEffects, let last = effects.indices.last,
-              effects[last].endOffsetSeconds == nil else { return }
-        effects[last].endOffsetSeconds = max(effects[last].startOffsetSeconds, offset)
-        manifest.videoEffects = effects
-        try store.writeManifest(manifest, in: package)
-        self.manifest = manifest
+        try update { manifest in
+            guard var effects = manifest.videoEffects, let last = effects.indices.last,
+                  effects[last].endOffsetSeconds == nil else { return }
+            effects[last].endOffsetSeconds = max(effects[last].startOffsetSeconds, offset)
+            manifest.videoEffects = effects
+        }
     }
 
     /// Marks the start of a range with no camera frames. Does nothing when a gap is already open.
@@ -261,14 +262,11 @@ actor RecordingSession {
         }
     }
 
-    /// Applies a change to a recording manifest and writes it. Unchanged manifests are not rewritten.
+    /// Applies a change to the newest saved manifest under the package lock and writes it.
+    /// Unchanged manifests are not rewritten.
     private func update(_ change: (inout RecordingManifest) -> Void) throws {
-        guard var manifest, let package, manifest.state == .recording else { throw PackageError.notRecording }
-        let before = manifest
-        change(&manifest)
-        guard manifest != before else { return }
-        try store.writeManifest(manifest, in: package)
-        self.manifest = manifest
+        guard let manifest, let package, manifest.state == .recording else { throw PackageError.notRecording }
+        self.manifest = try store.mutateManifest(in: package) { change(&$0) }
     }
 
     /// Stops and finalizes when free space drops below the store's floor. Returns true when it stopped.
@@ -281,10 +279,11 @@ actor RecordingSession {
     /// Closes every writer, records durations and missing files, writes the timeline,
     /// saves an unapproved draft placeholder and refreshes sync state.
     func stop(reason: String? = nil, originHostTime: Double? = nil) async throws -> RecordingManifest {
-        guard var manifest, let package, manifest.state == .recording else { throw PackageError.notRecording }
-        manifest.state = .finalizing
-        manifest.stopReason = reason
-        try store.writeManifest(manifest, in: package)
+        guard let current = manifest, let package, current.state == .recording else { throw PackageError.notRecording }
+        var manifest = try store.mutateManifest(in: package) { manifest in
+            manifest.state = .finalizing
+            manifest.stopReason = reason
+        }
         self.manifest = manifest
 
         var durations: [String: Double] = [:]
@@ -292,24 +291,32 @@ actor RecordingSession {
             if let seconds = await writer.finishSegment() { durations[path] = seconds }
         }
         writers.removeAll()
-        for t in manifest.tracks.indices {
-            for s in manifest.tracks[t].segments.indices {
-                let path = manifest.tracks[t].segments[s].relativePath
-                let exists = FileManager.default.fileExists(atPath: package.appendingPathComponent(path).path)
-                manifest.tracks[t].segments[s].status = exists ? .closed : .missing
-                if let seconds = durations[path] { manifest.tracks[t].segments[s].durationSeconds = seconds }
+        let closeSegments = { (manifest: inout RecordingManifest) in
+            for t in manifest.tracks.indices {
+                for s in manifest.tracks[t].segments.indices {
+                    let path = manifest.tracks[t].segments[s].relativePath
+                    let exists = FileManager.default.fileExists(atPath: package.appendingPathComponent(path).path)
+                    manifest.tracks[t].segments[s].status = exists ? .closed : .missing
+                    if let seconds = durations[path] { manifest.tracks[t].segments[s].durationSeconds = seconds }
+                }
             }
         }
+        closeSegments(&manifest)
+        // Slow checks run before the package lock is taken.
         let issues = await Self.mediaIssues(in: manifest, package: package)
-        manifest.mediaIssues = issues.isEmpty ? nil : issues
         try store.writeJSON(store.timeline(for: manifest, originHostTime: originHostTime),
                             to: manifest.timeline, in: package)
-        if manifest.drafts.isEmpty {
-            try store.appendDraft(body: "", source: "recording-stopped", to: &manifest, in: package)
+        let sync = RecordingManifest.Sync(await syncChecker.observe(vaultKey: manifest.vaultKey),
+                                          at: SessionStatus.now())
+        manifest = try store.mutateManifest(in: package) { manifest in
+            closeSegments(&manifest)
+            manifest.mediaIssues = issues.isEmpty ? nil : issues
+            if manifest.drafts.isEmpty {
+                try store.writeDraftRevision(body: "", source: "recording-stopped", to: &manifest, in: package)
+            }
+            manifest.state = .saved
+            manifest.sync = sync
         }
-        manifest.state = .saved
-        manifest.sync = .init(await syncChecker.observe(vaultKey: manifest.vaultKey), at: SessionStatus.now())
-        try store.writeManifest(manifest, in: package)
         self.manifest = manifest
         return manifest
     }
@@ -338,10 +345,11 @@ actor RecordingSession {
 
     /// Re-reads sync state for a saved package, for retry after offline or failed sync.
     func refreshSync() async throws -> RecordingManifest.Sync {
-        guard var manifest, let package, manifest.state == .saved else { throw PackageError.notRecording }
-        manifest.sync = .init(await syncChecker.observe(vaultKey: manifest.vaultKey), at: SessionStatus.now())
-        try store.writeManifest(manifest, in: package)
-        self.manifest = manifest
-        return manifest.sync
+        guard let manifest, let package, manifest.state == .saved else { throw PackageError.notRecording }
+        let sync = RecordingManifest.Sync(await syncChecker.observe(vaultKey: manifest.vaultKey),
+                                          at: SessionStatus.now())
+        let saved = try store.mutateManifest(in: package) { $0.sync = sync }
+        self.manifest = saved
+        return saved.sync
     }
 }

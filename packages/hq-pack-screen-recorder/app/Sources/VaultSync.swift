@@ -205,10 +205,8 @@ enum VaultSyncWorkflow {
         // Takes the time as a value: `failed` holds `report` inout while it calls this, so reading
         // `report` here would be a simultaneous access and trap at runtime.
         func record(_ state: RecordingManifest.Sync.State, checkedAt: String, detail: String?) throws {
-            // Re-read so a review autosave that landed during the push is kept.
-            var latest = try store.readManifest(in: package)
-            latest.sync = .init(state: state, checkedAt: checkedAt, detail: detail)
-            try store.writeManifest(latest, in: package)
+            // Locked re-read so a review autosave that landed during the push is kept.
+            try store.mutateManifest(in: package) { $0.sync = .init(state: state, checkedAt: checkedAt, detail: detail) }
         }
 
         for _ in 0..<maxAttempts {
@@ -633,10 +631,10 @@ enum SkillRegistrar {
                                                    reviewRevision: record.reviewRevision)
         let registrationPath = "\(folder)/\(folderName)/registration.json"
         try store.writeJSON(registration, to: registrationPath, in: package)
-        var manifest = try store.readManifest(in: package)
-        let added = [sourcePath, stampedPath, registrationPath].filter { !(manifest.exports ?? []).contains($0) }
-        manifest.exports = (manifest.exports ?? []) + added
-        try store.writeManifest(manifest, in: package)
+        try store.mutateManifest(in: package) { latest in
+            let added = [sourcePath, stampedPath, registrationPath].filter { !(latest.exports ?? []).contains($0) }
+            latest.exports = (latest.exports ?? []) + added
+        }
         return registration
     }
 
