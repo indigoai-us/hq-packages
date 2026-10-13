@@ -1,4 +1,4 @@
-# hq-pack-hq-capture
+# HQ Capture (hq-pack-hq-capture)
 
 `/record-process` for HQ. Run it in a company session to open **HQ Capture**,
 a local Mac app that records a process with screen, camera and narration as
