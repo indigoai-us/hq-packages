@@ -214,8 +214,8 @@ done
 for w in $(awk '/^  workers:/{f=1;next} /^  [a-z]+:/{f=0} f && /- /{print $2}' "$PACK_DIR/package.yaml"); do
   check "worker $w has worker.yaml with matching id" 'grep -q "^  id: $w$" "$PACK_DIR/workers/$w/worker.yaml"'
 done
-check "package version is 0.6.0" 'grep -q "^version: 0.6.0$" "$PACK_DIR/package.yaml"'
-check "changelog has a 0.6.0 entry" 'grep -q "^## 0.6.0" "$PACK_DIR/CHANGELOG.md"'
+check "package version is 0.6.1" 'grep -q "^version: 0.6.1$" "$PACK_DIR/package.yaml"'
+check "changelog has a 0.6.1 entry" 'grep -q "^## 0.6.1" "$PACK_DIR/CHANGELOG.md"'
 check "package contributes site-build and reddit-scout" 'grep -q "    - site-build" "$PACK_DIR/package.yaml" && grep -q "    - reddit-scout" "$PACK_DIR/package.yaml" && [ -f "$PACK_DIR/skills/site-build/SKILL.md" ] && [ -f "$PACK_DIR/skills/reddit-scout/SKILL.md" ]'
 check "worker registers the site-build and reddit-scout chat skills and loads their SKILL.md" 'grep -q "name: site-build" "$WORKER/worker.yaml" && grep -q "name: reddit-scout" "$WORKER/worker.yaml" && grep -q "skills/site-build/SKILL.md" "$WORKER/worker.yaml" && grep -q "skills/reddit-scout/SKILL.md" "$WORKER/worker.yaml" && [ -f "$WORKER/skills/site-build.md" ] && [ -f "$WORKER/skills/reddit-scout.md" ]'
 check "site-build requires the brand guide and current site, traces every change, and publishes only on a yes" 'grep -q "A brand guide and the current site are required" "$PACK_DIR/skills/site-build/SKILL.md" && grep -q "02-before-after.md" "$PACK_DIR/skills/site-build/SKILL.md" && grep -q "Never publish without an explicit yes" "$PACK_DIR/skills/site-build/SKILL.md" && grep -q "Never change a client" "$PACK_DIR/skills/site-build/SKILL.md"'
@@ -223,6 +223,11 @@ check "site-build chat flow gates the plan and the result and publishes behind a
 check "reddit-scout is read-only and the person posts" 'grep -q "never posts, comments, votes" "$PACK_DIR/skills/reddit-scout/SKILL.md" && grep -q "One teardown per founder" "$PACK_DIR/skills/reddit-scout/SKILL.md" && grep -q "Never post, comment, vote or message on Reddit" "$WORKER/skills/reddit-scout.md"'
 check "reddit.mjs parses and refuses an unknown command" 'node --check "$PACK_DIR/scripts/reddit.mjs" && ! node "$PACK_DIR/scripts/reddit.mjs" nope >/dev/null 2>&1'
 check "reddit.mjs never calls a Reddit write endpoint" '! grep -qE "api/(comment|submit|vote|compose|subscribe|save|report)" "$PACK_DIR/scripts/reddit.mjs" && grep -q "grant_type=client_credentials" "$PACK_DIR/scripts/reddit.mjs"'
+# 0.6.1: skills library installed into the company
+check "skills-library-install.sh exists and skips the setup-only skills" 'test -x "$PACK_DIR/scripts/skills-library-install.sh" && grep -q "agency-setup practice-client" "$PACK_DIR/scripts/skills-library-install.sh"'
+check "skills-library-install.sh copies into a company and keeps existing skills" 'T=$(mktemp -d) && mkdir -p "$T/companies/acme/skills/hero-rewrite" && out=$(cd "$T" && HQ_ROOT="$T" bash "$PACK_DIR/scripts/skills-library-install.sh" --firm acme) && echo "$out" | grep -q "\"kept\":1" && test -f "$T/companies/acme/skills/funnel-audit/SKILL.md" && test ! -e "$T/companies/acme/skills/agency-setup" && test ! -e "$T/companies/acme/skills/hero-rewrite/SKILL.md"; rc=$?; rm -rf "$T"; test $rc -eq 0'
+check "setup skill installs the skills library before the closing message" 'grep -q "scripts/skills-library-install.sh --firm" "$WORKER/skills/setup.md"'
+
 # 0.6.0: funnel-audit, the Reddit reply and tracker, the skills library, setup polish
 check "package contributes funnel-audit and the worker registers it with its SKILL.md in context" 'grep -q "    - funnel-audit" "$PACK_DIR/package.yaml" && [ -f "$PACK_DIR/skills/funnel-audit/SKILL.md" ] && grep -q "name: funnel-audit" "$WORKER/worker.yaml" && grep -q "skills/funnel-audit/SKILL.md" "$WORKER/worker.yaml" && [ -f "$WORKER/skills/funnel-audit.md" ]'
 check "worker job list routes the audit triggers to funnel-audit" 'grep -q "skills/funnel-audit.md" "$WORKER/worker.yaml" && grep -q "run the conversion audit for {Client}" "$WORKER/worker.yaml"'

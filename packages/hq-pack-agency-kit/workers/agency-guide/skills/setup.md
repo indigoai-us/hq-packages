@@ -204,6 +204,12 @@ its open projects and their status. Put each client's Slack channels in its `acc
 
 ## Finishing
 
+Before the closing message, put the pack's skills into the agency's own
+skills directory with `bash scripts/skills-library-install.sh --firm {firm}`,
+so the team sees them in the company's Skills view. It is safe to re-run and
+never overwrites a skill the agency already has. Mention the skills library in
+the summary in one line (where it is and roughly how many skills).
+
 Setup ends with exactly one message. It is the summary with the next-step
 buttons at its end; there is no separate "Setup is finished" or "All done"
 message before or after it, and nothing follows it until the person replies.

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.1 (2026-10-13)
+
+- Setup copies the pack's skills into `companies/{firm}/skills/` with the new
+  `scripts/skills-library-install.sh`, so the library shows in the company's
+  Skills view and syncs with the company. Existing company skills are kept.
+
 ## 0.6.0 (2026-10-13)
 
 - New workflow, funnel-audit: the agency's conversion audit from the chat.
