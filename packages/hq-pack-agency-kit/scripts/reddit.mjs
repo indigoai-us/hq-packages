@@ -22,7 +22,7 @@
 // Exit codes: 0 ok, 1 usage error, 2 Reddit refused and nothing is cached.
 
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
@@ -78,6 +78,23 @@ async function appToken(company) {
   if (!res.ok) return null;
   const data = await res.json();
   return data.access_token || null;
+}
+
+
+// Scan every cached search result for a post id (used when a post read is refused).
+function findInSearchCache(id) {
+  try {
+    for (const f of readdirSync(CACHE_DIR)) {
+      try {
+        const data = JSON.parse(readFileSync(join(CACHE_DIR, f), "utf8"));
+        if (Array.isArray(data.value)) {
+          const hit = data.value.find((p) => p && p.id === id);
+          if (hit) return { at: data.at, post: hit };
+        }
+      } catch { /* skip unreadable cache file */ }
+    }
+  } catch { /* no cache dir */ }
+  return null;
 }
 
 // ── cache ────────────────────────────────────────────────────────────────────
@@ -246,6 +263,10 @@ async function main() {
     }
     const cached = readCache(key);
     if (cached) out({ ok: true, route: "cache", cachedAt: cached.at, ...cached.value });
+    // Last resort: a search run already saw this post (the search feed carries
+    // the post text and its linked site), so answer from that entry.
+    const fromSearch = findInSearchCache(id);
+    if (fromSearch) out({ ok: true, route: "search-cache", cachedAt: fromSearch.at, post: fromSearch.post, comments: [], note: "Reddit refused the post read; this is the post as the search feed returned it. Comments are not included." });
     fail("reddit_refused", { note: "Reddit rate-limited or blocked this read and it is not cached. Try again in a few minutes." });
   }
 
