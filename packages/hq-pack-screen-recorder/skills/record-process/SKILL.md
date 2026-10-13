@@ -54,7 +54,7 @@ error, 130 cancelled.
 
 ## 1. Confirm the company
 
-Read the session company with `bash core/scripts/hq-session.sh get company_slug`.
+Read the session company with `hq core hq-session get company_slug`.
 If it is empty or `personal`, ask which company the recording belongs to and
 bind it before continuing. Tell the user in one line that the recording saves
 to that company's `recordings/` folder. Never record, edit or read a
