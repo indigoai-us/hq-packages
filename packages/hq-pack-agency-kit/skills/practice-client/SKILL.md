@@ -1,6 +1,6 @@
 ---
 name: practice-client
-description: Load Northwind Labs, an invented practice client with deliberately planted problems, into the agency so students can run /client-onboarding end to end on day one without real client data. Creates the engagement record through client-service, loads the documents, then hands off to /client-onboarding and grades the run against the answer key.
+description: Load Northwind Labs, an invented practice client with deliberately planted problems, into the agency so anyone can run /client-onboarding end to end on day one without real client data. Creates the engagement record through client-service, loads the documents, then hands off to /client-onboarding and grades the run against the answer key.
 triggers:
   - practice client
   - try the onboarding on a sample client
@@ -14,7 +14,7 @@ maturity: HQ-native (authored for this package)
 Northwind Labs is a made-up software company that just signed with the agency.
 Its documents contain the kinds of problems real clients bring: scope that does
 not match the sales call, campaigns that reward the wrong result, missing
-access, and data with holes in it. The point is for the student to watch
+access, and data with holes in it. The point is for the person to watch
 `/client-onboarding` find them.
 
 ## Step 1: Check setup
@@ -51,8 +51,8 @@ The answer key is left out.
 
 ## Step 4: Run onboarding
 
-Tell the student what is about to happen in two sentences, then run
-`/client-onboarding` for `practice-northwind`. Let the student act as the
+Tell the person what is about to happen in two sentences, then run
+`/client-onboarding` for `practice-northwind`. Let the person act as the
 strategist at each approval gate. Encourage them to push back on anything that
 looks wrong; that is the skill they are practising.
 
@@ -75,5 +75,5 @@ in action).
 ## Cleaning up
 
 The practice client lives at `companies/{firm}/clients/practice-northwind/`. It
-is safe to keep. If the student wants it gone, confirm first, then remove that
+is safe to keep. If they want it gone, confirm first, then remove that
 one folder and its record in `workspace/client-service/new-client/`.

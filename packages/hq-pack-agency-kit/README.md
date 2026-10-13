@@ -1,6 +1,6 @@
-# AI Builders Agency Kit
+# HQ Agency Kit
 
-An HQ pack for service agencies, built for the AI Builders cohort. It turns a
+An HQ pack for service agencies. It turns a
 signed client into a sourced client brief, an intake request, an account audit
 and a kickoff package a strategist can review before kickoff. It also writes
 every lesson the strategist catches back into the agency's playbook.
@@ -111,8 +111,8 @@ Policies:
   source, gaps in the data are stated, nothing reaches a client without approval.
 - `agency-kit-playbook-learns`: strategist corrections go back into the playbook.
 
-Brand: `brand/BRAND.md` and `brand/tokens.css` hold the AI Builders palette,
-type and voice for anything the pack renders for a student. The agency's own
+Brand: `brand/BRAND.md` and `brand/tokens.css` hold the HQ palette,
+type and voice for anything the pack renders for the agency's own team. The agency's own
 brand lives in its playbook and is what clients see.
 
 ## Where things go

@@ -1,6 +1,6 @@
 ---
 name: agency-setup
-description: First-run wizard for the AI Builders Agency Kit. Asks about the agency (name, services, ideal client, pricing, tools, voice), writes the agency playbook into companies/{firm}/knowledge/agency-playbook/, runs the client-service firm onboarding, and offers the practice client. Idempotent; never overwrites playbook files the agency has edited.
+description: First-run wizard for the HQ Agency Kit. Asks about the agency (name, services, ideal client, pricing, tools, voice), writes the agency playbook into companies/{firm}/knowledge/agency-playbook/, runs the client-service firm onboarding, and offers the practice client. Idempotent; never overwrites playbook files the agency has edited.
 triggers:
   - agency setup
   - set up my agency
@@ -11,8 +11,8 @@ maturity: HQ-native (authored for this package)
 
 # /agency-setup
 
-Sets up an agency in HQ in about ten minutes. This is the AI Builders Agency
-Kit; the student's agency is the one being set up, and its own name and voice
+Sets up an agency in HQ in about ten minutes. This is the HQ Agency Kit; the
+user's agency is the one being set up, and its own name and voice
 are what clients will see. At the end the agency has:
 
 - an **agency playbook** every other skill works from;
@@ -20,7 +20,7 @@ are what clients will see. At the end the agency has:
 - optionally, the **practice client** loaded and ready for `/client-onboarding`.
 
 Ask one question per `AskUserQuestion` call. Keep the tone friendly and short.
-Students may be new to HQ, so explain each step in one plain sentence before
+The person may be new to HQ, so explain each step in one plain sentence before
 running it.
 
 ## Step 1: Which company is the agency?

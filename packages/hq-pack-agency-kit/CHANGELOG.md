@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.7.0 (2026-10-13)
+
+- Renamed to the HQ Agency Kit. The AI Builders name, the `ai-builders`
+  keyword and the joinaibuilders.com palette are gone; `brand/` now carries
+  the HQ palette and type (black ground, white text at 70% and 50%, hairline
+  rules, Geist, square corners). Commands, slugs and file layout are
+  unchanged, so existing installs and playbooks keep working.
+- growth-scout: a prepared run in `growth/reddit/{date}-{site}/` (teardown,
+  reply, preview) is sent as-is before any research; `report.md` is sent
+  word for word when present.
+
 ## 0.6.2 (2026-10-13)
 
 - Quoted the descriptions of 17 library skills whose text contained a colon; the

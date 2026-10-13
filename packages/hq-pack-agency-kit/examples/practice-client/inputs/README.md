@@ -14,7 +14,7 @@ on a real client. Nothing here is real data.
 
 ## For instructors: what a good run should catch
 
-Do not show this section to students before they run the practice. A good run of
+Do not show this section to the person before they run the practice. A good run of
 /client-onboarding should surface at least these:
 
 1. **Brands.** The call discusses three products (Cloud, Edge, Academy). The

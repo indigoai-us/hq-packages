@@ -214,8 +214,8 @@ done
 for w in $(awk '/^  workers:/{f=1;next} /^  [a-z]+:/{f=0} f && /- /{print $2}' "$PACK_DIR/package.yaml"); do
   check "worker $w has worker.yaml with matching id" 'grep -q "^  id: $w$" "$PACK_DIR/workers/$w/worker.yaml"'
 done
-check "package version is 0.6.2" 'grep -q "^version: 0.6.2$" "$PACK_DIR/package.yaml"'
-check "changelog has a 0.6.2 entry" 'grep -q "^## 0.6.2" "$PACK_DIR/CHANGELOG.md"'
+check "package version is 0.7.0" 'grep -q "^version: 0.7.0$" "$PACK_DIR/package.yaml"'
+check "changelog has a 0.7.0 entry" 'grep -q "^## 0.7.0" "$PACK_DIR/CHANGELOG.md"'
 check "package contributes site-build and reddit-scout" 'grep -q "    - site-build" "$PACK_DIR/package.yaml" && grep -q "    - reddit-scout" "$PACK_DIR/package.yaml" && [ -f "$PACK_DIR/skills/site-build/SKILL.md" ] && [ -f "$PACK_DIR/skills/reddit-scout/SKILL.md" ]'
 check "worker registers the site-build and reddit-scout chat skills and loads their SKILL.md" 'grep -q "name: site-build" "$WORKER/worker.yaml" && grep -q "name: reddit-scout" "$WORKER/worker.yaml" && grep -q "skills/site-build/SKILL.md" "$WORKER/worker.yaml" && grep -q "skills/reddit-scout/SKILL.md" "$WORKER/worker.yaml" && [ -f "$WORKER/skills/site-build.md" ] && [ -f "$WORKER/skills/reddit-scout.md" ]'
 check "site-build requires the brand guide and current site, traces every change, and publishes only on a yes" 'grep -q "A brand guide and the current site are required" "$PACK_DIR/skills/site-build/SKILL.md" && grep -q "02-before-after.md" "$PACK_DIR/skills/site-build/SKILL.md" && grep -q "Never publish without an explicit yes" "$PACK_DIR/skills/site-build/SKILL.md" && grep -q "Never change a client" "$PACK_DIR/skills/site-build/SKILL.md"'
