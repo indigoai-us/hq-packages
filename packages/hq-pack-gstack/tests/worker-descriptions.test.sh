@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Regression: every worker.yaml shipped by hq-pack-gstack MUST carry a non-empty
-# worker-level `description:` field. Without it, HQ's generate-workers-registry.sh
+# worker-level `description:` field. Without it, `hq core generate-workers-registry`
 # quarantines the worker ("missing required field(s): description") on every
 # registry regeneration and excludes it from registry.yaml.
 #

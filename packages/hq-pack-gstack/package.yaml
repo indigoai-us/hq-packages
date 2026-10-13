@@ -1,5 +1,5 @@
 name: hq-pack-gstack
-version: 1.1.2
+version: 1.1.3
 publisher: '@indigoai-us'
 access: public
 description: 'gstack-team workers (26 g-* skills) + scripts/gstack-bridge.sh'
@@ -26,7 +26,7 @@ contributes:
   hooks: []
   policies: []
   commands: []
-  # scripts/ payload ships gstack-bridge.sh. scan-packages.sh (S3) symlinks
+  # scripts/ payload ships gstack-bridge.sh. `hq core scan-packages` (S3) symlinks
   # package-provided scripts into the host instance's scripts/ directory.
   scripts:
     - gstack-bridge.sh
