@@ -30,7 +30,7 @@ const throttle = !args.includes('--no-throttle');
 // axe-core from the project, else from the CDN; without it the a11y pass is skipped.
 async function loadAxe() {
   try { return fs.readFileSync(createRequire(path.join(process.cwd(), 'noop.js')).resolve('axe-core/axe.min.js'), 'utf8'); } catch {}
-  try { const r = await fetch('https://cdn.jsdelivr.net/npm/axe-core@4/axe.min.js'); if (r.ok) return await r.text(); } catch {}
+  try { const r = await fetch('https://cdn.jsdelivr.net/npm/axe-core@4.14.0/axe.min.js'); if (r.ok) return await r.text(); } catch {}
   return null;
 }
 

@@ -22,5 +22,5 @@ upstream:
   ported_at: '2026-10-12T00:00:00Z'
   kind: port
 capabilities:   # derived by static inspection of skills/awwwards/scripts/*.mjs; no contributes.scripts/hooks
-  - network     # font.mjs (Google Fonts / Fontshare), photos.mjs (picsum.photos), shoot.mjs (axe-core from jsdelivr fallback), audit.mjs (local server)
+  - network     # font.mjs (Google Fonts / Fontshare), photos.mjs (picsum.photos), shoot.mjs (axe-core@4.14.0 from jsdelivr fallback), audit.mjs (local server)
   - fs          # writes fonts, photos, screenshots and reports into the user's project
