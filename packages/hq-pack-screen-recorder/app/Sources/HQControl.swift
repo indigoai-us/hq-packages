@@ -49,6 +49,10 @@ enum SessionState: String, Codable, Sendable {
     case saved
     case failed
     case closed
+    /// The app quit before recording after the user asked for Screen Recording access, which is
+    /// macOS "Quit & Reopen". The reopened app keeps the binding and writes its own status, so HQ
+    /// keeps waiting instead of treating this as the user closing the app.
+    case relaunching
 }
 
 struct SessionStatus: Codable, Equatable, Sendable {

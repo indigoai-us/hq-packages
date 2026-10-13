@@ -107,6 +107,11 @@ final class SessionController {
     private var stopTask: Task<Void, Never>?
     /// True once the last recording ended and its saved or failed status was published.
     private var finished = false
+    /// True once the user asked for Screen Recording access in this launch while it was not
+    /// granted. macOS then offers Quit & Reopen, and quitting reports relaunching, not closed.
+    private var requestedScreenAccess = false
+    /// True when the app is quitting because HQ wrote stop.request.
+    private var quittingForStopRequest = false
     /// The shared timeline of the current recording. Pausing it pauses every track together.
     private(set) var clock: RecordingClock?
     private(set) var isPaused = false
@@ -189,6 +194,7 @@ final class SessionController {
                     self.publish(.recording)
                 }
                 if channel.stopRequested {
+                    self.quittingForStopRequest = true
                     await self.handleStopRequest()
                     NSApplication.shared.terminate(nil)
                     return
@@ -246,6 +252,7 @@ final class SessionController {
         case .checkDestination:
             recheckDestination()
         case .requestScreenAccess:
+            if !CGPreflightScreenCaptureAccess() { noteScreenAccessRequested() }
             if !CGRequestScreenCaptureAccess(), let url = CaptureDevices.settingsURL(.screen) {
                 NSWorkspace.shared.open(url)
             }
@@ -705,11 +712,23 @@ final class SessionController {
         preview.stop()
         observers.forEach(NotificationCenter.default.removeObserver)
         observers = []
-        guard state != .closed else { return }
+        guard state != .closed, state != .relaunching else { return }
         // A recording that ended as saved or failed keeps that status, with its package path and
         // resume prompt, so HQ still sees the outcome after the app quits.
         if finished, state == .saved || state == .failed { return }
-        publish(.closed, reason: problem)
+        publish(Self.closingState(state, requestedScreenAccess: requestedScreenAccess,
+                                  stopRequested: quittingForStopRequest), reason: problem)
+    }
+
+    /// Marks that the user asked for Screen Recording access in this launch while it was not granted.
+    func noteScreenAccessRequested() { requestedScreenAccess = true }
+
+    /// What a quit publishes when no recording result is kept. Quitting before recording after a
+    /// Screen Recording request is macOS Quit & Reopen, so it reports relaunching; HQ's stop and
+    /// every other quit report closed.
+    nonisolated static func closingState(_ state: SessionState, requestedScreenAccess: Bool, stopRequested: Bool) -> SessionState {
+        guard requestedScreenAccess, !stopRequested, state == .awaitingStart || state == .failed else { return .closed }
+        return .relaunching
     }
 
     /// Publishes how a recording ended. close() leaves this status in place.

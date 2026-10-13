@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.3.2
+
+Fixes from the 0.3.0 review that were held back at release. Vendored HQ Capture
+from local-screen-recorder 8e32b99. App version 0.3.2 (build 4).
+
+- The macOS "Quit and Reopen" after a Screen Recording grant no longer reads as
+  the user closing the app. The app reports `relaunching`. `status` and `wait`
+  keep it open while the old app quits and for up to 30 seconds after, until
+  the reopened app reports. `start` refuses with `already-open` during that
+  time. If no app reopens, the state becomes `closed`.
+- Approval applies to the guide revision the user was shown. `review-sop`
+  output has `head`, the revision it shows: the review revision, or the draft
+  when nobody has reviewed it yet. `approve-sop --revision` accepts that
+  `head`, and the launcher refuses `approve-sop` without `--revision`. The
+  skill passes the `head` of the last review it showed. If a newer revision
+  was saved after that, the approval is refused.
+- Launcher locks: a stale lock is taken over under a kernel file lock and
+  checked again before the takeover, so two launchers that find the same stale
+  lock cannot both take it. A lock records its owner's start time as well as
+  the pid, so a pid that macOS has given to another program no longer counts
+  as the owner. A build checks it still holds the lock before installing, and
+  it moves the old app aside before moving the new one in. If an app shows up
+  at that path during the install, the build stops with `install-conflict`
+  and does not put one app inside the other.
+- `run frame --out` resolves every `companies/<slug>` entry, including
+  symlinks that point outside `companies/`. It refuses a path inside another
+  company's folder however that path reaches it, including through a symlink
+  in the bound company's folder.
+
 ## 0.3.1
 
 - Added `cover.jpg`, the HQ marketplace card image (the "night press hall"

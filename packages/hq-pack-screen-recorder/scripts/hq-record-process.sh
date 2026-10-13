@@ -20,7 +20,9 @@
 #                                 exited it prints {"ok": true, "state": "none"}
 #   wait [--timeout <seconds>]    block until the state is saved, failed, closed or lost,
 #                                 printing one line per change (with issue when the app sets
-#                                 one) and the full status last; exit 3 when still open at timeout
+#                                 one) and the full status last; exit 3 when still open at timeout.
+#                                 relaunching (macOS Quit & Reopen after a permission grant) is
+#                                 followed until the reopened app reports
 #   stop                          write stop.request and wait for the app to close; refused when
 #                                 HQ Capture is open for another company; fails with stop-timeout
 #                                 when the app is still open and not finalizing after the wait
@@ -29,7 +31,8 @@
 #
 # run modes: describe, transcribe, edit, export-video, frame, review-sop, approve-sop,
 # list-frames, draft-sop, export-sop, extract-screen-evidence, sync-package. run prints the app's own output and exits with
-# its code (0 done, 1 refused, 2 usage or error, 130 cancelled). A launcher refusal
+# its code (0 done, 1 refused, 2 usage or error, 130 cancelled). approve-sop needs --revision
+# with the head of the review shown to the user. A launcher refusal
 # prints {"ok": false, ...} and exits 3 for run and resume, 1 for the other subcommands.
 #
 # Every subcommand except doctor and build uses the session's bound company and refuses
@@ -49,6 +52,12 @@
 #   HQ_RECORDER_STOP_WAIT  seconds stop waits for the app to act on a stop (default 20)
 #   HQ_RECORDER_PROCESS_NAME  process name a live HQ Capture has (default LocalScreenRecorder;
 #                        tests only)
+#   HQ_RECORDER_RELAUNCH_WAIT seconds a relaunching status counts as open after its app has
+#                        quit, while macOS reopens it (default 30)
+#   HQ_RECORDER_TAKEOVER_PAUSE seconds to pause between finding a stale lock and taking it over
+#                        (tests only)
+#   HQ_RECORDER_INSTALL_HOOK command run with the app path after the old app is moved aside and
+#                        before the new one is moved in (tests only)
 set -euo pipefail
 
 script_path="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || python3 -I -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "${BASH_SOURCE[0]}")"
@@ -260,43 +269,141 @@ build_is_current() {
   [ -x "$app_path/Contents/MacOS/$executable" ] && [ "$(cat "$stamp_file" 2>/dev/null)" = "$(build_inputs_hash)" ]
 }
 
-# Locks are directories holding the owner's pid. The pid is written to a temp file inside the
-# new directory and renamed into place, so a reader sees either no pid or the whole pid. A lock
-# whose owner has exited is stale, and so is one with no pid that is older than 30 seconds (its
-# owner died between creating it and writing the pid).
-lock_is_stale() {
-  local dir="$1" owner age
-  owner="$(cat "$dir/pid" 2>/dev/null || true)"
-  if [ -n "$owner" ]; then
-    [[ "$owner" =~ ^[0-9]+$ ]] && kill -0 "$owner" 2>/dev/null && return 1
-    return 0
-  fi
-  [ -d "$dir" ] || return 1
-  age="$(python3 -I -c 'import os,sys,time;print(int(time.time()-os.stat(sys.argv[1]).st_mtime))' "$dir" 2>/dev/null || echo 0)"
-  [ "$age" -ge 30 ]
-}
+# Locks are directories holding the owner's pid and, on the next line, that process's start
+# time (ps lstart). The file is written to a temp file inside the new directory and renamed into
+# place, so a reader sees either no pid or the whole file. A lock is stale when its owner has
+# exited, when its pid now belongs to a process with a different start time (macOS reused the
+# pid), or when it has no pid and is older than 30 seconds (its owner died between creating it and
+# writing the pid).
+
+# Prints the start time of process $1, or nothing.
+proc_start() { ps -p "$1" -o lstart= 2>/dev/null | sed 's/^ *//; s/ *$//' || true; }
 
 claim_lock() {
   mkdir "$1" 2>/dev/null || return 1
-  printf '%s\n' "$$" >"$1/.pid.$$" && mv -f "$1/.pid.$$" "$1/pid"
+  printf '%s\n%s\n' "$$" "$(proc_start $$)" >"$1/.pid.$$" && mv -f "$1/.pid.$$" "$1/pid"
   held_locks+=("$1")
   trap release_locks EXIT
+}
+
+# Clears the lock at $1 when it is stale and takes it, in one step. Takeovers run one at a time
+# under a kernel file lock (released by the kernel if the process dies), and the stale lock is
+# checked again inside it, so two launchers that both found it stale cannot both take it: the
+# second sees the first one's live lock. The stale lock is renamed aside (an atomic rename, checked
+# to be the same directory that was judged stale) before the new one is created with mkdir.
+takeover_lock() {
+  python3 -I - "$1" "$$" "$(proc_start $$)" "${HQ_RECORDER_TAKEOVER_PAUSE:-0}" <<'PY'
+import fcntl, os, shutil, subprocess, sys, time, uuid
+lock, pid, start, pause = sys.argv[1], sys.argv[2], sys.argv[3], float(sys.argv[4] or 0)
+guard = open(os.path.join(os.path.dirname(lock), ".lock-takeover"), "a")
+fcntl.flock(guard, fcntl.LOCK_EX)
+
+def started(p):
+    out = subprocess.run(["ps", "-p", p, "-o", "lstart="], capture_output=True, text=True).stdout
+    return out.strip()
+
+def stale_inode():
+    """The lock's inode when it is stale, None when it is gone, False when it is held."""
+    try:
+        st = os.stat(lock)
+    except FileNotFoundError:
+        return None
+    try:
+        lines = open(os.path.join(lock, "pid")).read().split("\n")
+    except OSError:
+        lines = []
+    owner = lines[0].strip() if lines else ""
+    if not owner:
+        return st.st_ino if time.time() - st.st_mtime >= 30 else False
+    if not owner.isdigit():
+        return st.st_ino
+    try:
+        os.kill(int(owner), 0)
+    except ProcessLookupError:
+        return st.st_ino
+    except PermissionError:
+        pass
+    recorded = lines[1].strip() if len(lines) > 1 else ""
+    if recorded and started(owner) != recorded:
+        return st.st_ino
+    return False
+
+def claim():
+    try:
+        os.mkdir(lock)
+    except FileExistsError:
+        sys.exit(1)
+    tmp = os.path.join(lock, ".pid.%s" % pid)
+    with open(tmp, "w") as f:
+        f.write("%s\n%s\n" % (pid, start))
+    os.rename(tmp, os.path.join(lock, "pid"))
+    sys.exit(0)
+
+inode = stale_inode()
+if inode is False:
+    sys.exit(1)
+if inode is None:
+    claim()
+if pause:
+    time.sleep(pause)  # tests only: widens the window between the check and the takeover
+aside = "%s.stale.%s" % (lock, uuid.uuid4().hex)
+try:
+    os.rename(lock, aside)
+except FileNotFoundError:
+    claim()
+if os.stat(aside).st_ino != inode:
+    # Not the directory judged stale. Put it back; a non-empty directory is never replaced.
+    try:
+        os.rename(aside, lock)
+    except OSError:
+        pass
+    sys.exit(1)
+shutil.rmtree(aside, ignore_errors=True)
+claim()
+PY
 }
 
 # Takes the lock at $1, clearing it first when it is stale. Returns 1 when another live
 # process holds it.
 try_lock() {
   claim_lock "$1" && return 0
-  if lock_is_stale "$1"; then
-    rm -rf "$1"
-    claim_lock "$1" && return 0
+  if takeover_lock "$1"; then
+    held_locks+=("$1")
+    trap release_locks EXIT
+    return 0
   fi
   return 1
 }
 
+# True while the lock at $1 still names this process and its start time.
+lock_is_mine() {
+  [ "$(sed -n 1p "$1/pid" 2>/dev/null)" = "$$" ] && [ "$(sed -n 2p "$1/pid" 2>/dev/null)" = "$(proc_start $$)" ]
+}
+
 release_lock() {
-  [ "$(cat "$1/pid" 2>/dev/null)" = "$$" ] && rm -rf "$1"
+  lock_is_mine "$1" && rm -rf "$1"
   return 0
+}
+
+# Moves the new app at $1 to $app_path. The old app is moved aside first, and the new one is moved
+# in with a rename that fails when anything is at $app_path, so it can never end up inside another
+# app bundle. Returns 1 when something appeared at $app_path meanwhile.
+install_app() {
+  local new="$1" aside="$state_dir/.old-app-$$"
+  mkdir -p "$(dirname "$app_path")"
+  rm -rf "$aside"
+  if [ -e "$app_path" ] || [ -L "$app_path" ]; then mv "$app_path" "$aside"; fi
+  # shellcheck disable=SC2086
+  [ -z "${HQ_RECORDER_INSTALL_HOOK:-}" ] || $HQ_RECORDER_INSTALL_HOOK "$app_path"
+  if ! python3 -I -c '
+import os, sys
+new, dest = sys.argv[1:]
+if os.path.lexists(dest): sys.exit(1)
+os.rename(new, dest)' "$new" "$app_path" 2>/dev/null; then
+    rm -rf "$aside"
+    return 1
+  fi
+  rm -rf "$aside"
 }
 
 release_locks() {
@@ -364,9 +471,11 @@ build_app() {
       esac
     fi
   fi
-  rm -rf "$app_path"
-  mkdir -p "$(dirname "$app_path")"
-  mv "$tmp/HQ Capture.app" "$app_path"
+  # Install only while this launcher still holds the build lock.
+  lock_is_mine "$lock_dir" \
+    || { rm -rf "$tmp"; fail build-busy "Another HQ Capture build took over while this one was building. Try again when it finishes."; }
+  install_app "$tmp/HQ Capture.app" \
+    || { rm -rf "$tmp"; fail install-conflict "Another HQ Capture app appeared at $app_path during the install. Run build again."; }
   rmdir "$tmp"
   printf '%s\n' "$want" >"$stamp_file"
   built=true
@@ -418,15 +527,29 @@ current_state() {
   state="$(python3 -I -c 'import json,sys;print(json.load(open(sys.argv[1]))["state"])' "$status_file")"
   case "$state" in
     closed|saved|failed) echo "$state" ;;
+    # The app quit for macOS Quit & Reopen after a Screen Recording grant. It stays relaunching
+    # while that app is still quitting and for a short wait after, while macOS reopens it and the
+    # reopened app writes its own status. If none does, it was a plain quit: closed.
+    relaunching)
+      if is_app_process "$(status_pid)" || [ "$(status_age)" -lt "${HQ_RECORDER_RELAUNCH_WAIT:-30}" ]; then
+        echo relaunching
+      else
+        echo closed
+      fi ;;
     *) if is_app_process "$(status_pid)"; then echo "$state"; else echo lost; fi ;;
   esac
 }
 
+# Seconds since status.json was last written.
+status_age() {
+  python3 -I -c 'import os,sys,time;print(int(time.time()-os.stat(sys.argv[1]).st_mtime))' "$status_file" 2>/dev/null || echo 0
+}
+
 # True while HQ Capture's process is running: awaiting start, recording or finalizing, or
-# still showing a saved or failed recording in its window.
+# still showing a saved or failed recording in its window, or being reopened by macOS.
 app_is_open() {
   case "$(current_state)" in
-    awaiting-start|recording|finalizing) return 0 ;;
+    awaiting-start|recording|finalizing|relaunching) return 0 ;;
     saved|failed) is_app_process "$(status_pid)" ;;
     *) return 1 ;;
   esac
@@ -578,13 +701,14 @@ cmd_stop() {
     app_is_open || break
     sleep 0.25
   done
-  # Still open after the wait: finalizing means the files are being written, and a saved or
-  # failed app keeps its result, so those are reported as they are. Any other state means the
-  # app has not acted on the stop and may still be recording.
+  # Still open after the wait: finalizing means the files are being written, a saved or failed
+  # app keeps its result, and a relaunching app is not recording (the reopened app finds
+  # stop.request and quits), so those are reported as they are. Any other state means the app
+  # has not acted on the stop and may still be recording.
   if app_is_open; then
     state="$(current_state)"
     case "$state" in
-      finalizing|saved|failed) ;;
+      finalizing|saved|failed|relaunching) ;;
       *) fail stop-timeout "HQ Capture did not stop within $limit seconds and may still be recording (status: $state). Run status to check." ;;
     esac
   fi
@@ -593,8 +717,11 @@ cmd_stop() {
 
 # Refuses a frame --out path inside another company's folder (companies/<slug>/ for any slug
 # but the bound one, or loose in companies/). Paths elsewhere, such as $TMPDIR, are allowed.
+# The path is resolved through its existing parents, and every companies/<slug> entry is resolved
+# too, so a company folder that is a symlink to somewhere outside companies/ still counts as that
+# company's, however the path reaches it. When company folders nest, the deepest one decides.
 check_frame_out() {
-  local out="" real companies rel
+  local out="" real
   while [ $# -gt 0 ]; do
     case "$1" in
       --out) out="${2:-}"; shift; [ $# -eq 0 ] || shift ;;
@@ -605,13 +732,23 @@ check_frame_out() {
   [ -n "$out" ] || return 0
   case "$out" in /*) ;; *) out="$PWD/$out" ;; esac
   real="$(realpath_of "$out")"
-  companies="$(realpath_of "$root/companies")"
-  case "$real" in
-    "$companies"/*)
-      rel="${real#"$companies"/}"
-      [ "${rel%%/*}" = "$company" ] && [ "$rel" != "$company" ] \
-        || fail out-outside-company "That frame path is in another company's folder. Save it in $company's folder or a temporary folder." ;;
-  esac
+  python3 -I - "$real" "$root/companies" "$company" <<'PY' || fail out-outside-company "That frame path is in another company's folder. Save it in $company's folder or a temporary folder."
+import os, sys
+real, companies, mine = sys.argv[1:]
+
+def inside(path, folder):
+    return path == folder or path.startswith(folder.rstrip("/") + "/")
+
+owner, owner_dir = None, ""
+for entry in os.listdir(companies):
+    folder = os.path.realpath(os.path.join(companies, entry))
+    if os.path.isdir(folder) and inside(real, folder) and len(folder) > len(owner_dir):
+        owner, owner_dir = entry, folder
+if owner is not None:
+    sys.exit(0 if owner == mine and real != owner_dir else 1)
+# Loose in companies/ (or companies/ itself) belongs to no company and is refused too.
+sys.exit(1 if inside(real, os.path.realpath(companies)) else 0)
+PY
 }
 
 cmd_run() {
@@ -631,6 +768,17 @@ cmd_run() {
         fail bad-argument "$arg can't be passed to run. Run one mode at a time; the launcher sets the company and folders." ;;
     esac
   done
+  # Approval binds to the review revision the user was shown: approve-sop must name it, so a
+  # revision saved after that (by another session or command) is refused instead of approved.
+  if [ "$mode" = approve-sop ]; then
+    local next="" shown=""
+    for arg in "$@"; do
+      [ "$next" = 1 ] && { shown="$arg"; next=""; continue; }
+      [ "$arg" = --revision ] && next=1
+    done
+    [[ "$shown" == drafts/*.json ]] \
+      || fail bad-argument "approve-sop needs --revision with the review revision you showed the user (from review-sop), such as drafts/draft-003.json."
+  fi
   resolve_company ""
   resolve_package "$given"
   [ "$mode" != frame ] || check_frame_out "$@"

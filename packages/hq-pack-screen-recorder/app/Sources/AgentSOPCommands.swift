@@ -219,9 +219,12 @@ extension AgentCommandsCLI {
     static func approveSOP(reviewer: String, revision: String?, package: URL, store: RecordingPackageStore,
                            syncChecker: any SyncChecking) async throws -> AgentReviewResult {
         let loaded = try loadReview(package: package, store: store)
-        if let revision, revision != loaded.revisionPath {
+        // `revision` is the one the user was shown (`head` in the review output): the newest review
+        // revision, or the newest draft when it has not been reviewed yet. Anything else is stale.
+        let head = SOPReviewWorkflow.head(of: loaded)
+        if let revision, revision != head {
             let newest = loaded.revisionPath.map { "The newest review revision is \($0)." }
-                ?? "The newest SOP draft has not been reviewed yet."
+                ?? "The newest SOP draft, \(head), has not been reviewed yet."
             throw AgentCommandError.refused("\(revision) is not the newest review revision, so it can't be approved. "
                                             + "\(newest) Check that one and approve it. Nothing was written.")
         }
@@ -319,6 +322,9 @@ struct AgentReviewResult: Codable, Equatable, Sendable {
 
     /// The saved review revision; nil when the newest draft has not been reviewed yet.
     var revision: String?
+    /// The revision this review shows: `revision`, or `basedOn` when the newest draft has not been
+    /// reviewed yet. `--approve-sop --revision` takes this, so approval binds to what was shown.
+    var head: String
     /// True when this command wrote `revision`.
     var saved: Bool
     var approved: Bool
@@ -331,6 +337,7 @@ struct AgentReviewResult: Codable, Equatable, Sendable {
 
     init(_ document: SOPReviewDocument, revision: String?, saved: Bool) {
         self.revision = revision
+        head = revision ?? document.basedOn
         self.saved = saved
         approved = document.isApproved
         reviewer = document.isApproved ? document.approval.reviewer : nil
@@ -348,7 +355,7 @@ struct AgentReviewResult: Codable, Equatable, Sendable {
     }
 
     var lines: [String] {
-        var lines = [saved ? "saved \(revision ?? "")" : "review: \(revision ?? "not saved yet")",
+        var lines = [saved ? "saved \(revision ?? "")" : "review: \(revision ?? "not saved yet, draft \(head)")",
                      "\(title): " + (approved ? "approved by \(reviewer ?? "a reviewer")" : "not approved")]
         for step in steps {
             let picture = step.screenshotOmitted ? "no screenshot" : (step.screenshot ?? "no screenshot")
