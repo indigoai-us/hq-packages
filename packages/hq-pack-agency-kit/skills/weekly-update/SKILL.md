@@ -22,7 +22,7 @@ For client `{slug}` in firm `{firm}`, read:
 - `companies/{firm}/knowledge/agency-playbook/agency-profile.md` for voice
 
 If the client has its own HQ company and the user wants work from there
-included, add it to the session (`hq-session.sh add company {client-company}`)
+included, add it to the session (`hq core hq-session add company {client-company}`)
 and read only what the update needs.
 
 Ask the user for anything else that happened this week that is not in HQ yet.

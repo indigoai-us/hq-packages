@@ -41,7 +41,7 @@ files there (for example exports the client dropped into their own HQ), add it
 to this session first:
 
 ```bash
-bash core/scripts/hq-session.sh add company {client-company}
+hq core hq-session add company {client-company}
 ```
 
 Never copy firm-internal notes into the client's company (policy

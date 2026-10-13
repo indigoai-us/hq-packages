@@ -35,7 +35,7 @@ The agency must be an existing HQ company. Resolve it in this order:
 Bind the session to it if it is not already bound:
 
 ```bash
-bash core/scripts/hq-session.sh set company_slug {firm}
+hq core hq-session set company_slug {firm}
 ```
 
 ## Step 2: Ask about the agency
