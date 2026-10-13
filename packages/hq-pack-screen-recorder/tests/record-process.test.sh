@@ -492,8 +492,10 @@ json.dump({"schema": 1, "state": state, "company": company, "destination": dest,
            "updatedAt": "2026-01-01T00:00:00Z"}, open(path, "w"))' \
     "$HQ_RECORDER_HOME/active/status.json" "$1" "$2" "$3" "$hq/companies/$1/recordings"
 }
-sleep 60 & gone=$!
-kill "$gone"; wait "$gone" 2>/dev/null || true
+# A pid that has exited. It is taken from a child that python3 started and reaped, not from
+# `sleep & kill`: a background child killed before it execs still carries this script's EXIT
+# trap, and would run cleanup and delete $tmp in the middle of the test.
+gone="$(python3 -I -c 'import subprocess; p = subprocess.Popen(["true"]); p.wait(); print(p.pid)')"
 
 # A status whose pid is now a different program (here this test's shell) is not HQ Capture.
 fake_status acme recording $$
