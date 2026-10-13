@@ -49,9 +49,9 @@ holds everything the kit needs, so most work never leaves it.
 When a task needs a client's own HQ company too, add it to the session:
 
 ```bash
-bash core/scripts/hq-session.sh add company {client}
-bash core/scripts/hq-session.sh get company_slugs
-bash core/scripts/hq-session.sh remove company {client}
+hq core hq-session add company {client}
+hq core hq-session get company_slugs
+hq core hq-session remove company {client}
 ```
 
 Requires hq-core 16.0.0-beta.50 or newer and hq-cli 5.345.62 or newer, and the
