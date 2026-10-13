@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Read the active company with `hq core hq-session get company_slug`, with no
+  shell-script fallback. The package requires hq-core 15.0.179 or newer, whose
+  CLI floor includes hq-cli 5.99.0.
+
 ## 0.3.2
 
 Fixes from the 0.3.0 review that were held back at release. Vendored HQ Capture
