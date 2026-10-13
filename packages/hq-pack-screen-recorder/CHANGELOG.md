@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1
+
+- Added `cover.jpg`, the HQ marketplace card image (the "night press hall"
+  wallpaper from the HQ Quiet Machines release). No skill, launcher or app
+  changes.
+
 ## 0.3.0
 
 - Vendored HQ Capture from local-screen-recorder da8e7f8: middle cuts, guide

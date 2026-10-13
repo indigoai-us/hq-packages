@@ -42,6 +42,7 @@ binary to download and no notarization step.
 | `knowledge/screen-recorder/` | Setup, permissions, the editing flow, control channel |
 | `app/` | Swift source, `Info.plist`, entitlements and icon for HQ Capture |
 | `tests/` | Launcher tests (any OS) and a macOS end-to-end check |
+| `cover.jpg` | HQ marketplace card image (`hq-night-press-hall` from the HQ "Quiet Machines" wallpaper release) |
 
 ## Source of truth
 
