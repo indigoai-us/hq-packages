@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.2
+
+- Internal cleanup with no user-visible change. Removed the unused SOP review
+  window code: `SOPReviewView.swift` (`SOPReviewModel`, `SOPReviewSection`,
+  `CropSurface` and the `--review-package` launch), and `SOPReviewSeek` /
+  `SOPSeekTarget` from `SOPReview.swift`. Nothing in the app, launcher or skill
+  used them. Guide review and export through the launcher are unchanged.
+- The vendored app now tracks upstream `bcc4af8`, keeping the 0.1.1 build
+  fixes. The app version is unchanged.
+
 ## 0.1.1
 
 - The app builds again with current Command Line Tools (Swift 6.2.3, macOS

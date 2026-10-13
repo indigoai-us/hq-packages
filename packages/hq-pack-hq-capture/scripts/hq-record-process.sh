@@ -221,7 +221,7 @@ source_guards() {
     echo "SOPDraft.swift must not run processes, open URLs, use the network or give the model tools"; return 1
   fi
   # Review and export write files only. The exported skill draft is never installed or run.
-  if grep -nE 'Process\(|NSWorkspace|URLSession|\.claude/skills' "$app_src/SOPReview.swift" "$app_src/SOPReviewView.swift"; then
+  if grep -nE 'Process\(|NSWorkspace|URLSession|\.claude/skills' "$app_src/SOPReview.swift"; then
     echo "SOP review and export must not run processes, open URLs, use the network or install skills"; return 1
   fi
   # Vault sync goes only through the hq CLI.
