@@ -1,5 +1,5 @@
 name: hq-pack-anatomy
-version: 1.0.0
+version: 1.0.1
 publisher: '@indigoai-us'
 access: public
 description: "Anatomy by Ryan (@wheresryan22): build crafted, interactive isometric SVG figures that explain a technical idea as a real physical object, with optional WebGL shaders and a 3D mode. Ported from wheresryan22/anatomy (MIT)."
