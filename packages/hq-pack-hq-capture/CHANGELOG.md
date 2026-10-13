@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Read the active company with `hq core hq-session get company_slug`, with no
+  shell-script fallback. The package requires hq-core 15.0.179 or newer, whose
+  CLI floor includes hq-cli 5.99.0.
+
 ## 0.1.3
 
 - HQ can now start a recording without the user pressing Start. `record`

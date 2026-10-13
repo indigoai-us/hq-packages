@@ -19,15 +19,30 @@ mkdir -p "$tmp/pack"
 cp -R "$here/../app" "$here/../scripts" "$tmp/pack/"
 R="$tmp/pack/scripts/hq-record-process.sh"
 
-# Fake HQ root with two companies and a session helper.
+# Fake HQ root with two companies. The CLI shim supplies the current session company.
 hq="$tmp/hq"
-mkdir -p "$hq/companies/acme" "$hq/companies/other" "$hq/core/scripts"
+mkdir -p "$hq/companies/acme" "$hq/companies/other" "$hq/core/scripts" "$tmp/bin"
 printf 'companies:\n  acme:\n    name: Acme\n  other:\n    name: Other\n' >"$hq/companies/manifest.yaml"
 cat >"$hq/core/scripts/hq-session.sh" <<'EOF'
 #!/usr/bin/env bash
 [ "$1 $2" = "get company_slug" ] && cat "$(dirname "$0")/session-company"
 EOF
-session() { printf '%s' "$1" >"$hq/core/scripts/session-company"; }
+chmod +x "$hq/core/scripts/hq-session.sh"
+cat >"$tmp/bin/hq" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$HQ_VERIFY_HQ_LOG"
+if [ "$*" = "core hq-session get company_slug" ]; then
+  [ "${HQ_VERIFY_HQ_EXIT:-0}" -eq 0 ] || exit "$HQ_VERIFY_HQ_EXIT"
+  printf '%s' "${HQ_VERIFY_SESSION_COMPANY:-}"
+fi
+EOF
+chmod +x "$tmp/bin/hq"
+export HQ_VERIFY_HQ_LOG="$tmp/hq.log" HQ_VERIFY_SESSION_COMPANY="" HQ_VERIFY_HQ_EXIT=0
+session() {
+  HQ_VERIFY_SESSION_COMPANY="$1"
+  export HQ_VERIFY_SESSION_COMPANY
+  printf '%s' "$1" >"$hq/core/scripts/session-company"
+}
 
 # Stub compiler: writes an app whose executable prints its arguments as JSON and exits
 # with $STUB_EXIT (default 0). Each build appends a line to builds.log.
@@ -155,6 +170,7 @@ chmod +x "$tmp/stub-open.sh"
 mkdir -p "$tmp/apps" "$tmp/legacy/HQ Recorder.app/Contents" "$tmp/state/LocalScreenRecorder.app/Contents"
 touch "$tmp/legacy/build.stamp" "$tmp/legacy/keep.txt"
 export HQ_ROOT="$hq"
+export PATH="$tmp/bin:$PATH"
 export HQ_RECORDER_HOME="$tmp/state"
 export HQ_RECORDER_APP="$tmp/apps/HQ Capture.app"
 export HQ_RECORDER_OPEN="$tmp/stub-open.sh"
@@ -202,6 +218,13 @@ check "invalid company name is refused" 'j["error"]=="bad-company"' "$(run start
   || { echo "FAIL: a refused start should not create status.json" >&2; exit 1; }
 session "acme"
 check "status before any start is none" 'j["state"]=="none"' "$(run status)"
+grep -q '^core hq-session get company_slug$' "$HQ_VERIFY_HQ_LOG" && pass=$((pass + 1)) \
+  || { echo "FAIL: company binding must use hq core hq-session" >&2; exit 1; }
+session "acme"
+HQ_VERIFY_HQ_EXIT=7
+check "CLI failure does not use a shell-script fallback" 'j["error"]=="no-company"' "$(run start)"
+HQ_VERIFY_HQ_EXIT=0
+session "acme"
 check "wait before any start is refused" 'j["error"]=="not-open"' "$(run wait --timeout 1)"
 check "record before any start is refused" 'j["ok"] is False and j["error"]=="not-open"' "$(run record)"
 expect "record before any start exits 1" "$(code record)" "1"
