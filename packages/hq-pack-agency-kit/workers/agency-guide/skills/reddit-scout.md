@@ -1,14 +1,15 @@
 ---
 name: reddit-scout
 title: Find leads on Reddit from the chat
-description: Run the pack's reddit-scout workflow from the chat. Finds founders asking for feedback on their site, drafts a teardown and builds an improved hero section in their brand, published to a private link for the person to review and post themselves.
+description: Run the pack's reddit-scout workflow from the chat. Finds founders asking for feedback on their site, drafts a teardown and builds an improved hero section in their brand, published to a private link, drafts the reply the person posts themselves, and keeps the Reddit tracker up to date.
 ---
 
 # Find leads on Reddit from the chat
 
 The pack's `skills/reddit-scout/SKILL.md` (in your context) is the method.
 Triggers: "find leads on Reddit", "scout Reddit", "reddit teardown", "who's
-asking for site feedback".
+asking for site feedback". Tracker triggers: "update the Reddit tracker",
+"log a call with {site}", "{site} replied", "how's Reddit going".
 
 ## Flow
 
@@ -34,14 +35,41 @@ asking for site feedback".
    hero section is built and can be published to a private link. Offer
    ["Approve and publish the section","Needs changes"].
 4. **Publish.** Deploy the section behind a password, reply with the link
-   and password, add it to the teardown, and log it. Say plainly: "This is
-   ready for you to post from your own Reddit account. I don't post."
-   Offer ["I posted it","Not posting this one"], and log their answer.
+   and password, add it to the teardown, and add the row to the tracker as
+   `drafted`.
+5. **The reply.** Draft the reply as SKILL.md Step 5 says: short, answers
+   the founder's question with two or three specific observations from the
+   teardown, offers the preview link, names the agency once, no pitch. Show
+   the draft in full in the same message, say it is saved next to the
+   teardown, and say plainly: "This is ready for you to post from your own
+   Reddit account. I don't post." Offer
+   ["Looks good, I'll post it","Rewrite it"]. On "Rewrite it", take one
+   message of direction, rewrite, show it again, same buttons.
+6. **After they post.** On "I posted it" (or "Looks good, I'll post it"
+   followed by "posted"), move the row to `posted` with the date, and say
+   once: "I'll keep the tracker up to date. When the founder replies, a call
+   gets booked, or it goes nowhere, tell me and I'll log it." No buttons;
+   the outcome comes later.
+
+## The tracker
+
+On "update the Reddit tracker", "log a call with {site}" or any message
+that names a site and an outcome: find the row by site or post, set the
+status the message gives (`replied`, `call booked`, `not qualified`), update
+the qualified-calls line at the top, and reply in one line with the row's
+new status and the count ("Logged: {site}, call booked. Qualified calls
+booked: 3."). If the message names the site but not the outcome, ask once
+with ["They replied","Call booked","Not qualified"]. If the site is not in
+the tracker, say so and offer ["Show the tracker","Start a teardown for it"].
+On "how's Reddit going" or "show the tracker", post the count and the rows in
+one short table, newest first. "It's in Files, under Growth, Reddit,
+tracker."
 
 ## Rules that never bend here
 
 - Never post, comment, vote or message on Reddit, and never offer to.
-- One teardown per founder; check the log.
+- One teardown per founder; check the tracker.
 - The teardown names the agency and promises nothing.
-- Never show a command or a path; the teardown text itself is shown because
-  the person must read it to approve it.
+- Never show a command or a path; the teardown and the reply are shown in
+  full because the person must read them to approve or post them.
+- The reply never pitches, never offers a call and never promises a result.

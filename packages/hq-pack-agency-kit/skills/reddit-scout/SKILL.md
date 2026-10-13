@@ -1,11 +1,13 @@
 ---
 name: reddit-scout
-description: Find founders asking for feedback on their website on Reddit, draft a specific, kind teardown, and build an improved version of one section in the founder's own brand, published to a private link. A growth workflow for agencies that do web and conversion work. Reads only; a person posts the reply. Use for "find leads on Reddit", "reddit teardown", "scout reddit".
+description: Find founders asking for feedback on their website on Reddit, draft a specific, kind teardown, and build an improved version of one section in the founder's own brand, published to a private link, then draft the short reply a person posts. Keeps a tracker of every teardown and its outcome. A growth workflow for agencies that do web and conversion work. Reads only; a person posts the reply. Use for "find leads on Reddit", "reddit teardown", "scout reddit", "update the Reddit tracker", "log a call with {site}".
 triggers:
   - reddit
   - find leads on reddit
   - teardown
   - roast my landing page
+  - update the reddit tracker
+  - log a call with
 maturity: HQ-native (authored for this package)
 ---
 
@@ -43,7 +45,7 @@ and returns it when Reddit refuses. Say which route was used.
    you sign up". Keep posts that (a) link a real site or name it, (b) ask for
    feedback on the site itself, (c) are from the founder or team, (d) match
    the agency's ideal client (from the playbook), and (e) have no teardown
-   from this agency already (`growth/reddit/log.md`).
+   from this agency already (`growth/reddit/tracker.md`).
 3. Write the top three to five with: post title and link, the site, the
    subreddit, when, why it fits, and one line on what you would say.
 
@@ -75,16 +77,42 @@ the link to the teardown as "a version of your hero you can take".
 
 **Approval gate 2.** The person approves the teardown and the section, or
 asks for changes. Approved means saved; posting is theirs, from their own
-Reddit account, and the log records the date they say they posted.
+Reddit account, and the tracker records the date they say they posted.
 
-## Step 5: Log
+## Step 5: The reply → `growth/reddit/{YYYY-MM-DD}-{site}/reply.md`
 
-Append a line to `growth/reddit/log.md`: date, post link, site, status
-(drafted, posted, replied, became a lead), and the review link.
+Once the section is published, draft the reply the person will post under
+the founder's post. Short: under 150 words. It answers the founder's
+question with two or three specific observations taken from the teardown
+(the quote, why it costs them, what to do instead, each in one or two
+lines), offers the preview link as a version of the hero they can take, and
+names the agency once, plainly, as who wrote it. No pitch, no offer of a
+call, no promise of results, nothing the teardown does not say. Save it, show
+it, and stop: the person posts it from their own account, or asks for a
+rewrite.
+
+## Step 6: The tracker → `growth/reddit/tracker.md`
+
+One file for the whole program, created on the first teardown. At the top,
+one line: `Qualified calls booked: {n}`, the count of rows whose status is
+`call booked`. Then one table with one row per teardown: date, subreddit,
+post (title, linked), site, status, review link. Statuses, in order:
+`drafted`, `posted`, `replied`, `call booked`, `not qualified`.
+
+- A new teardown adds a row as `drafted` the moment the reply is saved.
+- "I posted it" moves the row to `posted` and records the date.
+- "update the Reddit tracker" or "log a call with {site}" finds the row by
+  site (or by post link) and sets the status the person names: `replied`
+  when the founder answered, `call booked` when a call is on the calendar
+  (recount the line at the top), `not qualified` when it will not go
+  further. Ask once for the status when the message does not say it.
+- Nothing is removed. A row is only ever moved forward.
+
+`growth/reddit/log.md` is kept for older entries; the tracker is the record.
 
 ## Rules
 
 - Read only. This workflow never posts, comments, votes, follows or messages.
-- One teardown per founder. Check the log first.
+- One teardown per founder. Check the tracker first.
 - Disclose the agency in the teardown; never post from a client's account.
 - Nothing invented: no numbers, no claims about results.
