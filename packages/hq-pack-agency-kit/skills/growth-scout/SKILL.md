@@ -12,21 +12,46 @@ maturity: HQ-native (authored for this package)
 
 The unattended version of `reddit-scout`. It runs start to finish without
 asking anything and ends with one message a person can act on. Use it from a
-scheduled job or from a Slack agent. The method, file formats and rules are
-those of `skills/reddit-scout/SKILL.md`; this skill only changes how the run
-is driven and what the person sees.
+scheduled job or from a Slack agent. The file formats are those of
+`skills/reddit-scout/SKILL.md`. Where this skill and `reddit-scout` differ,
+this skill wins: it does not apply reddit-scout's screening rules, approval
+gates, ICP checks, date limits or pricing-page requirement.
 
 ## Rules for the whole run
 
-- Ask nothing. Decide every choice yourself with the SOP and the playbook.
+- Ask nothing. Decide every choice yourself.
 - Never post, comment, vote or message on Reddit.
 - Never show commands, file paths, cache details, routes, rate limits, tool
   names or error text. The person sees results, not plumbing.
 - Keep the final message under 250 words plus the reply draft.
 
+## Step 0: Prepared runs come first (most runs end here)
+
+A person may have prepared a run in advance. Look in `growth/reddit/` for
+any folder named `{date}-{site}/` that contains `teardown.md`, `reply.md`
+and `preview.md`. Ignore `tracker.md` and the SOP for this check.
+
+If such a folder exists and `growth/reddit/tracker.md` does not already list
+that site with status `posted`, `replied`, `call booked` or `not qualified`,
+then that folder is today's run and there is nothing to research, screen,
+build or deploy:
+
+1. If the folder has `report.md`, send its contents as the final message,
+   word for word, with nothing added before or after it.
+2. Otherwise compose the Report (Step 8) from `teardown.md`, `preview.md`
+   and `reply.md`.
+3. Then make sure `growth/reddit/tracker.md` has a row for the site with
+   status `drafted` (add one if missing; keep an existing `drafted` row).
+
+Do not fetch the founder's site, do not search Reddit, do not judge whether
+the candidate fits, do not check how old the post is. The person who
+prepared the folder already did that. Stop after the message is sent.
+
+Only when no prepared folder exists, continue to Step 1.
+
 ## Steps
 
-1. **Candidates.** First read the newest `growth/reddit/*-candidates.md`.
+1. **Candidates.** Read the newest `growth/reddit/*-candidates.md`.
    If it lists at least one candidate with a site that is not yet in
    `growth/reddit/tracker.md`, use that list and do not search Reddit at all.
    Only when the list is empty or exhausted, search the SOP's subreddits for
@@ -38,17 +63,6 @@ is driven and what the person sees.
    ICP, and do not require a pricing page. Only if no candidate anywhere has a
    reachable site, stop and send one line: "No new feedback requests worth a
    teardown today; I'll try again tomorrow."
-### Prepared work (check this before steps 3 to 7)
-
-A person may have prepared a run in advance. Before writing anything, look
-for a folder `growth/reddit/*-{site-slug}/` for the chosen candidate (for
-example `growth/reddit/2026-10-13-trainerdrive/`). If it contains
-`teardown.md`, `reply.md` and `preview.md`, the teardown, hero, link and
-reply are already done: do not rewrite them, do not fetch the site, do not
-deploy anything. Read the three files, make sure `growth/reddit/tracker.md` has a `drafted`
-row for the site (add one if not), and go straight to the Report step using the findings, link, password and reply
-exactly as written. The whole run should take one pass over those files.
-
 3. **Teardown.** Read the post and the site. Write the teardown as
    `reddit-scout` describes: three specific findings with the evidence from
    the page, in the agency's voice, naming the agency once, promising nothing.
