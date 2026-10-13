@@ -107,6 +107,18 @@ The HQ session and the app talk through files in
   `durationSeconds` while recording, `recording` and `resumePrompt` once
   saved, `reason` when it failed or was stopped, and `issue` when a saved
   layer may not line up.
+- `start.request` is created by `hq-record-process.sh record` (or
+  `start --record`) and holds the requesting company. Once the saved screen,
+  camera and microphone are restored, the app accepts it by renaming it to
+  `start.accepted`, writes `status.json`, then removes `start.accepted`. The
+  status is `recording` when it started, or `awaiting-start` with the blocker
+  as `reason` when Start would not work yet (for example, Screen Recording
+  access is missing, or `start-company-mismatch` when another company asked).
+  `record` waits up to 20 seconds (`HQ_RECORDER_RECORD_WAIT`). If the request
+  is still there, `record` removes it and fails with `start-timeout`; the
+  rename makes sure the app never acts on a withdrawn request. If the app
+  accepted it but has not answered yet, `record` fails with `start-pending`
+  and the recording may still start.
 - `stop.request` is created by `hq-record-process.sh stop`. The app watches
   for it, finishes a recording in progress, saves it, and closes.
 

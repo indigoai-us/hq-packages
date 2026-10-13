@@ -183,7 +183,10 @@ final class SessionController {
         guard context != nil, channel != nil else { return }
         recheckDestination()
         watchSources()
-        Task { await refreshSources() }
+        Task {
+            await refreshSources()
+            sourcesLoaded = true
+        }
         pollTask = Task { [weak self] in
             var tick = 0
             while !Task.isCancelled {
@@ -198,6 +201,11 @@ final class SessionController {
                     await self.handleStopRequest()
                     NSApplication.shared.terminate(nil)
                     return
+                }
+                // A start request waits until the saved screen, camera and microphone are
+                // restored, so it is judged on the selection the user would see.
+                if self.sourcesLoaded, channel.startRequested {
+                    await self.handleStartRequest(channel)
                 }
                 if self.isCapturing, let recording = self.recording, !recording.store.hasRoomToRecord() {
                     await self.stopRecording(reason: "low-disk-space")
@@ -274,6 +282,8 @@ final class SessionController {
     }
 
     private var publishedReason: String?
+    /// True once the first source refresh has restored the saved selection.
+    private var sourcesLoaded = false
 
     /// Recomputes blockers, points the preview at permitted devices and tells HQ why
     /// recording cannot start yet.
@@ -342,6 +352,31 @@ final class SessionController {
 
     func toggleRecording() {
         Task { isCapturing ? await stopRecording(reason: "stopped-by-user") : await startRecording() }
+    }
+
+    /// Answers `hq-record-process.sh record`: accepts the request, then starts recording when
+    /// the request names this app's company and Start would work, otherwise republishes
+    /// awaiting-start with the reason. The answer is in status.json before start.accepted is
+    /// removed, which is what HQ waits for.
+    private func handleStartRequest(_ channel: ControlChannel) async {
+        guard let company = channel.acceptStartRequest() else { return }
+        if state == .awaitingStart, !isCapturing {
+            if company != context?.company {
+                publishedReason = "start-company-mismatch"
+                publish(.awaitingStart, reason: "start-company-mismatch")
+            } else if canStart {
+                await startRecording()
+            } else {
+                let reason = problem ?? blockers.first?.reason ?? "not-ready"
+                publishedReason = reason
+                publish(.awaitingStart, reason: reason)
+            }
+        }
+        do {
+            try channel.finishStartRequest()
+        } catch {
+            NSLog("HQ recorder: could not clear the start request: \(error)")
+        }
     }
 
     /// Creates the package, hides the recorder's own windows from capture and starts the screen track.
