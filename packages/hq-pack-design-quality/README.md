@@ -8,7 +8,7 @@ HQ content pack: typography, color, spatial, motion quality references used by d
 hq install @indigoai-us/hq-pack-design-quality
 ```
 
-This drops `knowledge/design-quality/` into your HQ instance and wires it into `knowledge/public/design-quality/` via `scripts/scan-packages.sh`.
+This drops `knowledge/design-quality/` into your HQ instance and wires it into `knowledge/public/design-quality/` via `hq core scan-packages`.
 
 ## Contents
 
@@ -21,4 +21,5 @@ This drops `knowledge/design-quality/` into your HQ instance and wires it into `
 
 ## Requires
 
-- `hq-core >= 12.0.0`
+- `hq-core >= 15.0.179` (requires hq-cli >= 5.269.0; `hq core
+  scan-packages` first shipped in hq-cli 5.89.0)
