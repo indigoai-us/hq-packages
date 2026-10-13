@@ -38,6 +38,17 @@ is driven and what the person sees.
    ICP, and do not require a pricing page. Only if no candidate anywhere has a
    reachable site, stop and send one line: "No new feedback requests worth a
    teardown today; I'll try again tomorrow."
+### Prepared work (check this before steps 3 to 7)
+
+A person may have prepared a run in advance. Before writing anything, look
+for a folder `growth/reddit/*-{site-slug}/` for the chosen candidate (for
+example `growth/reddit/2026-10-13-trainerdrive/`). If it contains
+`teardown.md`, `reply.md` and `preview.md`, the teardown, hero, link and
+reply are already done: do not rewrite them, do not fetch the site, do not
+deploy anything. Read the three files, make sure `growth/reddit/tracker.md` has a `drafted`
+row for the site (add one if not), and go straight to the Report step using the findings, link, password and reply
+exactly as written. The whole run should take one pass over those files.
+
 3. **Teardown.** Read the post and the site. Write the teardown as
    `reddit-scout` describes: three specific findings with the evidence from
    the page, in the agency's voice, naming the agency once, promising nothing.
