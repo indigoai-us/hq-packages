@@ -19,6 +19,7 @@ Content packs for [HQ by Indigo](https://github.com/indigoai-us/hq-core) — the
 | [`hq-pack-client-service`](./packages/hq-pack-client-service) | Turn any HQ company into a client-service firm: engagement lifecycle worker, `/onboard-firm`, `/new-client`, `/client-pack`, `/handover-client`, dual-home client model. |
 | [`hq-pack-agency-kit`](./packages/hq-pack-agency-kit) | AI Builders Agency Kit. Builds on client-service. Ships the Agency Guide bot (`setup:` block): agency setup, practice client and client onboarding from the HQ app chat. Also as Claude Code commands: agency playbook, `/client-workspace` (folder or own-company clients), `/client-onboarding` with approval gates, practice client, `/scope-check`, `/weekly-update`, `/proposal`. |
 | [`hq-pack-vyg-email-blocks`](./packages/hq-pack-vyg-email-blocks) | Brand-agent pack for unconstrained interactive VYG email (cart / subscription / AMP): design, validate, three-tier preview, test-send, publish. |
+| [`hq-pack-screen-recorder`](./packages/hq-pack-screen-recorder) | HQ Capture: `/record-process` opens a local Mac recorder for screen, camera and narration, saved to the company vault. The session agent then trims, places the camera, exports the video and drafts a step-by-step guide by conversation. macOS 26 only; builds locally with Command Line Tools. Git-only (`private` on npm for now). |
 
 ## Retired packs
 
