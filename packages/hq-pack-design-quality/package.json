@@ -5,7 +5,8 @@
   "files": [
     "knowledge",
     "package.yaml",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
   "repository": {
     "type": "git",

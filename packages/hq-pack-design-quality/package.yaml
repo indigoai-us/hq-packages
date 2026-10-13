@@ -4,7 +4,7 @@ publisher: '@indigoai-us'
 access: public
 description: 'Typography, color, spatial, motion quality references for design-audit skills'
 requires:
-  hqCore: '>=12.0.0'
+  hqCore: '>=15.0.179'
 contributes:
   workers: []
   knowledge:
