@@ -27,7 +27,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 
-const UA = "hq-agency-kit/0.5 (read-only; finds public feedback requests)";
+const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36 hq-agency-kit/0.6 (read-only)";
 const DEFAULT_SUBS = ["SaaS", "startups", "Entrepreneur", "webdev", "SideProject"];
 const CACHE_DIR = join(homedir(), ".hq", "reddit-cache");
 
