@@ -12,9 +12,14 @@ R="$here/../scripts/hq-record-process.sh"
 tmp="$(mktemp -d)"
 trap 'bash "$R" stop >/dev/null 2>&1 || true; rm -rf "$tmp"' EXIT
 hq="$tmp/hq"
-mkdir -p "$hq/companies/acme/recordings" "$hq/core/scripts" "$tmp/legacy/LocalScreenRecorder.app/Contents"
+mkdir -p "$hq/companies/acme/recordings" "$tmp/bin" "$tmp/legacy/LocalScreenRecorder.app/Contents"
 printf 'companies:\n  acme:\n    name: Acme\n' >"$hq/companies/manifest.yaml"
-printf '#!/usr/bin/env bash\n[ "$1 $2" = "get company_slug" ] && echo acme\n' >"$hq/core/scripts/hq-session.sh"
+cat >"$tmp/bin/hq" <<'EOF'
+#!/usr/bin/env bash
+[ "$*" = "core hq-session get company_slug" ] && printf acme
+EOF
+chmod +x "$tmp/bin/hq"
+export PATH="$tmp/bin:$PATH"
 export HQ_ROOT="$hq" HQ_RECORDER_HOME="$tmp/state" HQ_RECORDER_LEGACY_HOME="$tmp/legacy"
 unset HQ_RECORDER_APP HQ_RECORDER_OPEN HQ_RECORDER_COMPILE
 
