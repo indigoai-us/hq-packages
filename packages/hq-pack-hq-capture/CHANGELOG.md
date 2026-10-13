@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.1
+
+- The app builds again with the Swift 6.3 compiler in current Command Line
+  Tools. Two long expressions in `RecordingPackage.swift` (the list of files a
+  recording refers to, and the time ranges checked on load) timed out in the
+  type checker, so `start` and `build` failed with "HQ Capture did not
+  compile". Both are now built step by step with explicit types. Behaviour is
+  unchanged.
+
 ## 0.1.0
 
 First release under the slug `hq-capture`. This pack continues
