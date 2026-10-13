@@ -85,6 +85,9 @@ struct ControlChannel: Sendable {
     let directory: URL
     var statusURL: URL { directory.appendingPathComponent("status.json") }
     var stopRequestURL: URL { directory.appendingPathComponent("stop.request") }
+    /// Created by `hq-record-process.sh record` to press Start from HQ. The app writes its answer
+    /// to status.json first and removes this file after, so HQ reads the answer once it is gone.
+    var startRequestURL: URL { directory.appendingPathComponent("start.request") }
 
     func write(_ status: SessionStatus) throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -102,6 +105,13 @@ struct ControlChannel: Sendable {
     func clearStopRequest() throws {
         guard stopRequested else { return }
         try FileManager.default.removeItem(at: stopRequestURL)
+    }
+
+    var startRequested: Bool { FileManager.default.fileExists(atPath: startRequestURL.path) }
+
+    func clearStartRequest() throws {
+        guard startRequested else { return }
+        try FileManager.default.removeItem(at: startRequestURL)
     }
 }
 

@@ -69,6 +69,12 @@ recording for any other company.
    the app on this Mac (about a minute); say so first. `start` returns
    `state: "awaiting-start"`: the window is open and nothing is recording yet.
    The user picks the screen, camera and microphone and presses Start.
+   When the user asks you to start the recording, run `record` instead (or
+   `start --record` to open and start in one step). It returns
+   `state: "recording"`. `start-blocked` (exit 1) carries the blocker in
+   `reason`, such as missing Screen Recording access: tell the user what to
+   fix in the HQ Capture window, then run `record` again. `start-timeout`
+   means the app did not answer; run `status` and report it.
 3. If macOS asks for Screen Recording, Camera or Microphone access, the user
    allows it and chooses **Quit and Reopen**. The reopened app keeps the
    company binding for 10 minutes, so no new `start` is needed. If more than

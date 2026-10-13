@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.3
+
+- HQ can now start a recording without the user pressing Start. `record`
+  asks the open HQ Capture to start, and `start --record` opens it and starts
+  in one step. The app answers through the control folder: it writes its
+  status (`recording`, or `awaiting-start` with the blocker as `reason`) and
+  then removes `start.request`. `record` fails with `start-blocked`,
+  `start-timeout`, `not-open`, `already-recording`, `not-ready` or
+  `other-company`, and never starts another company's recording.
+- `app/Sources` (`HQControl.swift`, `LocalScreenRecorderApp.swift`) is ahead
+  of upstream `bcc4af8` by the start request; it needs the same change in the
+  `local-screen-recorder` repository.
+
 ## 0.1.2
 
 - Internal cleanup with no user-visible change. Removed the unused SOP review

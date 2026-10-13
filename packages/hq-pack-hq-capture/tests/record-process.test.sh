@@ -2,7 +2,7 @@
 # Launcher tests for hq-record-process.sh. Safe on any OS: the compiler is replaced by a
 # stub that writes a fake HQ Capture.app whose executable echoes its arguments, and the
 # opener is replaced by a stub that speaks the same file control channel as the real app
-# (status.json + stop.request). The real macOS build and launch are covered by
+# (status.json, start.request and stop.request). The real macOS build and launch are covered by
 # tests/e2e-macos.sh.
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -78,10 +78,22 @@ ignore_stop = os.path.join(flags, "ignore.stop")
 finalize_stop = os.path.join(flags, "finalize.stop")
 def stop_asked():
     return os.path.exists(stop_request) and not os.path.exists(ignore_stop)
+# start.request is HQ asking the app to press Start. blocked.start makes the stub answer it the
+# way the real app does when a blocker is showing (it stays awaiting start and says why);
+# ignore.start makes the stub leave the request untouched, like an app that never reads it.
+start_request = os.path.join(ctl, "start.request")
+blocked_start = os.path.join(flags, "blocked.start")
+ignore_start = os.path.join(flags, "ignore.start")
 while not stop_asked() and not (recording and os.path.exists(user_stop)):
-    if not recording and os.path.exists(go):
+    asked = os.path.exists(start_request) and not os.path.exists(ignore_start)
+    # Like the real app, the answer is written before the request is removed.
+    if not recording and asked and os.path.exists(blocked_start):
+        write("awaiting-start", reason="screen-recording-permission")
+        os.remove(start_request)
+    elif not recording and (os.path.exists(go) or asked):
         recording = True
         write("recording", paused=False, durationSeconds=1.5)
+        if asked: os.remove(start_request)
     time.sleep(0.05)
 if stop_asked() and os.path.exists(finalize_stop):
     os.remove(stop_request)
@@ -162,6 +174,7 @@ expect "--company with no bound company exits 1" "$(code start --company acme)" 
 check "status with no bound company is refused" 'j["error"]=="no-company"' "$(run status)"
 check "wait with no bound company is refused" 'j["error"]=="no-company"' "$(run wait --timeout 1)"
 check "stop with no bound company is refused" 'j["error"]=="no-company"' "$(run stop)"
+check "record with no bound company is refused" 'j["error"]=="no-company"' "$(run record)"
 session "ghost"
 check "unknown company is refused" 'j["error"]=="unknown-company"' "$(run start)"
 session "../acme"
@@ -171,6 +184,8 @@ check "invalid company name is refused" 'j["error"]=="bad-company"' "$(run start
 session "acme"
 check "status before any start is none" 'j["state"]=="none"' "$(run status)"
 check "wait before any start is refused" 'j["error"]=="not-open"' "$(run wait --timeout 1)"
+check "record before any start is refused" 'j["ok"] is False and j["error"]=="not-open"' "$(run record)"
+expect "record before any start exits 1" "$(code record)" "1"
 check "a company other than the bound one is refused" 'j["error"]=="company-mismatch"' "$(run start --company other)"
 expect "nothing was built for a refused start" "$(builds)" "0"
 
@@ -248,6 +263,38 @@ check "status uses the first media issue as the note when the app gave none" \
 printf 'not json' >"$hq/companies/acme/recordings/demo.hqrec/manifest.json"
 check "an unreadable manifest leaves status working without mediaIssues" 'j["ok"] and "mediaIssues" not in j' "$(run status)"
 rm -f "$tmp/media.issue" "$tmp/app.issue" "$tmp/go.record" "$hq/companies/acme/recordings/demo.hqrec/manifest.json"
+
+# record: HQ starts the recording itself instead of the user pressing Start.
+ctl="$HQ_RECORDER_HOME/active"
+check "record when HQ Capture has quit is refused" 'j["error"]=="not-open"' "$(run record)"
+check "record rejects an unknown argument" 'j["error"]=="bad-argument"' "$(run record --now)"
+check "start opens for a recording HQ starts" 'j["state"]=="awaiting-start"' "$(run start)"
+session "other"
+check "record in another company is refused" 'j["ok"] is False and j["error"]=="other-company"' "$(run record)"
+[ ! -e "$ctl/start.request" ] && pass=$((pass + 1)) \
+  || { echo "FAIL: another company's record should not ask the app to start" >&2; exit 1; }
+session "acme"
+touch "$tmp/blocked.start"
+out="$(run record)"
+check "record reports why the app could not start" \
+  'j["ok"] is False and j["error"]=="start-blocked" and j["reason"]=="screen-recording-permission"' "$out"
+expect "a blocked record exits 1" "$(code record)" "1"
+check "a blocked record leaves the app awaiting start" 'j["state"]=="awaiting-start"' "$(run status)"
+rm -f "$tmp/blocked.start"
+touch "$tmp/ignore.start"
+out="$(HQ_RECORDER_RECORD_WAIT=1 bash "$R" record 2>/dev/null || true)"
+check "record times out when the app does not answer" 'j["ok"] is False and j["error"]=="start-timeout"' "$out"
+[ ! -e "$ctl/start.request" ] && pass=$((pass + 1)) \
+  || { echo "FAIL: a timed-out record should withdraw start.request" >&2; exit 1; }
+rm -f "$tmp/ignore.start"
+check "record starts the recording" 'j["ok"] and j["state"]=="recording" and j["paused"] is False' "$(run record)"
+[ ! -e "$ctl/start.request" ] && pass=$((pass + 1)) \
+  || { echo "FAIL: the app should consume start.request" >&2; exit 1; }
+check "record while recording is refused" 'j["ok"] is False and j["error"]=="already-recording"' "$(run record)"
+check "stop saves the recording HQ started" 'j["state"]=="saved" and j["reason"]=="stop-requested"' "$(run stop)"
+out="$(run start --record)"
+check "start --record opens HQ Capture and starts recording" 'j["ok"] and j["state"]=="recording"' "$out"
+check "stop saves the start --record recording" 'j["state"]=="saved"' "$(run stop)"
 
 # Rebuild only when the pack's app inputs change.
 out="$(run start)"

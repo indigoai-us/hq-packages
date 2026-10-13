@@ -10,9 +10,15 @@
 # Subcommands (each prints JSON on stdout):
 #   doctor                        check this Mac can build and run the app
 #   build [--force]               build the app if missing or out of date
-#   start [--company <slug>]      open HQ Capture bound to a company's recordings folder; refused
+#   start [--company <slug>] [--record]
+#                                 open HQ Capture bound to a company's recordings folder; refused
 #                                 with already-open while it is open, or busy while another
-#                                 session is opening it
+#                                 session is opening it. --record then starts recording (as record)
+#   record                        start recording in the open HQ Capture, as if the user pressed
+#                                 Start: writes start.request and waits for the app's answer.
+#                                 Fails with start-blocked (and the blocker as reason) when the app
+#                                 can't start, start-timeout when it doesn't answer, not-open,
+#                                 already-recording, not-ready or other-company
 #   status                        print status.json with the live state; after a save it adds
 #                                 mediaIssues from the package and keeps the app's issue note.
 #                                 When HQ Capture is open for another company it prints only
@@ -607,10 +613,11 @@ print(json.dumps(s))' "$status_file" "$state"
 }
 
 cmd_start() {
-  local requested=""
+  local requested="" record=false
   while [ $# -gt 0 ]; do
     case "$1" in
       --company) requested="${2:-}"; [ -n "$requested" ] || fail bad-argument "--company needs a company."; shift 2 ;;
+      --record) record=true; shift ;;
       *) fail bad-argument "Unknown argument: $1" ;;
     esac
   done
@@ -640,7 +647,55 @@ cmd_start() {
   done
   [ -f "$status_file" ] || fail no-status "HQ Capture opened but didn't report back within 15 seconds."
   release_lock "$start_lock"
-  print_status
+  if [ "$record" = true ]; then record_now; else print_status; fi
+}
+
+cmd_record() {
+  [ $# -eq 0 ] || fail bad-argument "Unknown argument: $1"
+  resolve_company ""
+  record_now
+}
+
+# Asks the open HQ Capture to start recording, as if the user pressed Start. The app answers by
+# writing its status and then removing start.request: recording when it started, awaiting-start
+# with the blocker as the reason when it could not, or failed when capture did not start.
+record_now() {
+  if open_for_other_company; then
+    fail other-company "HQ Capture is open for another company. Start it from a session in that company."
+  fi
+  if status_for_other_company || ! app_is_open; then
+    fail not-open "HQ Capture is not open. Run start first."
+  fi
+  local state
+  state="$(current_state)"
+  case "$state" in
+    awaiting-start) ;;
+    recording) fail already-recording "HQ Capture is already recording." ;;
+    *) fail not-ready "HQ Capture can't start a recording now (state: $state)." ;;
+  esac
+  local request="$control_dir/start.request" i limit="${HQ_RECORDER_RECORD_WAIT:-20}"
+  : >"$request"
+  for i in $(seq 1 $((limit * 4))); do
+    [ -e "$request" ] || break
+    sleep 0.25
+  done
+  if [ -e "$request" ]; then
+    rm -f "$request"
+    fail start-timeout "HQ Capture did not answer the start request within $limit seconds."
+  fi
+  state="$(current_state)"
+  case "$state" in
+    recording) print_status ;;
+    awaiting-start)
+      local reason
+      reason="$(python3 -I -c 'import json,sys;r=json.load(open(sys.argv[1])).get("reason");print(r if isinstance(r,str) else "")' "$status_file" 2>/dev/null || true)"
+      json ok false error start-blocked reason "${reason:-not-ready}" \
+        message "HQ Capture could not start recording (${reason:-not ready}). Fix it in the HQ Capture window, then run record again."
+      exit 1 ;;
+    *)
+      print_status >&2
+      fail start-failed "HQ Capture did not start recording (state: $state)." ;;
+  esac
 }
 
 cmd_wait() {
@@ -825,10 +880,11 @@ case "${1:-}" in
   doctor) shift; cmd_doctor "$@" ;;
   build) shift; cmd_build "$@" ;;
   start) shift; cmd_start "$@" ;;
+  record) shift; cmd_record "$@" ;;
   status) shift; cmd_status "$@" ;;
   wait) shift; cmd_wait "$@" ;;
   stop) shift; cmd_stop "$@" ;;
   run) shift; cmd_run "$@" ;;
   resume) shift; cmd_resume "$@" ;;
-  *) echo "usage: hq-record-process.sh {doctor|build [--force]|start [--company <slug>]|status|wait [--timeout <s>]|stop|run <mode> <package> [args]|resume <prompt>}" >&2; exit 2 ;;
+  *) echo "usage: hq-record-process.sh {doctor|build [--force]|start [--company <slug>] [--record]|record|status|wait [--timeout <s>]|stop|run <mode> <package> [args]|resume <prompt>}" >&2; exit 2 ;;
 esac

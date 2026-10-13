@@ -199,6 +199,9 @@ final class SessionController {
                     NSApplication.shared.terminate(nil)
                     return
                 }
+                if channel.startRequested {
+                    await self.handleStartRequest(channel)
+                }
                 if self.isCapturing, let recording = self.recording, !recording.store.hasRoomToRecord() {
                     await self.stopRecording(reason: "low-disk-space")
                 } else if let recording = self.recording, await recording.isRecording,
@@ -342,6 +345,26 @@ final class SessionController {
 
     func toggleRecording() {
         Task { isCapturing ? await stopRecording(reason: "stopped-by-user") : await startRecording() }
+    }
+
+    /// Answers `hq-record-process.sh record`: starts recording when Start would work, otherwise
+    /// republishes awaiting-start with the blocker as the reason. The answer is in status.json
+    /// before the request file is removed, which is what HQ waits for.
+    private func handleStartRequest(_ channel: ControlChannel) async {
+        if state == .awaitingStart, !isCapturing {
+            if canStart {
+                await startRecording()
+            } else {
+                let reason = problem ?? blockers.first?.reason ?? "not-ready"
+                publishedReason = reason
+                publish(.awaitingStart, reason: reason)
+            }
+        }
+        do {
+            try channel.clearStartRequest()
+        } catch {
+            NSLog("HQ recorder: could not clear the start request: \(error)")
+        }
     }
 
     /// Creates the package, hides the recorder's own windows from capture and starts the screen track.
