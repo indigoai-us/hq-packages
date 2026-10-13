@@ -85,9 +85,11 @@ struct ControlChannel: Sendable {
     let directory: URL
     var statusURL: URL { directory.appendingPathComponent("status.json") }
     var stopRequestURL: URL { directory.appendingPathComponent("stop.request") }
-    /// Created by `hq-record-process.sh record` to press Start from HQ. The app writes its answer
-    /// to status.json first and removes this file after, so HQ reads the answer once it is gone.
+    /// Created by `hq-record-process.sh record` to press Start from HQ. It holds the requesting
+    /// company. The app accepts it by renaming it to start.accepted, writes its answer to
+    /// status.json, then removes start.accepted; HQ reads the answer once that file is gone.
     var startRequestURL: URL { directory.appendingPathComponent("start.request") }
+    var startAcceptedURL: URL { directory.appendingPathComponent("start.accepted") }
 
     func write(_ status: SessionStatus) throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -109,9 +111,21 @@ struct ControlChannel: Sendable {
 
     var startRequested: Bool { FileManager.default.fileExists(atPath: startRequestURL.path) }
 
-    func clearStartRequest() throws {
-        guard startRequested else { return }
-        try FileManager.default.removeItem(at: startRequestURL)
+    /// Accepts a pending start request and returns the company that asked, or nil when there is
+    /// none. The rename fails when HQ withdrew the request first, so a withdrawn request is
+    /// never acted on.
+    func acceptStartRequest() -> String? {
+        let manager = FileManager.default
+        try? manager.removeItem(at: startAcceptedURL)
+        guard rename(startRequestURL.path, startAcceptedURL.path) == 0 else { return nil }
+        let company = (try? String(contentsOf: startAcceptedURL, encoding: .utf8)) ?? ""
+        return company.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Removes start.accepted once the answer is in status.json.
+    func finishStartRequest() throws {
+        guard FileManager.default.fileExists(atPath: startAcceptedURL.path) else { return }
+        try FileManager.default.removeItem(at: startAcceptedURL)
     }
 }
 

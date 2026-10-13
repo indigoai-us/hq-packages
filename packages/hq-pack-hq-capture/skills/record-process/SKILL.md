@@ -74,7 +74,9 @@ recording for any other company.
    `state: "recording"`. `start-blocked` (exit 1) carries the blocker in
    `reason`, such as missing Screen Recording access: tell the user what to
    fix in the HQ Capture window, then run `record` again. `start-timeout`
-   means the app did not answer; run `status` and report it.
+   means the app did not pick up the request; run `status` and report it.
+   `start-pending` means the app took the request and is still starting; run
+   `status` after a few seconds before trying `record` again.
 3. If macOS asks for Screen Recording, Camera or Microphone access, the user
    allows it and chooses **Quit and Reopen**. The reopened app keeps the
    company binding for 10 minutes, so no new `start` is needed. If more than

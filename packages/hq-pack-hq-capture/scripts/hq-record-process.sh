@@ -656,32 +656,61 @@ cmd_record() {
   record_now
 }
 
-# Asks the open HQ Capture to start recording, as if the user pressed Start. The app answers by
-# writing its status and then removing start.request: recording when it started, awaiting-start
-# with the blocker as the reason when it could not, or failed when capture did not start.
+# Asks the open HQ Capture to start recording, as if the user pressed Start.
+#
+# start.request holds the requesting company. The app accepts it by renaming it to
+# start.accepted (so a withdrawn request can never be accepted later), checks the company,
+# writes its answer to status.json, and then removes start.accepted. The answer is recording
+# when it started, awaiting-start with the blocker as the reason when it could not, or failed
+# when capture did not start.
+#
+# The start lock is held from the company and open checks until the request is in place, so a
+# stop and a start for another company cannot replace the control folder in between.
 record_now() {
+  local waited=0
+  until try_lock "$start_lock"; do
+    [ "$waited" -lt 20 ] || fail busy "HQ Capture is being opened by another session right now. Run status in a moment."
+    sleep 0.25; waited=$((waited + 1))
+  done
   if open_for_other_company; then
+    release_lock "$start_lock"
     fail other-company "HQ Capture is open for another company. Start it from a session in that company."
   fi
   if status_for_other_company || ! app_is_open; then
+    release_lock "$start_lock"
     fail not-open "HQ Capture is not open. Run start first."
   fi
   local state
   state="$(current_state)"
   case "$state" in
     awaiting-start) ;;
-    recording) fail already-recording "HQ Capture is already recording." ;;
-    *) fail not-ready "HQ Capture can't start a recording now (state: $state)." ;;
+    recording) release_lock "$start_lock"; fail already-recording "HQ Capture is already recording." ;;
+    *) release_lock "$start_lock"; fail not-ready "HQ Capture can't start a recording now (state: $state)." ;;
   esac
-  local request="$control_dir/start.request" i limit="${HQ_RECORDER_RECORD_WAIT:-20}"
-  : >"$request"
+  local request="$control_dir/start.request" accepted="$control_dir/start.accepted"
+  local i limit="${HQ_RECORDER_RECORD_WAIT:-20}"
+  rm -f "$accepted"
+  printf '%s\n' "$company" >"$request.$$"
+  mv "$request.$$" "$request"
+  release_lock "$start_lock"
   for i in $(seq 1 $((limit * 4))); do
     [ -e "$request" ] || break
     sleep 0.25
   done
-  if [ -e "$request" ]; then
-    rm -f "$request"
-    fail start-timeout "HQ Capture did not answer the start request within $limit seconds."
+  # Withdraw a request the app has not accepted. Removing it fails only when the app renamed it
+  # to start.accepted first, and then the app is starting and its answer is still to come.
+  if python3 -I -c 'import os,sys; os.remove(sys.argv[1])' "$request" 2>/dev/null; then
+    fail start-timeout "HQ Capture did not answer the start request within $limit seconds. The request was withdrawn."
+  fi
+  for i in $(seq 1 $((limit * 4))); do
+    [ -e "$accepted" ] || break
+    sleep 0.25
+  done
+  if [ -e "$accepted" ]; then
+    fail start-pending "HQ Capture accepted the start and is still starting. Run status to see when it is recording."
+  fi
+  if status_for_other_company; then
+    fail other-company "HQ Capture is open for another company. Start it from a session in that company."
   fi
   state="$(current_state)"
   case "$state" in

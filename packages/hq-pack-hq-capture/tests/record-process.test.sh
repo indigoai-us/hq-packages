@@ -78,22 +78,41 @@ ignore_stop = os.path.join(flags, "ignore.stop")
 finalize_stop = os.path.join(flags, "finalize.stop")
 def stop_asked():
     return os.path.exists(stop_request) and not os.path.exists(ignore_stop)
-# start.request is HQ asking the app to press Start. blocked.start makes the stub answer it the
-# way the real app does when a blocker is showing (it stays awaiting start and says why);
-# ignore.start makes the stub leave the request untouched, like an app that never reads it.
+# start.request is HQ asking the app to press Start; it holds the requesting company. Like the
+# real app, the stub accepts it by renaming it to start.accepted, writes its answer to
+# status.json, then removes start.accepted. The company it read is logged to start.company.
+# blocked.start makes it answer the way the app does when a blocker is showing (it stays
+# awaiting start and says why); slow.start makes it take 2 seconds to start; ignore.start makes
+# it leave the request untouched, like an app that never reads it.
 start_request = os.path.join(ctl, "start.request")
+start_accepted = os.path.join(ctl, "start.accepted")
 blocked_start = os.path.join(flags, "blocked.start")
+slow_start = os.path.join(flags, "slow.start")
 ignore_start = os.path.join(flags, "ignore.start")
+def accept_start():
+    if os.path.exists(ignore_start): return None
+    try:
+        os.rename(start_request, start_accepted)
+    except FileNotFoundError:
+        return None
+    asked_by = open(start_accepted).read().strip()
+    with open(os.path.join(flags, "start.company"), "w") as f: f.write(asked_by)
+    return asked_by
 while not stop_asked() and not (recording and os.path.exists(user_stop)):
-    asked = os.path.exists(start_request) and not os.path.exists(ignore_start)
-    # Like the real app, the answer is written before the request is removed.
-    if not recording and asked and os.path.exists(blocked_start):
-        write("awaiting-start", reason="screen-recording-permission")
-        os.remove(start_request)
-    elif not recording and (os.path.exists(go) or asked):
+    asked_by = accept_start() if not recording else None
+    if asked_by is not None:
+        if asked_by != args["--company"]:
+            write("awaiting-start", reason="start-company-mismatch")
+        elif os.path.exists(blocked_start):
+            write("awaiting-start", reason="screen-recording-permission")
+        else:
+            if os.path.exists(slow_start): time.sleep(2)
+            recording = True
+            write("recording", paused=False, durationSeconds=1.5)
+        os.remove(start_accepted)
+    elif not recording and os.path.exists(go):
         recording = True
         write("recording", paused=False, durationSeconds=1.5)
-        if asked: os.remove(start_request)
     time.sleep(0.05)
 if stop_asked() and os.path.exists(finalize_stop):
     os.remove(stop_request)
@@ -288,10 +307,20 @@ check "record times out when the app does not answer" 'j["ok"] is False and j["e
   || { echo "FAIL: a timed-out record should withdraw start.request" >&2; exit 1; }
 rm -f "$tmp/ignore.start"
 check "record starts the recording" 'j["ok"] and j["state"]=="recording" and j["paused"] is False' "$(run record)"
+expect "the start request names the session's company" "$(cat "$tmp/start.company")" "acme"
 [ ! -e "$ctl/start.request" ] && pass=$((pass + 1)) \
   || { echo "FAIL: the app should consume start.request" >&2; exit 1; }
 check "record while recording is refused" 'j["ok"] is False and j["error"]=="already-recording"' "$(run record)"
 check "stop saves the recording HQ started" 'j["state"]=="saved" and j["reason"]=="stop-requested"' "$(run stop)"
+check "start opens for a slow start" 'j["state"]=="awaiting-start"' "$(run start)"
+touch "$tmp/slow.start"
+out="$(HQ_RECORDER_RECORD_WAIT=1 bash "$R" record 2>/dev/null || true)"
+check "an accepted start that outlasts the wait is start-pending, not start-timeout" \
+  'j["ok"] is False and j["error"]=="start-pending"' "$out"
+sleep 2.5
+check "the accepted start goes on to record" 'j["state"]=="recording"' "$(run status)"
+rm -f "$tmp/slow.start"
+check "stop saves the slow-start recording" 'j["state"]=="saved"' "$(run stop)"
 out="$(run start --record)"
 check "start --record opens HQ Capture and starts recording" 'j["ok"] and j["state"]=="recording"' "$out"
 check "stop saves the start --record recording" 'j["state"]=="saved"' "$(run stop)"
