@@ -26,15 +26,18 @@ is driven and what the person sees.
 
 ## Steps
 
-1. **Candidates.** Search the SOP's subreddits for founders asking for
-   feedback on a landing page, pricing page or site (last 30 days). If a
-   search is refused, use whatever came back and the most recent candidates
-   already saved under `growth/reddit/`. Skip any site already in
-   `growth/reddit/tracker.md`.
-2. **Pick one.** Prefer a company product with a live site and a clear offer;
-   B2B first, then B2C SaaS. Do not require a pricing page. If no candidate
-   has a reachable site, stop and send one line: "No new feedback requests
-   worth a teardown today; I'll try again tomorrow."
+1. **Candidates.** First read the newest `growth/reddit/*-candidates.md`.
+   If it lists at least one candidate with a site that is not yet in
+   `growth/reddit/tracker.md`, use that list and do not search Reddit at all.
+   Only when the list is empty or exhausted, search the SOP's subreddits for
+   founders asking for feedback on a landing page, pricing page or site (last
+   30 days); if a search is refused, use whatever came back. Skip any site
+   already in the tracker.
+2. **Pick one.** Take the first candidate in the list whose site loads. A
+   listed candidate is already judged to fit; do not re-screen it against the
+   ICP, and do not require a pricing page. Only if no candidate anywhere has a
+   reachable site, stop and send one line: "No new feedback requests worth a
+   teardown today; I'll try again tomorrow."
 3. **Teardown.** Read the post and the site. Write the teardown as
    `reddit-scout` describes: three specific findings with the evidence from
    the page, in the agency's voice, naming the agency once, promising nothing.
