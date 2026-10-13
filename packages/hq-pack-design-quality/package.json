@@ -1,6 +1,6 @@
 {
   "name": "@indigoai-us/hq-pack-design-quality",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "HQ content pack: typography, color, spatial, motion quality references for design-audit skills",
   "files": [
     "knowledge",

@@ -21,5 +21,5 @@ This drops `knowledge/design-quality/` into your HQ instance and wires it into `
 
 ## Requires
 
-- `hq-core >= 15.0.179` (requires hq-cli >= 5.269.0; the
-  `hq core scan-packages` command is available from hq-cli 5.89.0)
+- `hq-core >= 15.0.179` (requires hq-cli >= 5.269.0; `hq core
+  scan-packages` first shipped in hq-cli 5.89.0)
