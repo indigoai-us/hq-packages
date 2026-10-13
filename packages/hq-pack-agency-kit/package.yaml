@@ -1,9 +1,9 @@
 name: hq-pack-agency-kit
-version: 0.4.19
+version: 0.5.0
 publisher: '@indigoai-us'
 access: public
 displayName: AI Builders Agency Kit
-description: 'The AI Builders agency operating kit for HQ. Builds on hq-pack-client-service. Ships the Agency Guide, a personal bot that sets up the agency (an agency brain, a brain per current client, and connected tools, learned from the agency''s apps) and runs client onboarding from the HQ app chat, with tap-to-answer questions and approval gates. The same flows are available as Claude Code commands: /agency-setup writes the agency playbook (profile, onboarding checklist, audit criteria, scope rules, example briefs and delivery plans) into the firm company. /client-workspace gives every client the same workspace layout, as a folder inside the agency or as the client''s own HQ company. /client-onboarding runs the onboarding system on a signed client: scope review, missing inputs, account audit and a kickoff package, each with sources and a human approval point, then feeds what the strategist caught back into the playbook. /practice-client loads a pre-filled practice client with planted gaps so students can try the whole flow on day one. Also ships /scope-check, /weekly-update and /proposal. AI Builders brand tokens in brand/.'
+description: 'The AI Builders agency operating kit for HQ. Builds on hq-pack-client-service. Ships the Agency Guide, a personal bot that sets up the agency (an agency brain, a brain per current client, and connected tools, learned from the agency''s apps) and runs client onboarding from the HQ app chat, with tap-to-answer questions and approval gates. The same flows are available as Claude Code commands: /agency-setup writes the agency playbook (profile, onboarding checklist, audit criteria, scope rules, example briefs and delivery plans) into the firm company. /client-workspace gives every client the same workspace layout, as a folder inside the agency or as the client''s own HQ company. /client-onboarding runs the onboarding system on a signed client: scope review, missing inputs, account audit and a kickoff package, each with sources and a human approval point, then feeds what the strategist caught back into the playbook. /practice-client loads a pre-filled practice client with planted gaps so students can try the whole flow on day one. Also ships /site-build (rebuild a client''s site from the client''s own data, every change traced to a data point, published to a review link), /reddit-scout (find founders asking for site feedback on Reddit, draft a teardown and an improved hero section in their brand; read-only), /scope-check, /weekly-update and /proposal. AI Builders brand tokens in brand/.'
 keywords:
   - hq
   - hq-pack
@@ -29,6 +29,8 @@ contributes:
     - scope-check
     - weekly-update
     - proposal
+    - site-build
+    - reddit-scout
   knowledge:
     - agency-kit
   policies:

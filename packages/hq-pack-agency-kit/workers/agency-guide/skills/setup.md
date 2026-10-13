@@ -195,7 +195,9 @@ bash core/packages/hq-pack-agency-kit/scripts/import-clients.sh \
 
 Then fill each client's `client-profile.md` and `access-and-assets.md` from
 what you already read, every fact with its source, blank where you have
-nothing. With a notetaker connected, add the client's recent meetings to its
+nothing. Record the client's website address and where their brand guide,
+product details, competitor list and exports live (the tool and the document
+name), so a later workflow can fetch them without asking. With a notetaker connected, add the client's recent meetings to its
 profile (date, who, what was agreed, what is next); with a project tool, add
 its open projects and their status. Put each client's Slack channels in its `access-and-assets.md`
 (channel name, whether it is shared with the client, and its purpose). Systems are names only; never copy a credential.
@@ -208,9 +210,12 @@ Files. Lead with the client workspaces: name each client and what you filled
 in for it. Then offer the next step as a real choice: open one client's
 workspace and walk through what is in it, or run a workflow on one client
 (onboarding with `skills/onboarding.md`, a scope check or a weekly update with
-`skills/clients.md`). Name the buttons so they never read as unfinished setup:
-"Walk me through {Client}" and "Kick off {Client}" (the onboarding), not
-"Onboard {Client}". Record `Setup: finished` and the date in your progress
+`skills/clients.md`, a site rebuild with `skills/site-build.md`, or finding
+leads with `skills/reddit-scout.md`). Pick the workflows that fit what the
+agency sells: an agency that does web or conversion work gets "Build a new
+site for {Client}" first. Name the buttons so they never read as unfinished
+setup: "Walk me through {Client}", "Build a new site for {Client}" and
+"Kick off {Client}" (the onboarding), not "Onboard {Client}". Record `Setup: finished` and the date in your progress
 note.
 
 Only if they have no clients at all, offer a practice run on Northwind Labs,

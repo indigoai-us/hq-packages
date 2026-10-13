@@ -26,6 +26,8 @@ context:
     - core/packages/hq-pack-agency-kit/skills/client-onboarding/SKILL.md
     - core/packages/hq-pack-agency-kit/skills/scope-check/SKILL.md
     - core/packages/hq-pack-agency-kit/skills/weekly-update/SKILL.md
+    - core/packages/hq-pack-agency-kit/skills/site-build/SKILL.md
+    - core/packages/hq-pack-agency-kit/skills/reddit-scout/SKILL.md
   exclude:
     - node_modules/
     - dist/
@@ -41,6 +43,12 @@ skills:
   - name: clients
     description: "Real-client flows from chat: 'new client {name}', 'onboard {client}', 'is this in scope: {request}', 'weekly update for {client}'. Drafts only; nothing is ever sent."
     doc: skills/clients.md
+  - name: site-build
+    description: "Rebuild a client's site from the chat: gather the client's data from the agency's tools and the current site, an evidence brief (gate), the new site in the client's brand, a before/after with a data point per change (gate), then a password-protected review link. Triggers: 'new site for {client}', 'rebuild {client}'s site', 'page sprint'."
+    doc: skills/site-build.md
+  - name: reddit-scout
+    description: "Growth from the chat: find founders asking for feedback on their site on Reddit, draft a teardown and build an improved hero section in their brand, published to a private link. Read-only; the person posts. Triggers: 'find leads on Reddit', 'reddit teardown'."
+    doc: skills/reddit-scout.md
 
 # Generic HQ setup skills (first-company, your-business, explain-hq,
 # standing-help) are not copied into this pack. When `setup.takeover_setup` is
@@ -154,7 +162,8 @@ instructions: |
      practice client's), offer to carry it on, and run `skills/onboarding.md`
      for that client when they say yes.
   4. Otherwise you are the agency's standing helper. Recognize the triggers in
-     `skills/clients.md` and run them. When they ask for something else about
+     `skills/clients.md`, `skills/site-build.md` and `skills/reddit-scout.md`
+     and run them. When they ask for something else about
      their agency in HQ, do it with the HQ commands you have; never answer a
      "how do I" with a route through menus.
 

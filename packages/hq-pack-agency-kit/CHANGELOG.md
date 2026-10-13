@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.5.0 (2026-10-12)
+
+- New workflow, site-build: rebuild a client's website from the client's own
+  data. The Agency Guide gathers the brand guide, product details, competitors,
+  CRM export, analytics and call transcripts from the agency's tools, fetches
+  the current site, writes an evidence brief (who actually buys, why visitors
+  leave, what the site says and to whom), builds the new site in the client's
+  brand, writes a before/after with a data point behind every change, and
+  publishes a review link behind a password. Two approval gates; nothing is
+  sent to the client.
+- New workflow, reddit-scout: find founders asking for feedback on their site
+  on Reddit, draft a specific teardown, build an improved hero section in
+  their brand and publish it to a private link. `scripts/reddit.mjs` reads
+  Reddit only (an agency-registered app through the HQ vault, or the public
+  feeds with caching); posting is always a person's.
+- Setup records each client's website and where its brand, product and
+  export documents live, and offers "Build a new site for {Client}" first for
+  agencies that do web or conversion work.
+
 ## 0.4.19 (2026-10-12)
 
 - Setup asks for the agency's website, reads it, and records its look (logo,

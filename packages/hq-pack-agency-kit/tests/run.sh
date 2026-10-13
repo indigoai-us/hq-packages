@@ -160,7 +160,7 @@ check "worker is a conversational PersonaWorker" 'grep -q "^  type: PersonaWorke
 for d in $(awk '/^skills:/{f=1;next} f && /^[a-z]/{f=0} f && $1=="doc:"{print $2}' "$WORKER/worker.yaml"); do
   check "worker skill doc $d exists" '[ -f "$WORKER/$d" ]'
 done
-check "worker lists three skills" '[ "$(awk "/^skills:/{f=1;next} f && /^[a-z]/{f=0} f && \$1==\"-\" && \$2==\"name:\"" "$WORKER/worker.yaml" | wc -l | tr -d " ")" = 3 ]'
+check "worker lists five skills" '[ "$(awk "/^skills:/{f=1;next} f && /^[a-z]/{f=0} f && \$1==\"-\" && \$2==\"name:\"" "$WORKER/worker.yaml" | wc -l | tr -d " ")" = 5 ]'
 for ctx in $(awk '/^context:/{f=1;next} f && /^[a-z]/{f=0} f && /^  base:/{b=1;next} f && /^  [a-z]/{b=0} f && b && /^    - /{print $2}' "$WORKER/worker.yaml"); do
   check "worker context $ctx is a pack file" '[ -f "$PACK_DIR/${ctx#core/packages/hq-pack-agency-kit/}" ]'
 done
@@ -214,8 +214,16 @@ done
 for w in $(awk '/^  workers:/{f=1;next} /^  [a-z]+:/{f=0} f && /- /{print $2}' "$PACK_DIR/package.yaml"); do
   check "worker $w has worker.yaml with matching id" 'grep -q "^  id: $w$" "$PACK_DIR/workers/$w/worker.yaml"'
 done
-check "package version is 0.4.19" 'grep -q "^version: 0.4.19$" "$PACK_DIR/package.yaml"'
-check "changelog has a 0.4.19 entry" 'grep -q "^## 0.4.19" "$PACK_DIR/CHANGELOG.md"'
+check "package version is 0.5.0" 'grep -q "^version: 0.5.0$" "$PACK_DIR/package.yaml"'
+check "changelog has a 0.5.0 entry" 'grep -q "^## 0.5.0" "$PACK_DIR/CHANGELOG.md"'
+check "package contributes site-build and reddit-scout" 'grep -q "    - site-build" "$PACK_DIR/package.yaml" && grep -q "    - reddit-scout" "$PACK_DIR/package.yaml" && [ -f "$PACK_DIR/skills/site-build/SKILL.md" ] && [ -f "$PACK_DIR/skills/reddit-scout/SKILL.md" ]'
+check "worker registers the site-build and reddit-scout chat skills and loads their SKILL.md" 'grep -q "name: site-build" "$WORKER/worker.yaml" && grep -q "name: reddit-scout" "$WORKER/worker.yaml" && grep -q "skills/site-build/SKILL.md" "$WORKER/worker.yaml" && grep -q "skills/reddit-scout/SKILL.md" "$WORKER/worker.yaml" && [ -f "$WORKER/skills/site-build.md" ] && [ -f "$WORKER/skills/reddit-scout.md" ]'
+check "site-build requires the brand guide and current site, traces every change, and publishes only on a yes" 'grep -q "A brand guide and the current site are required" "$PACK_DIR/skills/site-build/SKILL.md" && grep -q "02-before-after.md" "$PACK_DIR/skills/site-build/SKILL.md" && grep -q "Never publish without an explicit yes" "$PACK_DIR/skills/site-build/SKILL.md" && grep -q "Never change a client" "$PACK_DIR/skills/site-build/SKILL.md"'
+check "site-build chat flow gates the plan and the result and publishes behind a password" 'grep -q "Approve the plan" "$WORKER/skills/site-build.md" && grep -q "Publish for review" "$WORKER/skills/site-build.md" && grep -q "password" "$WORKER/skills/site-build.md" && grep -q "Nothing is sent to the client" "$WORKER/skills/site-build.md"'
+check "reddit-scout is read-only and the person posts" 'grep -q "never posts, comments, votes" "$PACK_DIR/skills/reddit-scout/SKILL.md" && grep -q "One teardown per founder" "$PACK_DIR/skills/reddit-scout/SKILL.md" && grep -q "Never post, comment, vote or message on Reddit" "$WORKER/skills/reddit-scout.md"'
+check "reddit.mjs parses and refuses an unknown command" 'node --check "$PACK_DIR/scripts/reddit.mjs" && ! node "$PACK_DIR/scripts/reddit.mjs" nope >/dev/null 2>&1'
+check "reddit.mjs never calls a Reddit write endpoint" '! grep -qE "api/(comment|submit|vote|compose|subscribe|save|report)" "$PACK_DIR/scripts/reddit.mjs" && grep -q "grant_type=client_credentials" "$PACK_DIR/scripts/reddit.mjs"'
+check "setup offers a site build first for agencies that do web work" 'grep -q "Build a new site for {Client}" "$WORKER/skills/setup.md" && grep -q "Record the client.s website address" "$WORKER/skills/setup.md"'
 check "setup skill learns tools by kind before the business topics" 'grep -q "learn their tools before asking about the business" "$WORKER/skills/setup.md"'
 check "worker caps buttons at four of one kind" 'grep -q "never answers mixed with actions" "$WORKER/worker.yaml"'
 check "requires client-service through requires.packs" 'grep -A2 "^  packs:" "$PACK_DIR/package.yaml" | grep -q "name: hq-pack-client-service"'
