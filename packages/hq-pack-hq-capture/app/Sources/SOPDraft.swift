@@ -556,7 +556,14 @@ struct OnDeviceSegmentRewriter: SegmentRewriting {
         let prompt = request.prompt
         // Instructions, prompt, schema overhead and the response must fit in the runtime window.
         let estimate = Self.estimatedTokens(Self.instructions) + Self.estimatedTokens(prompt) + 200 + maximumResponseTokens
-        let budget = model.contextSize / 2
+        #if compiler(>=6.3)
+        let contextSize = model.contextSize
+        #else
+        // The macOS 26.2 SDK in Command Line Tools (Swift 6.2) has no `contextSize`. The
+        // on-device model's window there is 4,096 tokens.
+        let contextSize = 4096
+        #endif
+        let budget = contextSize / 2
         guard estimate <= budget else { throw SegmentRewriteError.overBudget(estimatedTokens: estimate, budget: budget) }
 
         // A fresh session per segment: no tools, no earlier segments in context.

@@ -359,9 +359,19 @@ struct RecordingManifest: Codable, Equatable, Sendable {
     }
 
     var allReferences: [String] {
-        [timeline] + tracks.flatMap { $0.segments.map(\.relativePath) } + edits + transcripts
-            + screenshots + drafts.map(\.relativePath) + (teleprompter.map { [$0] } ?? [])
-            + (screenEvidence.map { [$0] } ?? []) + (exports ?? []) + (videoExports ?? []).map(\.relativePath)
+        // Built in steps: one long `+` chain of optional-mapped arrays exceeds the Swift 6.3
+        // type checker's time limit and the app no longer compiles.
+        var references: [String] = [timeline]
+        references += tracks.flatMap { $0.segments.map(\.relativePath) }
+        references += edits
+        references += transcripts
+        references += screenshots
+        references += drafts.map(\.relativePath)
+        if let teleprompter { references.append(teleprompter) }
+        if let screenEvidence { references.append(screenEvidence) }
+        references += exports ?? []
+        references += (videoExports ?? []).map(\.relativePath)
+        return references
     }
 
     func validate() throws {
@@ -377,11 +387,13 @@ struct RecordingManifest: Codable, Equatable, Sendable {
             guard segment.startOffsetSeconds.isFinite, segment.startOffsetSeconds >= 0
             else { throw PackageError.invalidPath }
         }
-        let ranges = (videoEffects ?? []).map { ($0.startOffsetSeconds, $0.endOffsetSeconds) }
-            + (cameraGaps ?? []).map { ($0.startOffsetSeconds, $0.endOffsetSeconds) }
-            + (cameraEffects ?? []).map { ($0.startOffsetSeconds, $0.endOffsetSeconds) }
-            + (microphoneGaps ?? []).map { ($0.startOffsetSeconds, $0.endOffsetSeconds) }
-            + (microphoneSilence ?? []).map { ($0.startOffsetSeconds, $0.endOffsetSeconds) }
+        // Typed and built in steps for the same type-checker limit as `allReferences`.
+        var ranges: [(Double, Double?)] = []
+        ranges += (videoEffects ?? []).map { ($0.startOffsetSeconds, $0.endOffsetSeconds) }
+        ranges += (cameraGaps ?? []).map { ($0.startOffsetSeconds, $0.endOffsetSeconds) }
+        ranges += (cameraEffects ?? []).map { ($0.startOffsetSeconds, $0.endOffsetSeconds) }
+        ranges += (microphoneGaps ?? []).map { ($0.startOffsetSeconds, $0.endOffsetSeconds) }
+        ranges += (microphoneSilence ?? []).map { ($0.startOffsetSeconds, $0.endOffsetSeconds) }
         for (start, end) in ranges {
             guard start.isFinite, start >= 0, end.map({ $0.isFinite && $0 >= start }) ?? true
             else { throw PackageError.invalidPath }
