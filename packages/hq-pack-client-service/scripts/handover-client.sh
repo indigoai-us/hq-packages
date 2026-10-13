@@ -203,14 +203,14 @@ require_session_bound_to() { # require_session_bound_to <slug>
     die_op "E_SESSION_UNKNOWN" \
 "cannot determine which company this session is bound to, so a handover of
        '${want}' is refused. Unknown is not authorization. Bind the session
-       (core/scripts/hq-session.sh set company_slug ${want}) or state it
+       with the hq core hq-session set company_slug ${want} command or state it
        explicitly with --session-company ${want}."
   fi
   if ! session_lock_includes "$got" "$want"; then
     die_op "E_SESSION_SCOPE" \
 "this session is locked to '${got}' but /handover-client operates on client
        company '${want}'. Run it in a session that holds the client (bound to it,
-       or added with core/scripts/hq-session.sh add company ${want}). The firm side
+       or added with the hq core hq-session add company ${want} command). The firm side
        arrives as --firm-member / --firm-domain names, never as a path."
   fi
 }

@@ -5,7 +5,7 @@
 #
 # Runs the entire arc on throwaway fixtures under $TMPDIR:
 #
-#   install  -> scan-packages.sh wires the pack into a fixture HQ root
+#   install  -> hq core scan-packages wires the pack into a fixture HQ root
 #   onboard  -> onboard-firm.sh writes + validates companies/{firm}/client-service.yaml
 #   client   -> new-client.sh engagement (firm-bound) + client-home (client-bound)
 #   pack     -> client-pack.sh scaffold / apply / fork / update / remove
@@ -21,13 +21,10 @@
 #   log must be empty at every checkpoint. "No cloud or vendor call was made" is
 #   therefore a mechanical result, not a claim about the source.
 #
-#   `hq` is shimmed SELECTIVELY, because `hq` is no longer one thing.
-#   core/scripts/scan-packages.sh is now a FORWARDER — its implementation moved
-#   into the hq CLI and it exec's `hq core --hq-root <root> scan-packages`. That
-#   subcommand is a purely LOCAL host operation: it symlinks a pack's
-#   contributions into an HQ root and touches nothing off-machine. Shimming `hq`
-#   wholesale was correct while scan-packages.sh was self-contained bash; against
-#   a forwarder it only kills the install step and proves nothing.
+#   `hq` is shimmed selectively. The hq core scan-packages subcommand is a local
+#   host operation: it symlinks pack contributions into the fixture HQ root and
+#   touches nothing off-machine. Shimming `hq` wholesale would kill this step and
+#   prove nothing.
 #
 #   So the hq shim discriminates on the subcommand:
 #     `hq core ...`  -> delegated to the resolved real CLI, recorded in a
@@ -100,12 +97,6 @@ for tool in jq yq shasum python3; do
   }
 done
 
-SCAN="${HOST_ROOT}/core/scripts/scan-packages.sh"
-[ -f "$SCAN" ] || {
-  printf 'ERROR  E_ENV_SCAN_PACKAGES_MISSING  no %s — the install step cannot run\n' "$SCAN" >&2
-  exit 2
-}
-
 if [ -n "$SEED_FAULT" ]; then
   case "$SEED_FAULT" in
     fork-detect|manifest-sha|remove-deletes-forks) ;;
@@ -117,7 +108,7 @@ fi
 # fixture root + cleanup trap (fires on success, failure and interrupt)
 # ---------------------------------------------------------------------------
 
-WORK="$(mktemp -d -t client-service-e2e)"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/client-service-e2e.XXXXXX")"
 CLEANED=0
 cleanup() {
   [ "$CLEANED" -eq 0 ] || return 0
@@ -166,7 +157,7 @@ done
 # ever prepended — and bake its absolute argv into the shim so the delegation
 # can never re-enter the shim by name.
 #
-# The probe is for the CAPABILITY the forwarder needs, not for liveness, because
+# The probe is for the CAPABILITY the direct command needs, not for liveness, because
 # two weaker probes both give a wrong answer here:
 #   * "is it on PATH" — a dangling npm symlink is `command -v`-visible and
 #     completely broken.
@@ -198,9 +189,8 @@ elif [ -n "$NODE_BIN" ] && [ -f "$HQ_REPO_CLI" ] && hq_cli_works "$NODE_BIN" "$H
   HQ_REAL_WHY="node ${HQ_REPO_CLI} (v$("$NODE_BIN" "$HQ_REPO_CLI" --version 2>/dev/null | head -1)) — hq on PATH is absent or not runnable"
 else
   printf 'ERROR  E_ENV_HQ_CLI_MISSING  no hq CLI that provides `hq core scan-packages`\n' >&2
-  printf '  core/scripts/scan-packages.sh is a forwarder into that subcommand, so the\n' >&2
-  printf '  install step cannot run without one. Neither candidate listed it under\n' >&2
-  printf '  `core --help`:\n' >&2
+  printf '  The install step calls that command directly, so it cannot run without one.\n' >&2
+  printf '  Neither candidate listed it under `core --help`:\n' >&2
   printf '    hq on PATH        : %s\n' "${HQ_ON_PATH:-<not found>}" >&2
   printf '    node + local build: %s\n' "$HQ_REPO_CLI" >&2
   printf '  Install or upgrade it (npm install -g @indigoai-us/hq-cli) or point the\n' >&2
@@ -317,11 +307,10 @@ REAL_PACK_BEFORE="$(tree_sha "$PACK")"
 hdr "1  INSTALL — the pack is wired into a fresh HQ root"
 # ===========================================================================
 
-mkdir -p "${HQ}/core/packages" "${HQ}/core/scripts" "${HQ}/core/policies" \
+mkdir -p "${HQ}/core/packages" "${HQ}/core/policies" \
          "${HQ}/core/workers/public" "${HQ}/core/knowledge/public" \
          "${HQ}/.claude/skills" "${HQ}/companies" "${HQ}/workspace"
 cp -R "$PACK" "${HQ}/core/packages/hq-pack-client-service"
-cp "$SCAN" "${HQ}/core/scripts/scan-packages.sh"
 
 # The fixture copy is what gets faulted; the real pack file is never opened for
 # writing by this script at all.
@@ -372,11 +361,11 @@ if [ -n "$SEED_FAULT" ]; then
   fi
 fi
 
-# scan-packages.sh takes the HQ root from the environment, not a flag.
+# The CLI command takes the HQ root from the environment, not a flag.
 RC=0
-OUT="$(cd "$HQ" && HQ_ROOT="$HQ" PATH="${SHIMS}:${PATH}" bash core/scripts/scan-packages.sh 2>&1)" || RC=$?
+OUT="$(cd "$HQ" && HQ_ROOT="$HQ" PATH="${SHIMS}:${PATH}" hq core scan-packages 2>&1)" || RC=$?
 show "$OUT"
-assert_eq "scan-packages.sh exits 0" "0" "$RC"
+assert_eq "hq core scan-packages exits 0" "0" "$RC"
 
 assert_link "skill /onboard-firm is wired"    "${HQ}/.claude/skills/onboard-firm"
 assert_link "skill /new-client is wired"      "${HQ}/.claude/skills/new-client"
@@ -406,7 +395,7 @@ assert_eq "every installed script parses" "" "$PARSE_BAD"
 
 # The install now runs THROUGH the hq CLI, so prove the shim discriminated in both
 # directions at the same checkpoint. Order matters: assert_offline truncates EXTLOG.
-assert_has "the install really reached the hq CLI (scan-packages.sh is a forwarder now)" \
+assert_has "the install really reached the hq CLI" \
   "$(cat "$LOCALLOG" 2>/dev/null)" "core"
 assert_has "  ... specifically the scan-packages subcommand" \
   "$(cat "$LOCALLOG" 2>/dev/null)" "scan-packages"

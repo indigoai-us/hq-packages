@@ -12,7 +12,8 @@ into the pack.
 **v0.1.0.** Everything documented below is landed and verified — see
 [CHANGELOG.md](CHANGELOG.md) for what shipped and what is still unproven.
 
-Requires **hq-core >= 15.0.0**.
+Requires **hq-core >= 16.0.4**. This release requires hq-cli >= 5.345.67,
+which includes the multi-company `hq core hq-session` operations used here.
 
 ---
 
@@ -30,7 +31,7 @@ hq packages install /abs/path/to/core/packages/hq-pack-client-service
 
 `hq packages install` accepts a bare slug (registry), `@scope/name[@ver]`, a git
 URL, or a local path. For a local path it copies the pack into
-`core/packages/` and runs `core/scripts/scan-packages.sh` to wire the
+`core/packages/` and runs `hq core scan-packages` to wire the
 contributions into host-side well-known paths. Expected output:
 
 ```
@@ -63,7 +64,7 @@ hq packages list        # -> contributes {workers:1, skills:4, knowledge:1, poli
 If the pack tree is already in place and you only need to re-wire it:
 
 ```bash
-bash core/scripts/scan-packages.sh
+hq core scan-packages
 ```
 
 > **Install from the gated `@indigoai-us` registry:**
@@ -150,7 +151,7 @@ handoff record under `workspace/`. A slug collision aborts and writes nothing.
 Add `--dry-run` to plan it first.
 
 **Phase 2, in a session that holds the CLIENT** (add it to the firm's session
-with `bash core/scripts/hq-session.sh add company {slug}`, or use a client-bound
+with `hq core hq-session add company {slug}`, or use a client-bound
 session). Preferred: run `/newcompany {slug}` first
 so the client company gets the proper discovery interview, brand packs and
 integrations, then verify rather than duplicate:
@@ -254,7 +255,7 @@ checklist says. See [Handover](#handover) for what is and is not proven.
 
 ## What it contributes
 
-10 contributions, all wired by `scan-packages.sh`:
+10 contributions, all wired by `hq core scan-packages`:
 
 | Kind | Name | Lands in |
 |---|---|---|
@@ -289,7 +290,7 @@ into exactly one company, and the session must hold that company in its lock
 set.
 
 On hq-core with multi-company session locks, a firm session can hold the client
-too. Add it with `bash core/scripts/hq-session.sh add company {client}`, run the
+too. Add it with `hq core hq-session add company {client}`, run the
 client-side phase, and remove it when done. The firm stays the primary company,
 and every company not added stays blocked. On older cores a session holds one
 company, so the client-side phases run in a session bound to the client.
@@ -310,7 +311,7 @@ dereferences it. Firm-internal content never lands in the client company
 (policies `client-service-materialize-not-mount` and
 `client-service-internal-external-split`).
 
-Each engine reads the session's lock set (`hq-session.sh get company_slugs`) and
+Each engine reads the session's lock set (`hq core hq-session get company_slugs`) and
 refuses when the target company is not in it, or when it cannot read it —
 unknown is not authorization:
 

@@ -166,7 +166,7 @@ require_session_bound_to() { # require_session_bound_to <slug> <what>
     die_op "E_SESSION_UNKNOWN" \
 "cannot determine which company this session is bound to, so writes to ${what} '${want}' are refused.
        Unknown is not authorization. Bind the session
-       (core/scripts/hq-session.sh set company_slug ${want}) or state it explicitly
+       with the hq core hq-session set company_slug ${want} command or state it explicitly
        with --session-company ${want} when running outside a session."
   fi
   if ! session_lock_includes "$got" "$want"; then
@@ -174,7 +174,7 @@ require_session_bound_to() { # require_session_bound_to <slug> <what>
 "this session is locked to '${got}' but the operation writes into ${what} '${want}'.
        Firm packs are materialized, not mounted: scaffold in a session locked to the
        firm; apply/update/remove in a session that holds the CLIENT company (bound
-       to it, or added with core/scripts/hq-session.sh add company ${want})."
+       to it, or added with the hq core hq-session add company ${want} command)."
   fi
 }
 

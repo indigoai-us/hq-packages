@@ -54,18 +54,20 @@ command -v yq >/dev/null 2>&1 || { printf 'E_ENV_YQ_MISSING: yq is required\n' >
 command -v shasum >/dev/null 2>&1 || { printf 'E_ENV: shasum is required\n' >&2; exit 2; }
 command -v python3 >/dev/null 2>&1 || { printf 'E_ENV: python3 is required (exact-string patching)\n' >&2; exit 2; }
 
-WORK="$(mktemp -d -t new-client-verify)"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/new-client-verify.XXXXXX")"
 cleanup() { [ "$KEEP" -eq 1 ] || rm -rf "$WORK"; }
 trap cleanup EXIT
 
 SHIMS="${WORK}/shims"
 EXTLOG="${WORK}/external-calls.log"
+LOCALHQLOG="${WORK}/local-hq-calls.log"
 EMPTY_NAMES="${WORK}/no-secret-names"
 : > "$EXTLOG"
+: > "$LOCALHQLOG"
 : > "$EMPTY_NAMES"
 
 mkdir -p "$SHIMS"
-for cmd in curl wget hq gh aws ssh scp nc open; do
+for cmd in curl wget gh aws ssh scp nc open; do
   cat > "${SHIMS}/${cmd}" <<SHIM
 #!/usr/bin/env bash
 printf '%s %s\n' "\$(basename "\$0")" "\$*" >> "${EXTLOG}"
@@ -73,6 +75,29 @@ exit 97
 SHIM
   chmod +x "${SHIMS}/${cmd}"
 done
+
+# `hq core hq-session` is the supported local CLI path. Return only synthetic
+# lock names for that exact command and keep every other hq invocation blocked.
+cat > "${SHIMS}/hq" <<SHIM
+#!/usr/bin/env bash
+case "\$*" in
+  'core hq-session get company_slugs')
+    printf '%s\n' "\$*" >> "${LOCALHQLOG}"
+    [ "\${HQ_VERIFY_SESSION_FAIL:-0}" = 1 ] && exit 127
+    printf '%s\n' "\${HQ_VERIFY_SESSION_COMPANIES:-}"
+    exit 0
+    ;;
+  'core hq-session get company_slug')
+    printf '%s\n' "\$*" >> "${LOCALHQLOG}"
+    [ "\${HQ_VERIFY_SESSION_FAIL:-0}" = 1 ] && exit 127
+    printf '%s\n' "\${HQ_VERIFY_SESSION_COMPANY:-}"
+    exit 0
+    ;;
+esac
+printf '%s %s\n' "\$(basename "\$0")" "\$*" >> "${EXTLOG}"
+exit 97
+SHIM
+chmod +x "${SHIMS}/hq"
 
 TOTAL_FAILS=0
 SCEN_FAILS=0
@@ -305,17 +330,49 @@ assert_absent "  ... and nothing was written" "$(CODIR "$ROOT1" hotel)"
 run "$NC" client-home --pack-dir "$PACK" --hq-root "$ROOT1" --session-company "${FIRM},hotelx" \
   --client hotel --invites declined --local-only
 assert_eq "a slug that merely starts with the client's slug does not match (exit 1)" "1" "$RC"
-# The live lock set comes from hq-session.sh `get company_slugs`.
-mkdir -p "${ROOT1}/core/scripts"
-cat > "${ROOT1}/core/scripts/hq-session.sh" <<EOF
-#!/usr/bin/env bash
-case "\$2" in company_slugs) printf '%s\n' "${FIRM},hotel" ;; company_slug) printf '%s\n' "${FIRM}" ;; esac
-EOF
+# The live lock set comes from `hq core hq-session get company_slugs`; the
+# synthetic hq shim above returns names only and blocks every other CLI call.
+: > "$LOCALHQLOG"
+HQ_VERIFY_SESSION_COMPANIES="${FIRM},hotel"
+export HQ_VERIFY_SESSION_COMPANIES
 run "$NC" client-home --pack-dir "$PACK" --hq-root "$ROOT1" \
   --client hotel --invites declined --local-only
+unset HQ_VERIFY_SESSION_COMPANIES
 assert_eq "the live session lock set (firm,hotel) authorizes the client phase (exit 0)" "0" "$RC"
 assert_exists "  ... the client company was written" "$(CODIR "$ROOT1" hotel)/handover-checklist.md"
-rm -f "${ROOT1}/core/scripts/hq-session.sh"
+assert_has "the live lock set was read through hq core hq-session" \
+  "$(cat "$LOCALHQLOG")" "core hq-session get company_slugs"
+assert_absent "the fixture does not provide a core scripts directory" \
+  "${ROOT1}/core/scripts"
+assert_no_external_call "live lock lookup made no external hq or network call"
+
+# A CLI failure remains unknown and must not fall back to a script file.
+: > "$LOCALHQLOG"
+HQ_VERIFY_SESSION_FAIL=1
+export HQ_VERIFY_SESSION_FAIL
+run "$NC" client-home --pack-dir "$PACK" --hq-root "$ROOT1" \
+  --client unavailable --invites declined --local-only
+unset HQ_VERIFY_SESSION_FAIL
+assert_eq "a failed hq core hq-session read is refused (exit 1)" "1" "$RC"
+assert_has "  ... names the unknown binding" "$OUT" "E_SESSION_UNKNOWN"
+assert_absent "  ... does not scaffold the client" "$(CODIR "$ROOT1" unavailable)"
+assert_absent "  ... does not fall back to a shell script" "${ROOT1}/core/scripts"
+assert_has "  ... made both direct CLI reads" "$(cat "$LOCALHQLOG")" \
+  "core hq-session get company_slugs"
+assert_has "  ... tried the single-company compatibility read" \
+  "$(cat "$LOCALHQLOG")" "core hq-session get company_slug"
+assert_no_external_call "failed session read made no external call"
+
+# When the multi-company list is empty, the single-company read remains supported.
+: > "$LOCALHQLOG"
+HQ_VERIFY_SESSION_COMPANY="$FIRM"
+export HQ_VERIFY_SESSION_COMPANY
+run "$NC" engagement --pack-dir "$PACK" --hq-root "$ROOT1" \
+  --firm "$FIRM" --client fallback-client --local-only
+unset HQ_VERIFY_SESSION_COMPANY
+assert_eq "the company_slug compatibility read authorizes its primary company (exit 0)" "0" "$RC"
+assert_has "  ... queried the single-company CLI subcommand" \
+  "$(cat "$LOCALHQLOG")" "core hq-session get company_slug"
 
 # ===========================================================================
 hdr "8  cloud posture"

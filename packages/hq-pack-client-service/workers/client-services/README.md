@@ -8,8 +8,8 @@ The generic, de-vendored client-service lifecycle worker. `worker.yaml`
 `new-engagement`, `engagement-kickoff`, `track-project`, `deal-pipeline`,
 `invoicing`, `build-agreement`.
 
-`scan-packages.sh` links this directory to `core/workers/public/client-services`,
-and `core/scripts/generate-workers-registry.sh` indexes the `worker.yaml` from
+`hq core scan-packages` links this directory to `core/workers/public/client-services`,
+and `hq core generate-workers-registry` indexes the `worker.yaml` from
 there.
 
 ## Layout

@@ -21,11 +21,11 @@ A firm session may work in a client company only when that client is in the
 session's company lock set. Add it explicitly:
 
 ```bash
-bash core/scripts/hq-session.sh add company {client}
+hq core hq-session add company {client}
 ```
 
 The firm stays the primary company. Add only the clients the task needs, and
-remove each one (`hq-session.sh remove company {client}`) when the task is done.
+remove each one (`hq core hq-session remove company {client}`) when the task is done.
 Every company not in the lock set stays blocked.
 
 On an hq-core without multi-company session locks, the lock set is a single

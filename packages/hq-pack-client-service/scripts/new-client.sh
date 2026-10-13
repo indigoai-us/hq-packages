@@ -199,15 +199,15 @@ require_session_bound_to() { # require_session_bound_to <slug> <what>
     die_op "E_SESSION_UNKNOWN" \
 "cannot determine which company this session is bound to, so writes into ${what}
        '${want}' are refused. Unknown is not authorization. Bind the session
-       (core/scripts/hq-session.sh set company_slug ${want}) or state it
-       explicitly with --session-company ${want} when running outside a session."
+       with the hq core hq-session set company_slug ${want} command or state it explicitly
+       with --session-company ${want} when running outside a session."
   fi
   if ! session_lock_includes "$got" "$want"; then
     die_op "E_SESSION_SCOPE" \
 "this session is locked to '${got}' but this phase writes into ${what} '${want}'.
        Run 'engagement' in a session locked to the FIRM. For 'client-home', either
        add the client to the firm's session:
-         core/scripts/hq-session.sh add company ${want}
+         using the hq core hq-session add company ${want} command
        or run it in a session bound to the CLIENT."
   fi
 }
