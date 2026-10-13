@@ -31,8 +31,9 @@ use the original repository.
 | `evals/` | Upstream skill evals |
 | `agents/` | Upstream Codex interface metadata |
 
-`cover.jpg` at the pack root is the HQ marketplace card image (lighthouse lens
-room, from the HQ "Quiet Machines" wallpaper release). It is HQ artwork, not
+`cover.jpg` at the pack root is the HQ marketplace card image (wireframe grid
+landscape, `moire-grid-abstract` from the HQ "Quiet Machines" wallpaper
+release). It is HQ artwork, not
 part of the upstream project, and is not covered by the upstream license.
 
 Not copied: the upstream README, changelog, contributing, code of conduct,
