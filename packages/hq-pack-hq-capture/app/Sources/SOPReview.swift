@@ -542,12 +542,16 @@ enum SOPExporter {
 
         // Folders already on disk count too, so an export that failed part way does not block the next.
         let onDisk = (try? FileManager.default.contentsOfDirectory(atPath: try store.url(for: "exports", in: package).path)) ?? []
-        let start = ((manifest.exports ?? []).compactMap { path -> Substring? in
+        // Built in steps: as one expression this exceeds the Swift 6.2 type checker's time limit.
+        var folderNames: [Substring] = (manifest.exports ?? []).compactMap { path -> Substring? in
             let parts = path.split(separator: "/")
             return parts.count > 1 ? parts[1] : nil
-        } + onDisk.map { Substring($0) }).compactMap { name -> Int? in
+        }
+        folderNames += onDisk.map { Substring($0) }
+        let numbers: [Int] = folderNames.compactMap { name -> Int? in
             name.hasPrefix("v") ? Int(name.dropFirst()) : nil
-        }.max().map { $0 + 1 } ?? 1
+        }
+        let start: Int = numbers.max().map { $0 + 1 } ?? 1
         // The folder is reserved by creating it, so an export started at the same time takes the
         // next number instead of writing into this one.
         try store.ensureDirectory("exports", in: package)

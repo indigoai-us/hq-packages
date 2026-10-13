@@ -2,12 +2,17 @@
 
 ## 0.1.1
 
-- The app builds again with the Swift 6.3 compiler in current Command Line
-  Tools. Two long expressions in `RecordingPackage.swift` (the list of files a
-  recording refers to, and the time ranges checked on load) timed out in the
-  type checker, so `start` and `build` failed with "HQ Capture did not
-  compile". Both are now built step by step with explicit types. Behaviour is
-  unchanged.
+- The app builds again with current Command Line Tools (Swift 6.2.3, macOS
+  26.2 SDK), which the launcher uses whenever they are installed. Before this
+  release `start` and `build` failed with "HQ Capture did not compile":
+  - Three long expressions timed out in the type checker: the list of files a
+    recording refers to and the time ranges checked on load
+    (`RecordingPackage.swift`), and the next export folder number
+    (`SOPReview.swift`). They are now built step by step with explicit types.
+  - `SystemLanguageModel.contextSize` is not in the 26.2 SDK
+    (`SOPDraft.swift`). On older compilers the guide-drafting budget uses the
+    on-device model's 4,096-token window instead.
+- Behaviour is unchanged. The app also still builds with Xcode 26.5 (Swift 6.3.3).
 
 ## 0.1.0
 
