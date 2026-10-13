@@ -264,27 +264,6 @@ struct SOPReviewDocument: Codable, Equatable, Sendable {
     mutating func revokeApproval() { edited() }
 }
 
-// MARK: - Seeking
-
-/// Where a moment on the recording clock is inside the screen track's segment files.
-struct SOPSeekTarget: Equatable, Sendable {
-    var segment: String
-    var seconds: Double
-}
-
-enum SOPReviewSeek {
-    static func target(timelineSeconds: Double, manifest: RecordingManifest) -> SOPSeekTarget? {
-        guard timelineSeconds.isFinite,
-              let segments = manifest.tracks.first(where: { $0.kind == .screen })?.segments
-                  .filter({ $0.status != .missing }).sorted(by: { $0.startOffsetSeconds < $1.startOffsetSeconds }),
-              let first = segments.first else { return nil }
-        let segment = segments.last { $0.startOffsetSeconds <= timelineSeconds } ?? first
-        var seconds = max(0, timelineSeconds - segment.startOffsetSeconds)
-        if let duration = segment.durationSeconds { seconds = min(seconds, duration) }
-        return SOPSeekTarget(segment: segment.relativePath, seconds: seconds)
-    }
-}
-
 // MARK: - Storage
 
 struct SOPReviewLoaded: Equatable, Sendable {

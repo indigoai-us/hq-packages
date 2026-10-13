@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Removed the unused in-app SOP review window code (`SOPReviewModel`,
+  `SOPReviewSection`, `CropSurface`, `SOPReviewSeek`). Nothing opened it; all
+  review saves go through `review-sop`, `approve-sop` and
+  `draft-sop --retry-failed`. Vendored HQ Capture from local-screen-recorder
+  bcc4af8. No version change.
+
 ## 0.3.2
 
 Fixes from the 0.3.0 review that were held back at release. Vendored HQ Capture

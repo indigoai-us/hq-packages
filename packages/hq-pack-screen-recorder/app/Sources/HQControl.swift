@@ -141,7 +141,7 @@ struct LaunchBindingStore: @unchecked Sendable {
 
     /// The arguments to launch with. An HQ launch is remembered and returned unchanged. A launch
     /// with no `--` options (system-added `-NS...` flags are ignored) reuses a binding saved within
-    /// `window`. Any other launch, such as a command-line tool or `--review-package`, is unchanged.
+    /// `window`. Any other launch, such as a command-line tool, is unchanged.
     func resolve(_ arguments: [String], now: Date = Date()) -> [String] {
         if arguments.contains("--hq-control") {
             if let context = try? HQLaunchContext.parse(arguments) { save(context, at: now) }
