@@ -2,7 +2,8 @@
 
 ## Unreleased
 
-- Instructions and workspace setup output call `hq core hq-session` directly.
+- Instructions and workspace setup output call `hq core hq-session` directly;
+  the hq-core requirement now carries the matching CLI floor.
 
 ## 0.4.19 (2026-10-12)
 
