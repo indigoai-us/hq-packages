@@ -360,14 +360,40 @@ out="$(run run frame "$pkg" --at 1 --out /tmp/still.png)"
 check "run frame allows --out in /tmp" 'j["argv"][-1]=="/tmp/still.png"' "$out"
 out="$(run run edit "$pkg" --out 4.5 --json)"
 check "run edit's --out seconds are not treated as a path" 'j["argv"][0]=="--edit"' "$out"
+# A company folder that is a symlink to somewhere outside companies/ is still that company's.
+mkdir -p "$tmp/elsewhere/linked" "$tmp/elsewhere/loose"
+printf '  linked:\n    name: Linked\n' >>"$hq/companies/manifest.yaml"
+ln -s "$tmp/elsewhere/linked" "$hq/companies/linked"
+check "run frame refuses --out through another company's symlinked folder" 'j["error"]=="out-outside-company"' \
+  "$(run run frame "$pkg" --at 1 --out "$hq/companies/linked/x.png")"
+check "run frame refuses --out at the real folder behind another company's symlink" 'j["error"]=="out-outside-company"' \
+  "$(run run frame "$pkg" --at 1 --out "$tmp/elsewhere/linked/sub/x.png")"
+ln -s "$tmp/elsewhere/linked" "$hq/companies/acme/recordings/sneaky"
+check "run frame refuses a new --out under a bound-company symlink to another company" 'j["error"]=="out-outside-company"' \
+  "$(run run frame "$pkg" --at 1 --out "$hq/companies/acme/recordings/sneaky/new/x.png")"
+out="$(run run frame "$pkg" --at 1 --out "$tmp/elsewhere/loose/x.png")"
+check "run frame still allows --out in a folder no company points at" 'j["argv"][0]=="--frame"' "$out"
+rm "$hq/companies/acme/recordings/sneaky"
 
 # run: the guide review, approval and frame list modes pass through like the others.
 out="$(run run review-sop "$pkg" --move 3 1 --reword 2 "Click Save" --drop 4 --json)"
 check "run review-sop passes every change to the app" \
   "j[\"argv\"]==[\"--review-sop\", \"$real_pkg\", \"--move\", \"3\", \"1\", \"--reword\", \"2\", \"Click Save\", \"--drop\", \"4\", \"--json\"]" "$out"
-out="$(run run --approve-sop "$pkg" --reviewer "Pat Lee" --json)"
-check "run approve-sop passes the reviewer" \
-  "j[\"argv\"]==[\"--approve-sop\", \"$real_pkg\", \"--reviewer\", \"Pat Lee\", \"--json\"]" "$out"
+out="$(run run --approve-sop "$pkg" --reviewer "Pat Lee" --revision drafts/draft-003.json --json)"
+check "run approve-sop passes the reviewer and the shown revision" \
+  "j[\"argv\"]==[\"--approve-sop\", \"$real_pkg\", \"--reviewer\", \"Pat Lee\", \"--revision\", \"drafts/draft-003.json\", \"--json\"]" "$out"
+# Approval binds to the revision the user was shown, so approve-sop must name it.
+check "run approve-sop refuses without --revision" 'j["error"]=="bad-argument" and "--revision" in j["message"]' \
+  "$(run run approve-sop "$pkg" --reviewer "Pat Lee" --json)"
+expect "run approve-sop without --revision exits 3" "$(code run approve-sop "$pkg" --reviewer "Pat Lee")" "3"
+check "run approve-sop refuses an empty --revision" 'j["error"]=="bad-argument"' \
+  "$(run run approve-sop "$pkg" --reviewer "Pat Lee" --revision "")"
+check "run approve-sop refuses --revision with no value" 'j["error"]=="bad-argument"' \
+  "$(run run approve-sop "$pkg" --reviewer "Pat Lee" --revision)"
+skill="$here/../skills/record-process/SKILL.md"
+expect "every approve-sop in the skill passes --revision" \
+  "$(grep -E 'run approve-sop' "$skill" | grep -vc -- '--revision' || true)" "0"
+expect "the skill shows at least one approve-sop call" "$(grep -cE 'run approve-sop' "$skill")" "1"
 out="$(run run list-frames "$pkg" --step 2 --json)"
 check "run list-frames passes the step" "j[\"argv\"]==[\"--list-frames\", \"$real_pkg\", \"--step\", \"2\", \"--json\"]" "$out"
 out="$(run run edit "$pkg" --cut 3.2-4.1 --cut 9-9.6 --json)"
@@ -376,7 +402,7 @@ check "run edit passes repeated cuts" \
 check "run review-sop refuses another company's recording" 'j["error"]=="package-outside-company"' \
   "$(run run review-sop "$hq/companies/other/recordings/theirs.hqrec" --drop 1)"
 check "run approve-sop refuses a symlink to another company's recording" 'j["error"]=="package-outside-company"' \
-  "$(run run approve-sop "$hq/companies/acme/recordings/link.hqrec" --reviewer Pat)"
+  "$(run run approve-sop "$hq/companies/acme/recordings/link.hqrec" --reviewer Pat --revision drafts/draft-001.json)"
 check "run list-frames refuses a company override" 'j["error"]=="bad-argument"' "$(run run list-frames "$pkg" --company other)"
 check "run review-sop refuses a destination override" 'j["error"]=="bad-argument"' "$(run run review-sop "$pkg" --destination /tmp)"
 check "run rejects approve-sop given as a second mode" 'j["error"]=="bad-argument"' "$(run run review-sop "$pkg" --approve-sop)"
@@ -466,8 +492,10 @@ json.dump({"schema": 1, "state": state, "company": company, "destination": dest,
            "updatedAt": "2026-01-01T00:00:00Z"}, open(path, "w"))' \
     "$HQ_RECORDER_HOME/active/status.json" "$1" "$2" "$3" "$hq/companies/$1/recordings"
 }
-sleep 60 & gone=$!
-kill "$gone"; wait "$gone" 2>/dev/null || true
+# A pid that has exited. It is taken from a child that python3 started and reaped, not from
+# `sleep & kill`: a background child killed before it execs still carries this script's EXIT
+# trap, and would run cleanup and delete $tmp in the middle of the test.
+gone="$(python3 -I -c 'import subprocess; p = subprocess.Popen(["true"]); p.wait(); print(p.pid)')"
 
 # A status whose pid is now a different program (here this test's shell) is not HQ Capture.
 fake_status acme recording $$
@@ -504,6 +532,30 @@ kill "$live" 2>/dev/null || true; wait "$live" 2>/dev/null || true
 check "status is none once that app has exited" 'j=={"ok": True, "state": "none"}' "$(run status)"
 rm -rf "$HQ_RECORDER_HOME/active"
 
+# Permission relaunch: the app quit for macOS Quit & Reopen and reported relaunching.
+fake_status acme relaunching "$gone"
+check "a fresh relaunching status is reported as relaunching" 'j["state"]=="relaunching"' "$(run status)"
+check "start is refused while macOS reopens the app" 'j["error"]=="already-open"' "$(run start)"
+expect "wait keeps waiting through relaunching" "$(set +e; bash "$R" wait --timeout 1 >/dev/null 2>&1; echo $?)" "3"
+# The reopened app reports awaiting-start under its own pid; wait follows it instead of returning.
+python3 -I -c 'import time; time.sleep(60)' & reopened=$!
+( python3 -I -c 'import time; time.sleep(1.2)'
+  fake_status acme awaiting-start "$reopened" ) &
+out="$(set +e; bash "$R" wait --timeout 4 2>/dev/null; echo "exit=$?")"
+check "wait prints relaunching first" 'j["state"]=="relaunching"' "$(head -n 1 <<<"$out")"
+check "wait then follows the reopened app" 'j["event"]=="state" and j["state"]=="awaiting-start"' "$(sed -n 2p <<<"$out")"
+expect "wait is still open at its timeout" "$(last "$out")" "exit=3"
+kill "$reopened" 2>/dev/null || true; wait "$reopened" 2>/dev/null || true
+# If no reopened app reports within the relaunch wait, it was a plain quit.
+fake_status acme relaunching "$gone"
+check "a relaunching status with no reopened app becomes closed" 'j["state"]=="closed"' \
+  "$(HQ_RECORDER_RELAUNCH_WAIT=0 run status)"
+check "wait returns closed once the relaunch wait has passed" 'j["state"]=="closed"' \
+  "$(last "$(HQ_RECORDER_RELAUNCH_WAIT=0 run wait --timeout 2)")"
+check "start proceeds once the relaunch wait has passed" 'j["state"]=="awaiting-start"' "$(HQ_RECORDER_RELAUNCH_WAIT=0 run start)"
+check "stop closes it" 'j["state"]=="closed"' "$(run stop)"
+rm -rf "$HQ_RECORDER_HOME/active"
+
 # Build lock: a build waits for a live lock holder and clears a lock left by a dead one.
 mkdir -p "$HQ_RECORDER_HOME/.build.lock"
 sleep 60 & holder=$!
@@ -522,6 +574,69 @@ python3 -I -c 'import os,sys,time; t=time.time()-60; os.utime(sys.argv[1], (t, t
 check "build clears a lock with no pid older than 30 seconds" 'j["ok"] and j["built"] is True' "$(HQ_RECORDER_LOCK_WAIT=1 run build --force)"
 [ ! -e "$HQ_RECORDER_HOME/.build.lock" ] && pass=$((pass + 1)) \
   || { echo "FAIL: build should release the lock it took over" >&2; exit 1; }
+
+# Several builds that all find the same stale lock: only one takes it over at a time. The race
+# compiler marks itself inside with mkdir, so a second build inside at once is recorded.
+cat >"$tmp/race-compile.sh" <<'EOF'
+#!/usr/bin/env bash
+d="$(dirname "$0")"
+mkdir "$d/race.inside" 2>/dev/null || echo overlap >>"$d/race.log"
+sleep 0.4
+rmdir "$d/race.inside" 2>/dev/null || true
+exec "$d/stub-compile.sh" "$@"
+EOF
+chmod +x "$tmp/race-compile.sh"
+rm -f "$tmp/race.log"
+for round in 1 2 3; do
+  rm -rf "$HQ_RECORDER_HOME/.build.lock"; mkdir -p "$HQ_RECORDER_HOME/.build.lock"
+  echo "$gone" >"$HQ_RECORDER_HOME/.build.lock/pid"
+  pids=()
+  for i in 1 2 3 4 5 6; do
+    HQ_RECORDER_COMPILE="$tmp/race-compile.sh" HQ_RECORDER_LOCK_WAIT=30 HQ_RECORDER_TAKEOVER_PAUSE=0.3 \
+      bash "$R" build --force >/dev/null 2>&1 & pids+=($!)
+  done
+  for p in "${pids[@]}"; do wait "$p" || true; done
+done
+expect "builds racing for a stale lock never build at the same time" "$( [ -f "$tmp/race.log" ] && wc -l <"$tmp/race.log" | tr -d ' ' || echo 0)" "0"
+nested="$(find "$HQ_RECORDER_HOME" -path '*HQ Capture.app/*HQ Capture.app' -print -quit)"
+expect "racing builds never nest one app inside another" "$nested" ""
+
+# A lock naming a live pid whose start time differs (the pid was reused by another program) is stale.
+mkdir -p "$HQ_RECORDER_HOME/.build.lock"
+printf '%s\n%s\n' "$$" "Thu Jan  1 00:00:00 1970" >"$HQ_RECORDER_HOME/.build.lock/pid"
+check "build clears a lock whose pid now belongs to a later process" 'j["ok"] and j["built"] is True' \
+  "$(HQ_RECORDER_LOCK_WAIT=1 run build --force)"
+# A lock naming a live pid with its real start time is held.
+mkdir -p "$HQ_RECORDER_HOME/.build.lock"
+sleep 60 & holder=$!
+printf '%s\n%s\n' "$holder" "$(ps -p "$holder" -o lstart=)" >"$HQ_RECORDER_HOME/.build.lock/pid"
+check "build waits on a lock whose pid and start time match a live process" 'j["error"]=="build-busy"' \
+  "$(HQ_RECORDER_LOCK_WAIT=1 run build --force)"
+kill "$holder" 2>/dev/null || true; wait "$holder" 2>/dev/null || true
+rm -rf "$HQ_RECORDER_HOME/.build.lock"
+
+# Installing the new app never moves it inside an app that appeared at the same path.
+cat >"$tmp/install-hook.sh" <<'EOF'
+#!/usr/bin/env bash
+mkdir -p "$1/Contents/MacOS" && echo intruder >"$1/Contents/MacOS/intruder"
+EOF
+chmod +x "$tmp/install-hook.sh"
+out="$(HQ_RECORDER_INSTALL_HOOK="$tmp/install-hook.sh" run build --force)"
+check "build refuses to install over an app that appeared during the install" 'j["ok"] is False and j["error"]=="install-conflict"' "$out"
+expect "the refused install nested nothing" "$(find "$HQ_RECORDER_HOME" -path '*HQ Capture.app/*HQ Capture.app' -print -quit)" ""
+check "the next build installs normally" 'j["ok"] and j["built"] is True' "$(run build --force)"
+[ ! -e "$HQ_RECORDER_HOME/HQ Capture.app/Contents/MacOS/intruder" ] && pass=$((pass + 1)) \
+  || { echo "FAIL: the next build should replace the intruding app" >&2; exit 1; }
+# A build whose lock was taken over while it compiled does not install.
+cat >"$tmp/steal-compile.sh" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' 1 >"$HQ_RECORDER_HOME/.build.lock/pid"
+exec "$(dirname "$0")/stub-compile.sh" "$@"
+EOF
+chmod +x "$tmp/steal-compile.sh"
+check "a build that lost its lock does not install" 'j["ok"] is False and j["error"]=="build-busy"' \
+  "$(HQ_RECORDER_COMPILE="$tmp/steal-compile.sh" run build --force)"
+rm -rf "$HQ_RECORDER_HOME/.build.lock"
 
 # The build recipe is part of the rebuild hash.
 sed -i.bak 's/-swift-version 6 -O/-swift-version 6 -Osize/' "$R" && rm -f "$R.bak"

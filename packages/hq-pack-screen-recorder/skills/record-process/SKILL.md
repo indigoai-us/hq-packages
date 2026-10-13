@@ -72,7 +72,9 @@ recording for any other company.
 3. If macOS asks for Screen Recording, Camera or Microphone access, the user
    allows it and chooses **Quit and Reopen**. The reopened app keeps the
    company binding for 10 minutes, so no new `start` is needed. If more than
-   10 minutes pass, run `start` again.
+   10 minutes pass, run `start` again. While macOS reopens the app, `status`
+   and `wait` show `relaunching`; `wait` keeps following it until the reopened
+   app reports `awaiting-start`.
 4. `already-open` means HQ Capture is already open. Show `status` and ask
    whether to keep using it or `stop` it first.
 5. `busy` (exit 1) means another session is opening HQ Capture right now.
@@ -87,11 +89,14 @@ seconds) and exits:
 
 - **3 (still open):** the last line is the current status. Report it in one
   line (`recording`, `paused`, `durationSeconds`) and run `wait` again. Keep
-  re-arming while the state is `awaiting-start`, `recording` or `finalizing`.
+  re-arming while the state is `awaiting-start`, `recording`, `finalizing` or
+  `relaunching`.
 - **0, state `saved`:** go to step 4. The status carries `recording` (the
   package path relative to HQ) and `resumePrompt`. It can also carry `issue`
   and `mediaIssues` (see below).
-- **0, state `closed`:** the user closed the app without saving. Say so.
+- **0, state `closed`:** run `status` once more. If it shows the app open
+  again (macOS reopened it after a permission grant), run `wait` again.
+  Otherwise the user closed the app without saving. Say so.
 - **0, state `failed` or `lost`:** report `reason` plainly. Recorded files
   that were saved stay in the company's `recordings/` folder.
 
@@ -289,16 +294,21 @@ delegate that to a sub-agent when the session already holds several images. No f
 ### Approve and export
 
 When the user is happy, ask plainly whether they approve the guide as shown.
-Only after they say yes, run, with their name as the reviewer:
+Only after they say yes, run, with their name as the reviewer and `--revision`
+set to the `head` of the review you last showed them (from the last
+`review-sop` result):
 
 ```bash
-bash "$R" run approve-sop "<package>" --reviewer "<the user's name>" --json
+bash "$R" run approve-sop "<package>" --reviewer "<the user's name>" --revision "<head>" --json
 bash "$R" run export-sop "<package>"
 ```
 
 Use the user's name from the session or from what they told you; if you
 don't know it, ask. Never approve on the user's behalf without that yes.
-`approve-sop` approves the newest revision exactly as it is. `export-sop`
+`approve-sop` approves that revision exactly as it is. It refuses when a
+newer revision was saved after the one you showed (for example from another
+session): show the user the newest review with `review-sop` and ask again.
+The launcher refuses `approve-sop` without `--revision`. `export-sop`
 writes the guide (exit 0); exit 1 means the newest revision is not approved,
 for example because a change came after the approval. Report the exported
 path.

@@ -29,8 +29,8 @@ macOS asks for each permission the first time the app uses it. Approve:
 
 For Screen Recording, macOS asks you to choose **Quit and Reopen**. The
 reopened app keeps its company binding for 10 minutes, so you can carry on
-without going back to the HQ session. After 10 minutes, run `/record-process`
-again.
+without going back to the HQ session. The session keeps following the app
+while it reopens. After 10 minutes, run `/record-process` again.
 
 You can review the permissions in System Settings → Privacy & Security.
 Because the app is built and signed on your Mac, macOS can treat an updated
@@ -101,7 +101,8 @@ The HQ session and the app talk through files in
 `~/Library/Application Support/HQ Capture/active/`:
 
 - `status.json` is written by the app. Fields: `schema`, `state`
-  (`awaiting-start`, `recording`, `finalizing`, `saved`, `failed`, `closed`),
+  (`awaiting-start`, `recording`, `finalizing`, `saved`, `failed`, `closed`,
+  or `relaunching` when the app quit for **Quit and Reopen**),
   `company`, `destination`, `pid`, `updatedAt`, `paused` and
   `durationSeconds` while recording, `recording` and `resumePrompt` once
   saved, `reason` when it failed or was stopped, and `issue` when a saved
