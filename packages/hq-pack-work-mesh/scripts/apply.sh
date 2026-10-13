@@ -83,7 +83,7 @@ unload_old_listen() {
 }
 unload_old_listen
 
-# 2. Wire pack into core/packages so scan-packages can symlink (no clobber).
+# 2. Wire pack into core/packages so `hq core scan-packages` can symlink (no clobber).
 DEST="$HQ_ROOT/core/packages/hq-pack-work-mesh"
 if [ -e "$DEST" ] && [ ! -L "$DEST" ]; then
   echo "apply: $DEST already exists as a directory — leaving it"
@@ -92,8 +92,8 @@ elif [ ! -e "$DEST" ]; then
   ln -s "$PACK_ROOT" "$DEST"
   echo "apply: linked $DEST -> $PACK_ROOT"
 fi
-if [ -x "$HQ_ROOT/core/scripts/scan-packages.sh" ]; then
-  (cd "$HQ_ROOT" && bash core/scripts/scan-packages.sh) || true
+if command -v hq >/dev/null 2>&1; then
+  (cd "$HQ_ROOT" && HQ_ROOT="$HQ_ROOT" hq core scan-packages) || true
 fi
 
 # 3. Drop a stale generic genesis.sh link if an older apply wired one.
