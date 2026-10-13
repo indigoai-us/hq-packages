@@ -1,6 +1,6 @@
 ---
 name: sample-size-check
-description: Before a test starts, check whether the page's traffic can reach significance in a reasonable time: baseline rate, minimum detectable effect, visitors per week from the export, and the weeks needed. Says go, wait, or test something bigger.
+description: "Before a test starts, check whether the page's traffic can reach significance in a reasonable time: baseline rate, minimum detectable effect, visitors per week from the export, and the weeks needed. Says go, wait, or test something bigger."
 triggers:
   - sample size
   - can we run a test here

@@ -1,6 +1,6 @@
 ---
 name: newsletter-issue
-description: Draft one issue of the agency's newsletter from the week's work: one lesson from a readout, an audit or a teardown, written as a short story with the numbers, in the agency's voice. Anonymizes clients unless permission is recorded. Draft only.
+description: "Draft one issue of the agency's newsletter from the week's work: one lesson from a readout, an audit or a teardown, written as a short story with the numbers, in the agency's voice. Anonymizes clients unless permission is recorded. Draft only."
 triggers:
   - newsletter issue
   - write this week's newsletter

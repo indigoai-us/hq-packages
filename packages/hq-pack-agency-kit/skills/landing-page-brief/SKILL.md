@@ -1,6 +1,6 @@
 ---
 name: landing-page-brief
-description: Write the brief a designer or builder needs for one page: the buyer, the one job of the page, the message hierarchy section by section, the proof to use, the objections to answer, the form, and the data point behind each decision.
+description: "Write the brief a designer or builder needs for one page: the buyer, the one job of the page, the message hierarchy section by section, the proof to use, the objections to answer, the form, and the data point behind each decision."
 triggers:
   - landing page brief
   - brief for the new page

@@ -1,6 +1,6 @@
 ---
 name: pricing-page-review
-description: Review the pricing page against what the product details say the client actually sells and what the CRM says buyers choose: plan names, the number shown, billing period, minimums, the trial, and the exit rate. Says what to show and what to drop.
+description: "Review the pricing page against what the product details say the client actually sells and what the CRM says buyers choose: plan names, the number shown, billing period, minimums, the trial, and the exit rate. Says what to show and what to drop."
 triggers:
   - pricing page review
   - review the pricing

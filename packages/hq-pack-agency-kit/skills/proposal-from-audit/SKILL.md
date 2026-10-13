@@ -1,6 +1,6 @@
 ---
 name: proposal-from-audit
-description: Turn an approved conversion audit into a Page Sprint proposal: the top experiment as the scope, the page, the metric and baseline, what is in and out, the package price and timeline from the rate card, and the evidence section quoted from the audit. Draft only.
+description: "Turn an approved conversion audit into a Page Sprint proposal: the top experiment as the scope, the page, the metric and baseline, what is in and out, the package price and timeline from the rate card, and the evidence section quoted from the audit. Draft only."
 triggers:
   - proposal from the audit
   - page sprint proposal

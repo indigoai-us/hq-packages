@@ -1,6 +1,6 @@
 ---
 name: pricing-table-copy
-description: Write the pricing table from the product details only: plan names, prices, units, billing period, minimums, what each plan is for, the trial, and the one FAQ per objection the CRM shows. Shows what exists; never sets a price.
+description: "Write the pricing table from the product details only: plan names, prices, units, billing period, minimums, what each plan is for, the trial, and the one FAQ per objection the CRM shows. Shows what exists; never sets a price."
 triggers:
   - write the pricing table
   - pricing page copy

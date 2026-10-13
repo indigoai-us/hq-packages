@@ -3,6 +3,6 @@ modules:
   - name: hq-pack-agency-kit
     strategy: package
     source: /Users/jacobposel/Documents/HQ/workspace/worktrees/hq-packages/cro-kit/packages/hq-pack-agency-kit
-    version: 0.6.0
-    installed_at_iso: '2026-10-13T12:17:11.051Z'
+    version: 0.6.1
+    installed_at_iso: '2026-10-13T12:38:10.180Z'
     access: public

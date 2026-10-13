@@ -1,6 +1,6 @@
 ---
 name: hypothesis-writer
-description: Turn an audit finding into a testable hypothesis: if we change X on page Y for segment Z, metric M moves, because the data shows D. One per finding, with the minimum detectable effect and the source.
+description: "Turn an audit finding into a testable hypothesis: if we change X on page Y for segment Z, metric M moves, because the data shows D. One per finding, with the minimum detectable effect and the source."
 triggers:
   - write the hypothesis
   - hypothesis for

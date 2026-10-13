@@ -1,6 +1,6 @@
 ---
 name: form-friction-audit
-description: Audit every form on the client's site: required fields, what each is used for, whether it matches the motion (trial or demo), and the analytics start-to-complete rate when the export has it. Recommends the fields to cut.
+description: "Audit every form on the client's site: required fields, what each is used for, whether it matches the motion (trial or demo), and the analytics start-to-complete rate when the export has it. Recommends the fields to cut."
 triggers:
   - form friction
   - audit the forms

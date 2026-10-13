@@ -1,6 +1,6 @@
 ---
 name: icp-statement
-description: Write the client's ideal customer profile from the CRM export: the segment, size, title and trigger of the deals that close, and the ones that do not. One paragraph the whole site can be written to, every number from the export.
+description: "Write the client's ideal customer profile from the CRM export: the segment, size, title and trigger of the deals that close, and the ones that do not. One paragraph the whole site can be written to, every number from the export."
 triggers:
   - write the ICP
   - who is the ideal customer

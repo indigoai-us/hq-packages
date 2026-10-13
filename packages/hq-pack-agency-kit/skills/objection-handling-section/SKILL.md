@@ -1,6 +1,6 @@
 ---
 name: objection-handling-section
-description: Write the section that answers the objections buyers raise before they ask: security, integrations, migration, price, time to value. Each objection from the CRM lost reasons or transcripts with its count; each answer from the product details only.
+description: "Write the section that answers the objections buyers raise before they ask: security, integrations, migration, price, time to value. Each objection from the CRM lost reasons or transcripts with its count; each answer from the product details only."
 triggers:
   - objection handling
   - answer the objections

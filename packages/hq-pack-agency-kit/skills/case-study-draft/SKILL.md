@@ -1,6 +1,6 @@
 ---
 name: case-study-draft
-description: Draft a case study from an engagement's readouts and engagement record: the client's situation, what was changed and why, the measured result with its source, and the client's words from transcripts. Marks every claim that still needs the client's permission.
+description: "Draft a case study from an engagement's readouts and engagement record: the client's situation, what was changed and why, the measured result with its source, and the client's words from transcripts. Marks every claim that still needs the client's permission."
 triggers:
   - case study
   - write up the results for

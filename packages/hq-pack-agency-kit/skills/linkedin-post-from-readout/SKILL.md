@@ -1,6 +1,6 @@
 ---
 name: linkedin-post-from-readout
-description: Turn a test readout or an audit finding into a LinkedIn post: the surprising number first, what was tried, what happened, one takeaway, under 150 words, in the agency's voice. Anonymizes the client; draft only.
+description: "Turn a test readout or an audit finding into a LinkedIn post: the surprising number first, what was tried, what happened, one takeaway, under 150 words, in the agency's voice. Anonymizes the client; draft only."
 triggers:
   - linkedin post
   - post about the test

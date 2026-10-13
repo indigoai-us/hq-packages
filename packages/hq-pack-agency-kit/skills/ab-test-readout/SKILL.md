@@ -1,6 +1,6 @@
 ---
 name: ab-test-readout
-description: Write the readout for a finished A/B test from its results export: what was tested, the numbers per variant, whether the result is significant, what we learned, and what to do next. Never calls a losing or inconclusive test a win.
+description: "Write the readout for a finished A/B test from its results export: what was tested, the numbers per variant, whether the result is significant, what we learned, and what to do next. Never calls a losing or inconclusive test a win."
 triggers:
   - test readout
   - write up the test results

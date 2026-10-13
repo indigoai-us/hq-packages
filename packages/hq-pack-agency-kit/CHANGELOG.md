@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.2 (2026-10-13)
+
+- Quoted the descriptions of 17 library skills whose text contained a colon; the
+  unquoted form was invalid YAML and company sync refused to upload them.
+
 ## 0.6.1 (2026-10-13)
 
 - Setup copies the pack's skills into `companies/{firm}/skills/` with the new

@@ -1,6 +1,6 @@
 ---
 name: analytics-leak-finder
-description: Read the analytics export and find the pages and devices where visitors leave: exit and bounce by page and device, the biggest drops between funnel steps, and what each leak is worth. Numbers only from the export, each with its row.
+description: "Read the analytics export and find the pages and devices where visitors leave: exit and bounce by page and device, the biggest drops between funnel steps, and what each leak is worth. Numbers only from the export, each with its row."
 triggers:
   - where are we leaking
   - analytics leaks

@@ -1,6 +1,6 @@
 ---
 name: customer-interview-synthesis
-description: Turn a set of customer interview transcripts into the patterns that matter for conversion work: the jobs people hire the product for, the words they use, the objections they raise, and the moments they decided. Every pattern cites the transcript and timestamp.
+description: "Turn a set of customer interview transcripts into the patterns that matter for conversion work: the jobs people hire the product for, the words they use, the objections they raise, and the moments they decided. Every pattern cites the transcript and timestamp."
 triggers:
   - synthesize the interviews
   - what did customers say

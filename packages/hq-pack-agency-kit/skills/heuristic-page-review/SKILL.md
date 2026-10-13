@@ -1,6 +1,6 @@
 ---
 name: heuristic-page-review
-description: Review one page against the playbook's audit criteria without new data: clarity in five seconds, one primary action, proof near the claim, objections answered, form friction. Quotes the page and scores each criterion; flags what data would confirm it.
+description: "Review one page against the playbook's audit criteria without new data: clarity in five seconds, one primary action, proof near the claim, objections answered, form friction. Quotes the page and scores each criterion; flags what data would confirm it."
 triggers:
   - review this page
   - heuristic review

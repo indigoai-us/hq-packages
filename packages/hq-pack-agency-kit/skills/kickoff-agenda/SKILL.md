@@ -1,6 +1,6 @@
 ---
 name: kickoff-agenda
-description: Draft the agenda for the client kickoff call from the engagement record, the proposal or SOW and the open questions: what we agreed, what we need, decisions to make on the call, and who owns what. Under one page; draft only.
+description: "Draft the agenda for the client kickoff call from the engagement record, the proposal or SOW and the open questions: what we agreed, what we need, decisions to make on the call, and who owns what. Under one page; draft only."
 triggers:
   - kickoff agenda
   - agenda for the kickoff
