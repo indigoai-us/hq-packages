@@ -2,7 +2,7 @@
 
 ## 0.3.0
 
-- Vendored HQ Capture from local-screen-recorder ef85eba: middle cuts, guide
+- Vendored HQ Capture from local-screen-recorder da8e7f8: middle cuts, guide
   review and approval commands, screenshot frame listing, media length checks,
   the rounded Liquid Glass window style, the window coming back to the front
   on stop and on launch, and roomier controls. App version 0.3.0 (build 3).
@@ -57,6 +57,19 @@
 - `doctor` works without python3 and uses the same developer directory as the
   build.
 - The skill tells the agent to run `wait` when `stop` returns `finalizing`.
+- `draft-sop` no longer hides a reviewed or approved guide. When a review
+  exists it refuses with exit 1 and writes nothing, unless the user asked to
+  start over and the agent passes `--replace-review`. `--retry-failed` fills
+  only the empty steps of the current review and keeps edits, order and
+  screenshots; an approved guide gets a new unapproved revision. The app's
+  guide button opens the existing review instead of drafting again, and
+  export and vault sync use the current review.
+- The skill runs `review-sop` before drafting, and on resume continues an
+  existing review instead of drafting again.
+- A leftover edit or guide revision file no longer blocks saves. The next free
+  revision number is used.
+- Export renders the newest saved edit, read under the recording lock, and
+  records which edit it rendered.
 - The package is private.
 - Stopping while a capture is still starting waits for the start and then
   stops it, so no capture keeps running after a stop.

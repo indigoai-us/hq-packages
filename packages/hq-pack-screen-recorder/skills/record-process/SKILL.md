@@ -214,10 +214,24 @@ Report the exported `path` and offer to reveal it: `open -R "<path>"`.
 
 ## 7. Draft the step-by-step guide
 
+First check for a guide the user already reviewed:
+
+```bash
+bash "$R" run review-sop "<package>" --json
+```
+
+If it shows steps, the recording already has a guide. Go straight to
+"Review the guide in chat" below and do not draft again. Draft only when
+`review-sop` refuses with "This recording has no SOP draft yet":
+
 ```bash
 bash "$R" run extract-screen-evidence "<package>"
 bash "$R" run draft-sop "<package>"
 ```
+
+- `draft-sop` refuses (exit 1, nothing written) when a reviewed guide
+  exists, so a new draft never hides the user's edits or approval. Pass
+  `--replace-review` only when the user asks to start the guide over.
 
 - `extract-screen-evidence` exit 1 means the screen text was not reliable;
   the draft will use narration alone. Tell the user.
@@ -227,7 +241,10 @@ bash "$R" run draft-sop "<package>"
   actions), drafted only part, or found no supported steps. Repeat its
   message plainly. Do not write the missing steps yourself and do not invent
   steps from the video; offer to record again with more narration. A partial
-  draft can be retried with `--retry-failed`.
+  draft can be retried with `draft-sop "<package>" --retry-failed`. When a
+  review exists, the retry fills only the empty steps and keeps every edit,
+  order and screenshot choice. If the guide was approved, the retry saves a
+  new unapproved revision and the user must approve again.
 - Never present the draft as approved.
 
 ### Review the guide in chat
@@ -318,6 +335,8 @@ inside that company's `recordings/` folder. On `company-mismatch`, say which
 company the recording belongs to and ask the user to open a session for it;
 do not rebind. On any other refusal, say the prompt doesn't point to a
 recording in this company. On success, continue at step 4 with `package`.
+When the guide step comes, run `review-sop` first as step 7 says; if a
+reviewed guide exists, continue the review instead of drafting.
 
 ## Rules
 

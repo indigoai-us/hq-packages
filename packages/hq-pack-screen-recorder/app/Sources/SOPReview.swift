@@ -172,6 +172,16 @@ struct SOPReviewDocument: Codable, Equatable, Sendable {
         edited()
     }
 
+    /// Fills a step whose drafting failed with a retried instruction. The step's wording is set only
+    /// when the reviewer left it blank; order, screenshot and every other edit stay as they are.
+    mutating func fillDraftedInstruction(_ text: String, candidate: Int) {
+        for i in steps.indices where steps[i].candidate == candidate && steps[i].draftedInstruction == nil {
+            steps[i].draftedInstruction = text
+            if steps[i].instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { steps[i].instruction = text }
+            edited()
+        }
+    }
+
     mutating func removeStep(_ id: String) throws {
         removed.append(steps.remove(at: try index(of: id)))
         edited()
@@ -377,20 +387,25 @@ enum SOPReviewWorkflow {
         var saved = document
         // The revision path is chosen under the package lock, so the history names the revision
         // this save really writes even when another command saved a draft first.
-        try store.mutateManifest(in: package) { latest in
-            try unchanged(latest)
-            let revision = RecordingPackageStore.nextDraftPath(latest)
-            path = revision
-            saved = document
-            saved.history.append(.init(revision: revision, savedAt: SessionStatus.now(),
-                                       approval: saved.approval.state, steps: saved.steps.count))
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            try store.writeDraftRevision(body: String(decoding: try encoder.encode(saved), as: UTF8.self),
-                                         source: "\(sourcePrefix):\(approval.rawValue)", approval: approval,
-                                         to: &latest, in: package)
-            addKept(&latest)
-            latest.sync = sync
+        do {
+            try store.mutateManifest(in: package) { latest in
+                try unchanged(latest)
+                let encoder = JSONEncoder()
+                encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+                path = try store.writeDraftRevision(source: "\(sourcePrefix):\(approval.rawValue)", approval: approval,
+                                                    to: &latest, in: package) { revision in
+                    saved = document
+                    saved.history.append(.init(revision: revision, savedAt: SessionStatus.now(),
+                                               approval: saved.approval.state, steps: saved.steps.count))
+                    return String(decoding: try encoder.encode(saved), as: UTF8.self)
+                }
+                addKept(&latest)
+                latest.sync = sync
+            }
+        } catch {
+            // The revision file was created but the manifest was not saved, so nothing lists it.
+            if !path.isEmpty { try? FileManager.default.removeItem(at: store.url(for: path, in: package)) }
+            throw error
         }
         document = saved
         return path
@@ -405,6 +420,15 @@ enum SOPReviewWorkflow {
         try store.writeData(try ScreenEvidenceExtractor.png(image), to: path, in: package)
         try store.mutateManifest(in: package) { $0.screenshots.append(path) }
         return path
+    }
+
+    /// The review `load` and `head` use: the newest review revision based on the newest SOP draft,
+    /// with its saved approval. Nil when that draft has no review yet. Export and skill
+    /// registration use this too, so they never act on a review the user no longer sees.
+    static func currentReview(manifest: RecordingManifest, package: URL,
+                              store: RecordingPackageStore) throws -> (SOPReviewDocument, String, DraftRevision.Approval)? {
+        guard let review = try current(manifest: manifest, package: package, store: store).review else { return nil }
+        return (review.0, review.1, try readRevision(review.1, package: package, store: store).approval)
     }
 
     static func latestReview(manifest: RecordingManifest, package: URL,
@@ -502,7 +526,7 @@ struct SOPExportRecord: Codable, Equatable, Sendable {
 enum SOPExporter {
     static let folderPrefix = "exports/"
 
-    /// Exports the newest review revision. Refuses unless that saved revision is approved and its
+    /// Exports the current review revision (see `currentReview`). Refuses unless that saved revision is approved and its
     /// approval still matches its content. Writes `exports/vNNN/` and never replaces an export.
     static func export(package: URL, store: RecordingPackageStore, includeSkill: Bool = true,
                        syncChecker: any SyncChecking = HQSyncCLIChecker(),
@@ -510,7 +534,7 @@ enum SOPExporter {
         // Sync is checked before any file is written; the manifest is saved under the package lock.
         let observation = await syncChecker.observe(vaultKey: try store.readManifest(in: package).vaultKey)
         let manifest = try store.readManifest(in: package)
-        guard let latest = try SOPReviewWorkflow.latestReview(manifest: manifest, package: package, store: store)
+        guard let latest = try SOPReviewWorkflow.currentReview(manifest: manifest, package: package, store: store)
         else { throw SOPReviewError.notApproved }
         let (document, revisionPath, savedApproval) = latest
         guard savedApproval == .approved, document.approval.state == .approved else { throw SOPReviewError.notApproved }
@@ -577,7 +601,7 @@ enum SOPExporter {
             saved = try store.mutateManifest(in: package) { latest in
                 // A review saved while this export was written would be hidden behind an export of
                 // the older one, so the export is refused and its folder removed.
-                guard try SOPReviewWorkflow.latestReview(manifest: latest, package: package, store: store)?.1
+                guard try SOPReviewWorkflow.currentReview(manifest: latest, package: package, store: store)?.1
                     == revisionPath else { throw SOPReviewError.reviewChanged }
                 latest.exports = (latest.exports ?? []) + written.filter { !(latest.exports ?? []).contains($0) }
                 latest.sync = sync

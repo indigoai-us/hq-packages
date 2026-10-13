@@ -331,6 +331,9 @@ struct RecordingManifest: Codable, Equatable, Sendable {
         /// The kept ranges when the edit had middle cuts. Absent for one range and in older exports.
         var kept: [RecordingProject.TrimRange]?
         var webcam: RecordingProject.WebcamPlacement
+        /// The edit revision the video was rendered from. Absent when there was no edit and in
+        /// older exports.
+        var edit: String?
     }
 
     struct Sync: Codable, Equatable, Sendable {
@@ -733,16 +736,31 @@ struct RecordingPackageStore: Sendable {
                     to manifest: inout RecordingManifest, in package: URL) throws {
         try RecordingProject(id: manifest.id, title: manifest.title, tracks: [], trim: trim, kept: kept,
                              webcam: webcam).validate()
-        manifest = try mutateManifest(in: package) { latest in
-            let revision = latest.edits.count + 1
-            let path = String(format: "edits/edit-%03d.json", revision)
-            try writeNewJSON(EditRevision(revision: revision, createdAt: SessionStatus.now(), trim: trim, kept: kept,
-                                          webcam: webcam),
-                             to: path, in: package)
-            latest.trim = trim
-            latest.kept = kept
-            latest.webcam = webcam
-            latest.edits.append(path)
+        var written: String?
+        do {
+            manifest = try mutateManifest(in: package) { latest in
+                // A number whose file is already there (for example left by a save that stopped
+                // before the manifest was written) is skipped, never overwritten.
+                var revision = latest.edits.count + 1
+                while true {
+                    let path = String(format: "edits/edit-%03d.json", revision)
+                    let data = try Self.encodeJSON(EditRevision(revision: revision, createdAt: SessionStatus.now(),
+                                                                trim: trim, kept: kept, webcam: webcam))
+                    if try !latest.edits.contains(path) && createNew(data, at: path, in: package) {
+                        written = path
+                        break
+                    }
+                    revision += 1
+                }
+                latest.trim = trim
+                latest.kept = kept
+                latest.webcam = webcam
+                latest.edits.append(written ?? "")
+            }
+        } catch {
+            // The file was created but the manifest was not saved, so nothing lists it.
+            if let written { try? FileManager.default.removeItem(at: url(for: written, in: package)) }
+            throw error
         }
     }
 
@@ -760,28 +778,47 @@ struct RecordingPackageStore: Sendable {
     func appendDraft(source: String, approval: DraftRevision.Approval = .unapproved, in package: URL,
                      change: (inout RecordingManifest) throws -> Void = { _ in },
                      body: (String) throws -> String) throws -> RecordingManifest {
-        try mutateManifest(in: package) { latest in
-            try writeDraftRevision(body: body(Self.nextDraftPath(latest)), source: source, approval: approval,
-                                   to: &latest, in: package)
-            try change(&latest)
+        var written: String?
+        do {
+            return try mutateManifest(in: package) { latest in
+                written = try writeDraftRevision(source: source, approval: approval, to: &latest, in: package, body: body)
+                try change(&latest)
+            }
+        } catch {
+            // The file was created but the manifest was not saved, so nothing lists it.
+            if let written { try? FileManager.default.removeItem(at: url(for: written, in: package)) }
+            throw error
         }
-    }
-
-    /// The path the next draft revision will be saved at.
-    static func nextDraftPath(_ manifest: RecordingManifest) -> String {
-        String(format: "drafts/draft-%03d.json", manifest.drafts.count + 1)
     }
 
     /// Writes a draft revision and adds it to `manifest` without saving the manifest. Only for use
     /// inside a `mutateManifest` change.
     func writeDraftRevision(body: String, source: String, approval: DraftRevision.Approval = .unapproved,
                             to manifest: inout RecordingManifest, in package: URL) throws {
-        let revision = manifest.drafts.count + 1
-        let path = Self.nextDraftPath(manifest)
-        try writeNewJSON(DraftRevision(revision: revision, createdAt: SessionStatus.now(), approval: approval,
-                                       source: source, body: body),
-                         to: path, in: package)
-        manifest.drafts.append(.init(relativePath: path, approval: approval))
+        try writeDraftRevision(source: source, approval: approval, to: &manifest, in: package) { _ in body }
+    }
+
+    /// Writes a draft revision at the first free `drafts/draft-NNN.json` from one past the listed
+    /// drafts, and adds it to `manifest` without saving the manifest. A number whose file is already
+    /// there is skipped, never overwritten. `body` gets the path it is written at. Returns the path.
+    /// Only for use inside a `mutateManifest` change.
+    @discardableResult
+    func writeDraftRevision(source: String, approval: DraftRevision.Approval = .unapproved,
+                            to manifest: inout RecordingManifest, in package: URL,
+                            body: (String) throws -> String) throws -> String {
+        var revision = manifest.drafts.count + 1
+        while true {
+            let path = String(format: "drafts/draft-%03d.json", revision)
+            if !manifest.drafts.contains(where: { $0.relativePath == path }) {
+                let data = try Self.encodeJSON(DraftRevision(revision: revision, createdAt: SessionStatus.now(),
+                                                             approval: approval, source: source, body: body(path)))
+                if try createNew(data, at: path, in: package) {
+                    manifest.drafts.append(.init(relativePath: path, approval: approval))
+                    return path
+                }
+            }
+            revision += 1
+        }
     }
 
     /// Absolute URL for a package-relative path, refused when it would leave the package or the
@@ -951,10 +988,14 @@ extension RecordingPackageStore {
     /// The video is written to a hidden temporary file and only moved into place once it is
     /// complete and checked, so cancelling, a full disk or a failure leaves the recorded media,
     /// earlier exports and the manifest as they were. Nothing is uploaded or shared.
-    func exportVideo(manifest: RecordingManifest, timeline: RecordingTimeline,
+    /// The trim, cuts and camera placement come from the newest saved edit, read under the
+    /// package lock, not from the passed manifest, which may be older. The entry names the
+    /// edit revision that was rendered, so an edit saved during the render is not claimed.
+    func exportVideo(manifest passed: RecordingManifest, timeline: RecordingTimeline,
                      in package: URL) async throws -> (url: URL, manifest: RecordingManifest) {
         let package = try root.contain(package)
-        guard manifest.company == root.company else { throw PackageError.companyMismatch }
+        guard passed.company == root.company else { throw PackageError.companyMismatch }
+        let manifest = try withPackageLock(package) { try readManifest(in: package) }
         let folder = try url(for: Self.exportsFolder, in: package)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         var path = try nextExportPath(for: manifest, in: package)
@@ -985,7 +1026,7 @@ extension RecordingPackageStore {
         }
         let entry = RecordingManifest.Export(
             relativePath: path, createdAt: SessionStatus.now(), durationSeconds: duration,
-            trim: manifest.trim, kept: manifest.kept, webcam: manifest.webcam)
+            trim: manifest.trim, kept: manifest.kept, webcam: manifest.webcam, edit: manifest.edits.last)
         let saved: RecordingManifest
         do {
             saved = try mutateManifest(in: package) { $0.videoExports = ($0.videoExports ?? []) + [entry] }

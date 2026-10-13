@@ -63,6 +63,8 @@ enum NarrationTranscriptReader {
 enum SOPDraftError: Error, Equatable {
     case unreadableTranscript(String)
     case noDraftToRetry
+    /// The newest SOP draft already has a saved review (its revision path); a new draft would hide it.
+    case reviewExists(String)
 }
 
 // MARK: - Options
@@ -976,16 +978,32 @@ struct SOPDraftResult: Equatable, Sendable {
     var manifest: RecordingManifest
 }
 
+struct SOPReviewRetryResult: Equatable, Sendable {
+    var document: SOPReviewDocument
+    /// The review revision now current: the one just saved, or the loaded one when nothing changed.
+    var revision: String
+    /// True when the retry wrote a new review revision.
+    var saved: Bool
+    /// True when the loaded review was approved and the retry changed it, so it must be approved again.
+    var approvalCleared: Bool
+    /// Kept steps still without wording after the retry.
+    var blankSteps: Int
+}
+
 enum SOPDraftWorkflow {
     /// Prefix of the draft revision `source` for segment-first SOP drafts.
     static let sourcePrefix = "sop-segment-first"
 
     /// Drafts from the package's newest transcript and screen evidence and saves the result as a
-    /// new unapproved draft revision inside the package.
+    /// new unapproved draft revision inside the package. Refuses with `reviewExists` when the
+    /// newest draft has a saved review, because the new draft would hide it; `replaceReview`
+    /// starts the guide over anyway.
     static func draft(package: URL, store: RecordingPackageStore, rewriter: any SegmentRewriting,
-                      screen: ScreenEvidenceResult? = nil, options: SOPDraftOptions = .init()) async throws -> SOPDraftResult {
+                      screen: ScreenEvidenceResult? = nil, options: SOPDraftOptions = .init(),
+                      replaceReview: Bool = false) async throws -> SOPDraftResult {
         let manifest = try store.readManifest(in: package)
         guard manifest.state == .saved || manifest.state == .interrupted else { throw PackageError.stillRecording }
+        if !replaceReview { try refuseOverReview(manifest: manifest, package: package, store: store) }
         let transcript = try NarrationTranscriptReader.latest(manifest: manifest, package: package, store: store)
         var input = SOPDraftInput(narration: transcript?.segments ?? [], transcriptPath: transcript?.path)
         if let screen {
@@ -1007,12 +1025,14 @@ enum SOPDraftWorkflow {
         if transcript == nil {
             document.evidenceGap = "No transcript in the package, so there is no narration to draft from."
         }
-        return try save(document, package: package, store: store)
+        return try save(document, package: package, store: store, replaceReview: replaceReview)
     }
 
     /// Retries the failed or pending steps of the newest SOP draft and saves a new revision.
+    /// Refuses with `reviewExists` when that draft has a review; use `retryReview` then.
     static func retry(package: URL, store: RecordingPackageStore, rewriter: any SegmentRewriting) async throws -> SOPDraftResult {
         let manifest = try store.readManifest(in: package)
+        try refuseOverReview(manifest: manifest, package: package, store: store)
         guard let latest = try latestDocument(manifest: manifest, package: package, store: store) else {
             throw SOPDraftError.noDraftToRetry
         }
@@ -1021,7 +1041,53 @@ enum SOPDraftWorkflow {
             evidence = try? JSONDecoder().decode(ScreenEvidence.self, from: Data(contentsOf: store.url(for: path, in: package)))
         }
         let updated = await SOPDrafter.retry(latest, rewriter: rewriter, evidence: evidence)
-        return try save(updated, package: package, store: store)
+        return try save(updated, package: package, store: store, replaceReview: false)
+    }
+
+    /// Retries the steps of the current review whose drafting failed, and fills them in the review
+    /// itself. Wording, order, screenshots and every other edit stay as they are. A changed review
+    /// is saved as a new unapproved revision, so an approved guide must be approved again. Returns
+    /// nil when the newest draft has no saved review.
+    static func retryReview(package: URL, store: RecordingPackageStore, rewriter: any SegmentRewriting,
+                            syncChecker: any SyncChecking = HQSyncCLIChecker()) async throws -> SOPReviewRetryResult? {
+        let loaded = try SOPReviewWorkflow.load(package: package, store: store)
+        guard let revision = loaded.revisionPath else { return nil }
+        var document = loaded.document
+        let wasApproved = document.isApproved
+        let blanks = Set(document.steps.filter { $0.draftedInstruction == nil }.map(\.candidate))
+        let draftRevision = try JSONDecoder().decode(DraftRevision.self,
+                                                     from: Data(contentsOf: store.url(for: document.basedOn, in: package)))
+        let draft = try JSONDecoder().decode(SOPDraftDocument.self, from: Data(draftRevision.body.utf8))
+        let failed = draft.steps.filter { blanks.contains($0.candidate) && $0.status != .drafted }
+        var saved: String?
+        if !failed.isEmpty {
+            var evidence: ScreenEvidence?
+            if let path = draft.screenEvidence {
+                do {
+                    evidence = try JSONDecoder().decode(ScreenEvidence.self, from: Data(contentsOf: store.url(for: path, in: package)))
+                } catch {
+                    NSLog("HQ recorder: SOP retry continues without screen evidence \(path): \(error)")
+                }
+            }
+            let retried = await SOPDrafter.retry(draft, failedSteps: failed, rewriter: rewriter, evidence: evidence)
+            for step in retried.steps where blanks.contains(step.candidate) && step.status == .drafted {
+                if let text = step.instruction { document.fillDraftedInstruction(text, candidate: step.candidate) }
+            }
+            saved = try await SOPReviewWorkflow.autosave(&document, package: package, store: store,
+                                                         syncChecker: syncChecker,
+                                                         expecting: SOPReviewWorkflow.head(of: loaded))
+        }
+        let blank = document.steps.filter { $0.instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.count
+        return SOPReviewRetryResult(document: document, revision: saved ?? revision, saved: saved != nil,
+                                    approvalCleared: wasApproved && saved != nil && !document.isApproved,
+                                    blankSteps: blank)
+    }
+
+    /// Throws `reviewExists` when the newest SOP draft has a saved review.
+    private static func refuseOverReview(manifest: RecordingManifest, package: URL, store: RecordingPackageStore) throws {
+        if let review = try SOPReviewWorkflow.currentReview(manifest: manifest, package: package, store: store) {
+            throw SOPDraftError.reviewExists(review.1)
+        }
     }
 
     static func latestDocument(manifest: RecordingManifest, package: URL, store: RecordingPackageStore) throws -> SOPDraftDocument? {
@@ -1034,11 +1100,16 @@ enum SOPDraftWorkflow {
         return nil
     }
 
-    private static func save(_ document: SOPDraftDocument, package: URL, store: RecordingPackageStore) throws -> SOPDraftResult {
+    private static func save(_ document: SOPDraftDocument, package: URL, store: RecordingPackageStore,
+                             replaceReview: Bool) throws -> SOPDraftResult {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let body = String(decoding: try encoder.encode(document), as: UTF8.self)
-        let manifest = try store.appendDraft(source: "\(sourcePrefix):\(document.source)", in: package) { _ in body }
+        // Checked again under the package lock, so a review saved while drafting is not hidden.
+        let manifest = try store.mutateManifest(in: package) { latest in
+            if !replaceReview { try refuseOverReview(manifest: latest, package: package, store: store) }
+            try store.writeDraftRevision(body: body, source: "\(sourcePrefix):\(document.source)", to: &latest, in: package)
+        }
         return SOPDraftResult(document: document, draftPath: manifest.drafts.last?.relativePath ?? "", manifest: manifest)
     }
 }
@@ -1046,31 +1117,36 @@ enum SOPDraftWorkflow {
 // MARK: - Command line
 
 /// `--draft-sop <package>` drafts SOP steps for a saved recording and exits.
-/// `--draft-sop <package> --retry-failed` retries the failed or pending steps of the newest draft.
+/// `--draft-sop <package> --retry-failed` retries the failed or pending steps of the newest draft,
+/// or, when that draft has a saved review, fills the review's failed steps and keeps its edits.
+/// A new draft is refused while the newest draft has a saved review, unless `--replace-review`.
 /// Exit codes: 0 drafted, 1 refused, partial or no supported steps, 2 error.
 enum DraftSOPCLI {
     static let flag = "--draft-sop"
     static let retryFlag = "--retry-failed"
+    static let replaceReviewFlag = "--replace-review"
 
     static func runIfRequested(_ arguments: [String]) -> Int32? {
         guard let index = arguments.firstIndex(of: flag) else { return nil }
         guard arguments.indices.contains(index + 1), !arguments[index + 1].hasPrefix("--") else {
-            FileHandle.standardError.write(Data("usage: \(flag) <path to .hqrec package> [\(retryFlag)]\n".utf8))
+            FileHandle.standardError.write(Data("usage: \(flag) <path to .hqrec package> [\(retryFlag)] [\(replaceReviewFlag)]\n".utf8))
             return 2
         }
         let package = URL(fileURLWithPath: arguments[index + 1], isDirectory: true)
         let retry = arguments.contains(retryFlag)
+        let replaceReview = arguments.contains(replaceReviewFlag)
         let result = StatusBox()
         let done = DispatchSemaphore(value: 0)
         Task.detached {
-            result.set(await run(package: package, retry: retry))
+            result.set(await run(package: package, retry: retry, replaceReview: replaceReview))
             done.signal()
         }
         done.wait()
         return result.value
     }
 
-    static func run(package: URL, retry: Bool = false, rewriter: any SegmentRewriting = OnDeviceSegmentRewriter(),
+    static func run(package: URL, retry: Bool = false, replaceReview: Bool = false,
+                    rewriter: any SegmentRewriting = OnDeviceSegmentRewriter(),
                     sampler: any ScreenFrameSampling = AVFrameSampler(),
                     recognizer: any ScreenTextRecognizing = VisionTextRecognizer(),
                     syncChecker: any SyncChecking = HQSyncCLIChecker()) async -> Int32 {
@@ -1078,6 +1154,18 @@ enum DraftSOPCLI {
             let recordings = package.standardizedFileURL.deletingLastPathComponent()
             let company = recordings.deletingLastPathComponent().lastPathComponent
             let store = RecordingPackageStore(root: try RecordingsRoot.resolve(company: company, destination: recordings))
+            if retry, !replaceReview,
+               let reviewed = try await SOPDraftWorkflow.retryReview(package: package, store: store, rewriter: rewriter,
+                                                                     syncChecker: syncChecker) {
+                return report(reviewed)
+            }
+            if !replaceReview,
+               let review = try SOPReviewWorkflow.currentReview(manifest: try store.readManifest(in: package),
+                                                                package: package, store: store) {
+                // Refused before screen evidence is extracted, so nothing in the package changes.
+                FileHandle.standardError.write(Data(refusal(review.1).utf8))
+                return 1
+            }
             let result: SOPDraftResult
             if retry {
                 result = try await SOPDraftWorkflow.retry(package: package, store: store, rewriter: rewriter)
@@ -1090,18 +1178,47 @@ enum DraftSOPCLI {
                     NSLog("HQ recorder: SOP draft continues without new screen evidence: \(error)")
                     FileHandle.standardError.write(Data("screen evidence unavailable: \(error)\n".utf8))
                 }
-                result = try await SOPDraftWorkflow.draft(package: package, store: store, rewriter: rewriter, screen: screen)
+                result = try await SOPDraftWorkflow.draft(package: package, store: store, rewriter: rewriter, screen: screen,
+                                                          replaceReview: replaceReview)
             }
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             FileHandle.standardOutput.write(try encoder.encode(result.document) + Data("\n".utf8))
             FileHandle.standardError.write(Data("saved \(result.draftPath)\n".utf8))
             return result.document.status == .drafted ? 0 : 1
+        } catch SOPDraftError.reviewExists(let path) {
+            FileHandle.standardError.write(Data(refusal(path).utf8))
+            return 1
         } catch {
             NSLog("HQ recorder: SOP draft failed: \(error)")
             FileHandle.standardError.write(Data("SOP draft failed: \(error)\n".utf8))
             return 2
         }
+    }
+
+    static func refusal(_ review: String) -> String {
+        "This recording already has a reviewed guide (\(review)). A new draft would hide it. "
+            + "Run --review-sop to see it, or \(retryFlag) to fill its empty steps. "
+            + "Pass \(replaceReviewFlag) only if the user asked to start the guide over. Nothing was drafted.\n"
+    }
+
+    private static func report(_ result: SOPReviewRetryResult) -> Int32 {
+        do {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            let shown = AgentReviewResult(result.document, revision: result.revision, saved: result.saved)
+            FileHandle.standardOutput.write(try encoder.encode(shown) + Data("\n".utf8))
+        } catch {
+            NSLog("HQ recorder: SOP retry could not print the review: \(error)")
+            FileHandle.standardError.write(Data("SOP retry could not print the review: \(error)\n".utf8))
+            return 2
+        }
+        let note = result.saved ? "saved \(result.revision)\n" : "No failed step could be drafted. No revision was written.\n"
+        FileHandle.standardError.write(Data(note.utf8))
+        if result.approvalCleared {
+            FileHandle.standardError.write(Data("The guide changed, so its approval was cleared. Ask the user to approve it again.\n".utf8))
+        }
+        return result.blankSteps == 0 ? 0 : 1
     }
 
     private final class StatusBox: @unchecked Sendable {

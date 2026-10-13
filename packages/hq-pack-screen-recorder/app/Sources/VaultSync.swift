@@ -646,7 +646,7 @@ enum SkillRegistrar {
         guard manifest.state == .saved || manifest.state == .interrupted else { throw PackageError.stillRecording }
         let record = try JSONDecoder().decode(SOPExportRecord.self,
                                               from: Data(contentsOf: store.url(for: "\(folder)/export.json", in: package)))
-        guard let latest = try SOPReviewWorkflow.latestReview(manifest: manifest, package: package, store: store),
+        guard let latest = try SOPReviewWorkflow.currentReview(manifest: manifest, package: package, store: store),
               latest.2 == .approved, latest.0.isApproved, latest.1 == record.reviewRevision
         else { throw SkillRegistrationError.exportNotCurrent }
         return (record, latest.0)

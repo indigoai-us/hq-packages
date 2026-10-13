@@ -71,6 +71,11 @@ final class SOPReviewModel {
         note = "Drafting steps on this Mac…"
         defer { isDrafting = false }
         do {
+            // A saved review is opened rather than hidden behind a new draft.
+            if try SOPReviewWorkflow.currentReview(manifest: try store.readManifest(in: package),
+                                                   package: package, store: store) != nil {
+                throw SOPDraftError.reviewExists("")
+            }
             let screen = try? await ScreenEvidenceExtractor.extract(package: package, store: store,
                                                                     sampler: AVFrameSampler(),
                                                                     recognizer: VisionTextRecognizer(),
@@ -83,6 +88,9 @@ final class SOPReviewModel {
             case .partial: "Some steps couldn't be drafted. Fill in or remove the empty ones."
             case .noSupportedSteps, .refused: result.document.evidenceGap ?? "No steps could be drafted from this recording."
             }
+        } catch SOPDraftError.reviewExists {
+            reload()
+            note = "This recording already has a reviewed guide, so it was opened instead of drafting again."
         } catch {
             NSLog("HQ recorder: drafting failed: \(error)")
             note = "Steps couldn't be drafted."
