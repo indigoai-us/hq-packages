@@ -57,6 +57,55 @@ injected break.
 - `new-client-verify.sh` and `e2e-smoke.sh` use portable `mktemp` templates so
   their targeted Linux runs work with the system `mktemp` implementation.
 
+### Fixed — `e2e-smoke.sh` install step, after `scan-packages.sh` became a CLI forwarder
+
+**Platform change, recorded here because it is durable and not specific to this
+pack.** On 2026-08-06 `core/scripts/scan-packages.sh` stopped being self-contained
+bash. It is now a **forwarder**: it checks for `hq` on PATH and exec's
+`hq core --hq-root "$HQ_ROOT" scan-packages "$@"`. The pack-contribution mapping
+it used to encode is single-sourced in the CLI (`src/utils/pack-contributions.ts`)
+so the two copies cannot drift. The ABI is preserved exactly — arguments, streams
+and exit status pass through untouched — so every caller that invokes it by path
+still works.
+
+What it broke: `e2e-smoke.sh` proves offline-ness by shimming `curl`, `wget`, `hq`,
+`gh`, `aws`, `ssh`, `scp`, `nc` and `open` onto PATH as stubs that log and exit 97.
+Once `scan-packages.sh` forwarded into `hq`, the harness's own `hq` shim killed
+step 1: `scan-packages.sh exits 0 (expected '0', got '97')`, and every downstream
+"is wired" assertion failed because nothing had been wired.
+
+The harness's assumption was the wrong thing, not the forwarder. `hq core …` is a
+purely **local host operation** — it symlinks pack contributions into an HQ root
+and touches nothing off-machine. Shimming `hq` wholesale was correct when
+`scan-packages.sh` was self-contained; against a forwarder it proves nothing and
+only removes coverage.
+
+- The `hq` shim is now **selective**. `hq core …` is delegated to a resolved real
+  CLI and recorded in a separate local-call log; it is never a violation. Every
+  other subcommand — `secrets`, `sync`, `dm`, `invite`, `publish`, `deploy`,
+  `files`, `login`, `whoami`, `run`, … — is still logged and exited 97. Those are
+  the ones the offline proof exists to catch. `curl`/`wget`/`gh`/`aws`/`ssh`/
+  `scp`/`nc`/`open` are unchanged and still shimmed totally.
+- Step 1 now asserts the discrimination in **both directions at the same
+  checkpoint**: the local `hq core scan-packages` call demonstrably happened, and
+  it demonstrably was not written to the violation log. Verified by temporarily
+  planting an `hq secrets list` call in a fixture step — the harness went red
+  (exit 1) with `hq secrets list` in the shim log while the `hq core` calls stayed
+  in the local log, and green again once removed.
+- The real CLI is resolved once at start-up from the pristine PATH and baked into
+  the shim by absolute path, so delegation can never re-enter the shim by name.
+  The probe is for the **capability**, not liveness: it reads `core --help` and
+  requires `scan-packages` to be listed. Both weaker probes give wrong answers
+  here — a dangling npm symlink is `command -v`-visible while completely broken,
+  and an older CLI answers `--version` happily and then dies on `core` with
+  `unknown command`, failing the install step for a reason unrelated to this pack.
+  Order: `hq` on PATH, then `node <HQ root>/repos/private/hq-cli/dist/index.js`,
+  overridable with `HQ_SMOKE_CLI`. If nothing qualifies the harness exits **2**
+  with a named environment error rather than silently skipping the install step.
+- Caution, learned the hard way: `hq core scan-packages --help` is **not** a help
+  path. It runs, and wires packs into whatever root it is pointed at. Never probe
+  with it.
+
 ### Fixed — step 1 was asserting a stale contributed surface
 
 Independent of the above, step 1 had drifted behind the pack: it asserted 3 skills
