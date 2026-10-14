@@ -1,6 +1,6 @@
 {
   "name": "@indigoai-us/hq-pack-design-styles",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "HQ content pack: curated style packs (registry + pack schema + reference MDCs) for HQ design workers",
   "files": [
     "knowledge",

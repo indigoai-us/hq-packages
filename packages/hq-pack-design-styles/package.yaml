@@ -1,5 +1,5 @@
 name: hq-pack-design-styles
-version: 1.0.0
+version: 1.0.1
 publisher: '@indigoai-us'
 access: public
 description: 'Curated style packs (registry + pack schema + reference MDCs)'
