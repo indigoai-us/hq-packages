@@ -1,6 +1,6 @@
 {
   "name": "@indigoai-us/hq-pack-gstack",
-  "version": "1.1.3",
+  "version": "1.1.4",
   "description": "HQ content pack: gstack-team workers (26 g-* skills) + scripts/gstack-bridge.sh",
   "files": [
     "workers",

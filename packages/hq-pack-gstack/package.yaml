@@ -1,12 +1,12 @@
 name: hq-pack-gstack
-version: 1.1.3
+version: 1.1.4
 publisher: '@indigoai-us'
 access: public
 description: 'gstack-team workers (26 g-* skills) + scripts/gstack-bridge.sh'
 license: 'MIT'
 repository: 'https://github.com/garrytan/gstack'
 requires:
-  hqCore: '>=12.0.0'
+  hqCore: '>=15.0.179'
 author:
   uid: 'cmt_garrytan'
   handle: 'garrytan'
