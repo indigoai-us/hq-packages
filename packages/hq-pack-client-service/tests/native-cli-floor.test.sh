@@ -8,12 +8,14 @@ trap 'rm -rf "$WORK"' EXIT
 has_core_command() {
   local package="$1"
   grep -R -E -q --include='*.md' --include='*.sh' \
+    --exclude='CHANGELOG.md' \
     'hq core (hq-session|scan-packages|generate-workers-registry)' "$package"
 }
 
 minimum_hq_core() {
   local package="$1"
   if grep -R -E -q --include='*.md' --include='*.sh' \
+      --exclude='CHANGELOG.md' \
       'hq core hq-session (add|remove) company|hq core hq-session get company_slugs' "$package"; then
     printf '16.0.4'
   elif has_core_command "$package"; then
@@ -66,6 +68,27 @@ fi
 pass 'rejects a synthetic package below the derived CLI floor'
 floor_is_sufficient "$WORK/at-floor" || fail 'rejected the derived hqCore floor'
 pass 'accepts a synthetic package at the derived CLI floor'
+
+# Historical entries are not instructions to use a command. Keep active docs
+# and scripts in scope so they still require a sufficient hqCore floor.
+mkdir -p "$WORK/changelog-only" "$WORK/readme-too-low"
+cat > "$WORK/changelog-only/package.yaml" <<'YAML'
+requires:
+  hqCore: '>=12.0.0'
+YAML
+printf '%s\n' 'Earlier instructions referenced hq core scan-packages.' > "$WORK/changelog-only/CHANGELOG.md"
+floor_is_sufficient "$WORK/changelog-only" || fail 'rejected a changelog-only command reference below the active-doc floor'
+pass 'ignores changelog-only command references'
+
+cat > "$WORK/readme-too-low/package.yaml" <<'YAML'
+requires:
+  hqCore: '>=12.0.0'
+YAML
+printf '%s\n' 'Run hq core scan-packages to install this package.' > "$WORK/readme-too-low/README.md"
+if floor_is_sufficient "$WORK/readme-too-low"; then
+  fail 'accepted hqCore 12.0.0 for an active README command reference'
+fi
+pass 'rejects an under-floor command reference in README.md'
 
 for package in "$ROOT"/packages/hq-pack-*; do
   [ -d "$package" ] || continue
