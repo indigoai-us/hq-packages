@@ -1,0 +1,498 @@
+# client-service.yaml — schema (US-002, v1)
+#
+# Machine-readable encoding of ../adapter-contracts.md. This file is not
+# decorative: ../../scripts/validate-config.sh reads the connector enum, the slot
+# list, the field lists, the denylists and the error catalogue out of THIS file.
+# Change the contract here and the validator changes with it.
+#
+# Hard policy honoured throughout: hq-absent-field-never-means-constraining-value.
+# Presence and value are read separately, everywhere. Absent is `undeclared`,
+# which is unknown, which adds no constraint and asserts no decision.
+
+schema: hq.client-service.config
+schema_version: 1
+
+# A validator understands any config whose major version it knows. A config from
+# a newer major is not rejected outright — it is reported as unsupported with a
+# named error so the operator upgrades the pack rather than debugging a parse.
+supported_schema_major: 1
+
+# ---------------------------------------------------------------------------
+# Compatibility contract — safe in EITHER direction
+# ---------------------------------------------------------------------------
+# An older config read by a newer validator, and a newer config read by an older
+# validator, must both load. Neither direction may be made safe by ordering an
+# upgrade. Concretely: unknown things warn, missing things are `undeclared`, and
+# nothing absent is ever resolved into a decision.
+compatibility:
+  unknown_top_level_key: warn      # a newer pack added a key; do not fail
+  unknown_slot_key: warn           # a newer pack added a slot; do not fail
+  unknown_slot_field: warn         # a newer pack added a slot field; do not fail
+  unknown_mapping_key: ignore      # mapping is deliberately free-form
+  unknown_capability: warn         # a newer pack named an operation this one lacks
+  missing_slot_key: warn           # -> undeclared, NEVER -> empty
+  slot_without_binding_key: warn   # -> undeclared, NEVER -> empty
+  strict_mode_promotes_warnings: true   # --strict, used by /onboard-firm on its own output
+
+# ---------------------------------------------------------------------------
+# Slot state resolution — the tri-state that gap #1 requires
+# ---------------------------------------------------------------------------
+slot_states:
+  bound:
+    written_as: "slot key present; `binding:` present with a mapping, or `pointer:` present"
+    means: the firm runs something here
+    lifecycle: call the operations
+  empty:
+    written_as: "slot key present; `binding: null` written EXPLICITLY"
+    means: the firm has decided it runs nothing here
+    lifecycle: documented degrade path, surface any recommendation once, no external writes
+  undeclared:
+    written_as: "slot key absent, or slot present with no `binding` key at all"
+    means: unknown — this config never answered the question
+    lifecycle: report `slot not declared`, no external writes, suggest /onboard-firm
+    never: must never be reported or treated as `empty`
+# Empty is expressed positively and can never be expressed by absence alone.
+empty_requires_explicit_null: true
+
+# ---------------------------------------------------------------------------
+# Top level
+# ---------------------------------------------------------------------------
+top_level:
+  required: [schema, schema_version, firm, slots]
+  optional: [description, engagement_source_of_truth, engagement_layout, notes]
+  fields:
+    schema:
+      const: hq.client-service.config
+    schema_version:
+      type: int
+    firm:
+      type: string
+      pattern: '^[a-z0-9][a-z0-9-]{1,63}$'
+      note: HQ company slug of the firm. Never a client slug.
+    engagement_source_of_truth:
+      type: string
+      default_when_absent: 'companies/{firm}/clients/{slug}/engagement.md'
+      note: >-
+        Informational, and kept for configs written before `engagement_layout`
+        existed. It records WHICH FILE is canonical, never whether it is. When
+        `engagement_layout.engagement_path` is also present, the layout wins,
+        because the layout is the resolvable form and this is the prose form.
+
+# ---------------------------------------------------------------------------
+# Engagement layout — where the canonical record and its trackers actually live
+# ---------------------------------------------------------------------------
+# Added in the first-install dogfood (US-008). The v1 draft assumed one fixed
+# path template for every engagement a firm has, and one fixed glob for its
+# project trackers. The first real firm broke both on day one: its engagements
+# live in three different trees (the firm's own client folder, a separate
+# company tree, and a private knowledge repo), its project trackers do not sit
+# under the engagement folder at all, and at least one engagement's join key to
+# its billing and agreement records is an alias rather than its slug.
+#
+# The fix is a DECLARATION, not a branch. The pack still resolves exactly one
+# engagement path, one tracker list, and exactly one join value per (engagement,
+# slot); it just stops hard-coding what they are. Vendors are still absent here:
+# these are paths, globs and keys, all in the firm's own vocabulary.
+#
+# Amended again by the credentialed parity run (D1): `dedupe_keys`, a map keyed
+# by SLOT name, at the firm level and inside any override entry. The pack used to
+# resolve one key per engagement and push it into whatever field each slot's
+# `mapping.dedupe_field` named, which silently assumed a single value was valid
+# in every slot's join field. Precedence is in `dedupe_key_precedence` below.
+#
+# The whole block is optional and every field inside it is optional. Absent
+# resolves to `defaults_when_absent` below, which is byte-for-byte the v1
+# behaviour, so an older config is unchanged and a firm that never declares a
+# layout never notices this section exists.
+engagement_layout:
+  required_fields: []
+  optional_fields: [engagement_path, tracker_sources, dedupe_key, dedupe_keys, overrides]
+  placeholders: ['{firm}', '{slug}']
+  defaults_when_absent:
+    engagement_path: 'companies/{firm}/clients/{slug}/engagement.md'
+    tracker_sources: ['companies/{firm}/clients/{slug}/projects/*/prd.json']
+    dedupe_key: '{slug}'
+    # `dedupe_keys` has NO default. Absent means "no slot names a key of its own",
+    # which resolves to `dedupe_key`, which resolves to `{slug}`. Absent adds no
+    # constraint and asserts no decision — see dedupe_key_precedence below.
+    dedupe_keys: undeclared
+  fields:
+    engagement_path:
+      type: string
+      note: Path template for the canonical engagement record. Placeholders only.
+    tracker_sources:
+      type: list
+      of: string
+      note: >-
+        Glob templates that locate this firm's project trackers. A LIST because
+        a firm may keep trackers in more than one tree. An empty list written
+        explicitly means "declared, none" — the firm tracks projects elsewhere
+        and `track-project` reports no tracker instead of guessing a percentage.
+        Absent means undeclared and resolves to the default glob.
+    dedupe_key:
+      type: string
+      note: >-
+        Template for the local, pure dedupe key that every slot joins on unless a
+        slot names one of its own. Still no tool call. Default `{slug}`
+        reproduces v1 exactly.
+    dedupe_keys:
+      type: map
+      keyed_by: slot name
+      value_type: string
+      null_means: declared-none
+      note: >-
+        Added by the credentialed parity run (D1). ONE join value per
+        (engagement, slot) is still resolved — this stops assuming that one value
+        serves every slot. `mapping.dedupe_field` was always declared PER SLOT
+        while the key it carried was resolved per ENGAGEMENT, so a firm whose
+        slots join on different shapes of value (a short alias for the ledger and
+        the agreements tool, a registrable domain for the CRM) had no way to say
+        so. The read symptom is a rejected lookup; the write consequence is worse,
+        because a search-then-create write that cannot match creates a DUPLICATE
+        record, which is exactly what the idempotency rule exists to prevent.
+        Still a DECLARATION, not a branch: these are keys in the firm's own
+        vocabulary, keyed by contract slot name. No vendor is named, and
+        `resolve_dedupe_key` stays local and pure.
+        An entry written EXPLICITLY as null is DECLARED-NONE: this slot has no
+        join value derivable at this level, so a caller must report the key as
+        unresolved and make no external write, rather than sending a value the
+        slot cannot join on. Absent is undeclared and falls through the precedence
+        order; the two are never collapsed.
+    overrides:
+      type: map
+      keyed_by: engagement slug
+      entry_optional_fields: [engagement_path, tracker_sources, dedupe_key, dedupe_keys, note]
+      note: >-
+        Per-engagement exceptions. An override entry replaces only the fields it
+        names; everything else falls back to the firm-level layout, and then to
+        the defaults. An engagement with no override entry is NOT special-cased —
+        absence here means "nothing exceptional", which is the non-constraining
+        direction, not "unknown path".
+
+# ---------------------------------------------------------------------------
+# Join-key precedence — ONE value per (engagement, slot), five declaring levels
+# ---------------------------------------------------------------------------
+# Two orthogonal axes, resolved in a fixed order:
+#   SCOPE first  — an override entry is more specific than the firm-level layout,
+#                  which is more specific than the pack default. This is the rule
+#                  `engagement_layout` already had, unchanged.
+#   SLOT second  — WITHIN a scope, a key named for a slot beats the general key.
+#
+# Presence is read before value at every level, so an absent level is skipped
+# rather than resolved into a decision.
+dedupe_key_precedence:
+  order:
+    - level: 1
+      expr: engagement_layout.overrides.<slug>.dedupe_keys.<slot>
+      means: this engagement, this slot
+      source_label: override-slot
+    - level: 2
+      expr: engagement_layout.overrides.<slug>.dedupe_key
+      means: this engagement, every slot that does not name its own key
+      source_label: override
+    - level: 3
+      expr: engagement_layout.dedupe_keys.<slot>
+      means: this firm, this slot
+      source_label: firm-slot
+    - level: 4
+      expr: engagement_layout.dedupe_key
+      means: this firm, every slot that does not name its own key
+      source_label: firm
+    - level: 5
+      expr: '{slug}'
+      means: the pack default — v1 behaviour, byte for byte
+      source_label: default
+  resolved_by: workers/client-services/scripts/engagement-layout.sh --engagement <slug> --slot <name>
+  backward_compatibility: >-
+    A config with a single `dedupe_key` and no `dedupe_keys` anywhere can only
+    ever reach levels 2, 4 and 5 — the exact three levels that existed before
+    this key was added — so its resolution is unchanged for every slot. A config
+    with no `engagement_layout` at all reaches only level 5. Absent never becomes
+    a constraint and never becomes an error.
+  known_hazard: >-
+    Level 2 outranks level 3, because scope outranks slot. So a per-engagement
+    general `dedupe_key` SHADOWS a firm-level per-slot key for that engagement.
+    That is the ordering the layout block already promised ("an override entry,
+    then the firm-level layout"), and reversing it for one field would be a
+    second, unstated rule. It is also the one combination that can silently
+    reintroduce D1, so the validator warns on it by name
+    (W_LAYOUT_DEDUPE_KEY_SHADOWS_SLOT) and the warning is silenced by declaring
+    the slot key on the override entry — level 1 — which is where an engagement
+    that needs two different join values should say so anyway.
+
+# ---------------------------------------------------------------------------
+# Binding shape — exactly four keys, no vendor semantics
+# ---------------------------------------------------------------------------
+binding:
+  required_fields: [tool_name, connector]
+  optional_fields: [mapping, secret_name]
+  # Any other key inside `binding` is a warning (a newer pack may have added it).
+  connectors: [mcp, cli, api]
+  fields:
+    tool_name:
+      type: string
+      max_length: 64
+      note: Opaque firm-chosen label. The pack never branches on its value.
+    connector:
+      enum_from: binding.connectors
+      note: Transport only. Says nothing about the vendor.
+    mapping:
+      type: map
+      free_form: true
+      reserved_keys: [capabilities, dedupe_field, objects, defaults, stage_labels]
+      note: Unknown keys here are ignored by design, in both version directions.
+    secret_name:
+      type: string
+      pattern: '^[A-Za-z][A-Za-z0-9_.-]{0,63}(/[A-Za-z][A-Za-z0-9_.-]{0,63})*$'
+      # Added by the first-install dogfood (US-008), in the same idiom as
+      # `binding: null`. Absent is undeclared: the skill ASKS rather than
+      # assuming an unauthenticated call is acceptable. But a binding to a
+      # capability the host platform already authenticates has no vault secret
+      # to name, and before this there was no way to say so — the firm had to
+      # leave the field absent and be asked forever. `secret_name: null`
+      # written EXPLICITLY is declared-none: no credential is resolved, and the
+      # skill does not ask.
+      null_means: declared-none
+      note: >-
+        VAULT NAME ONLY. Resolved through the HQ secret workflow at call time.
+        Absent means undeclared, not "no auth needed" — the skill asks rather
+        than assuming an unauthenticated call is acceptable.
+        Slash-scoped names are the norm in HQ vaults (`SCOPE/KEY`, as in
+        `CRM_TOOL/API_KEY` or `LEDGER_TOOL/CONSUMER_KEY`), so the pattern admits
+        one or more `/`-separated segments. A bare `NAME` is equally valid. This
+        is a NAME, never a value — the inline-credential denylist, not this
+        pattern, is what keeps secret values out of a config.
+
+# `mapping.capabilities` semantics, spelled out because this is the field most
+# likely to be misread as a constraint.
+capabilities:
+  absent_means: undeclared          # attempt the optional operation, degrade on failure
+  empty_list_means: declared-none   # skip without attempting
+  never_means: unsupported-by-default
+
+# ---------------------------------------------------------------------------
+# Pointer shape — a slot bound to a place rather than a tool (gap #5)
+# ---------------------------------------------------------------------------
+pointer:
+  required_fields: [kind, location]
+  optional_fields: [maintained_by, note]
+  kinds: [document, folder, url]
+  maintained_by: [human, automation]
+  note: >-
+    A pointer is a BOUND state, not an empty one. Operations that cannot be
+    served from a static location resolve as unsupported and the skill says so.
+    A slot carrying both `binding` and `pointer` is an error.
+
+# ---------------------------------------------------------------------------
+# Recommendations — the only place a vendor name may appear
+# ---------------------------------------------------------------------------
+recommendation:
+  allowed_on: [empty]
+  rejected_on: [bound]
+  required_fields: [tool]
+  optional_fields: [reason, required]
+  required_field_rules:
+    absent_resolves_to: false
+    true_is_rejected: true          # a recommendation may never become mandatory
+  surfaced_as: optional-suggestion-once
+
+# ---------------------------------------------------------------------------
+# Credential hygiene — zero secret values anywhere
+# ---------------------------------------------------------------------------
+credentials:
+  # A key with any of these names anywhere under a slot means someone inlined a
+  # credential. Rejected as an error, not a warning.
+  inline_key_denylist:
+    - secret
+    - secret_value
+    - token
+    - access_token
+    - api_key
+    - apikey
+    - password
+    - passwd
+    - bearer
+    - private_key
+    - client_secret
+  # Secondary, advisory heuristic on VALUES. Deliberately not exhaustive; the
+  # key-name denylist above is the enforcing check.
+  value_shape_warning_patterns:
+    - '^sk_(live|test)_'
+    - '^xox[baprs]-'
+    - '^gh[pousr]_'
+    - '-----BEGIN [A-Z ]*PRIVATE KEY-----'
+
+# ---------------------------------------------------------------------------
+# Slots
+# ---------------------------------------------------------------------------
+# `operations` are what the lifecycle skills call. `optional_capabilities` are
+# declared per binding in `mapping.capabilities`; absent there means undeclared,
+# never unsupported. See adapter-contracts.md for signatures and degrade paths.
+slots:
+  crm:
+    required: false
+    source_of_truth: false
+    note: >-
+      Derived, write-mostly mirror of engagement.md. No lifecycle skill may block
+      on it; a failure is a warning and never changes engagement state.
+    operations: [resolve_dedupe_key, upsert_company, upsert_deal]
+    optional_capabilities: [mirror_stage, read_back]
+    local_operations: [resolve_dedupe_key]   # pure, no tool call
+    # `mapping.dedupe_field` names the remote field; `engagement_layout`'s
+    # dedupe_key precedence resolves the VALUE that goes in it, per slot. The
+    # credentialed parity run found a firm whose CRM joins on a registrable
+    # domain while its ledger and agreements join on a short alias; sending the
+    # alias into the domain field is rejected on read and, on write, falls
+    # through search-then-create and DUPLICATES the company record.
+    dedupe_value_from: engagement_layout (see dedupe_key_precedence)
+    no_pipeline_assumption: true             # stage lives in engagement.md, mirroring is optional
+    recommendation_allowed: true
+    empty_behaviour: engagement.md only; nothing is written anywhere else
+
+  billing:
+    required: false
+    operations: [ensure_customer, draft_invoice, send_invoice, billing_status]
+    # `ensure_recurring_billing` was added by the first-install dogfood (US-008).
+    # The v1 draft could only express one-off invoices, so a firm on a monthly
+    # retainer had no way to say so through the slots. It is an OPTIONAL
+    # capability, so a firm that only ever sends one-off invoices declares
+    # nothing and is unaffected.
+    optional_capabilities: [void_invoice, ensure_recurring_billing]
+    gated_operations: [send_invoice, ensure_recurring_billing]
+    recommendation_allowed: true
+    empty_behaviour: write an invoice draft into the engagement folder and stop
+
+  agreements:
+    required: false
+    operations: [render_agreement, request_signature, agreement_status]
+    optional_capabilities: [store_executed]
+    gated_operations: [request_signature]
+    recommendation_allowed: true
+    empty_behaviour: render a draft locally; signature becomes a manual human step
+    dedupe_value_from: engagement_layout (see dedupe_key_precedence)
+    # D3, decided rather than omitted. `agreement_status` locates a document by
+    # an explicit reference recorded in the engagement record, then by the join
+    # value in `mapping.dedupe_field`. It does NOT fall back to a fuzzy match on
+    # the client's name, and never will at the contract layer.
+    lookup_strategies: [document_ref_from_engagement_record, dedupe_value_metadata_match]
+    excluded_lookup_strategies: [client_name_substring_match]
+    excluded_reason: >-
+      A name substring is not a join key and cannot be an idempotency key. A
+      false positive attaches the WRONG executed agreement — and therefore the
+      wrong commercial terms — to an engagement, which is the most damaging
+      failure this pack has, and it fails silently because the document it
+      returns looks plausible. Two similarly named clients are common; a firm
+      with a parent and a subsidiary has them by construction.
+    excluded_consequence: >-
+      An agreement document created outside the pack that carries no engagement
+      metadata and is not referenced from the engagement record is INVISIBLE to
+      the pack. `agreement_status` reports it as not found, which is honest and
+      wrong, and the operator records the document reference in the engagement
+      record to fix it. A firm that wants that document found declares the join
+      value it does carry through `engagement_layout.dedupe_keys.agreements`.
+
+  portal:
+    required: false
+    note: >-
+      Operation-shaped, never repo-shaped. No build/deploy/commit operation
+      exists at the contract layer; a repo-backed portal hides those inside
+      publish_update. Also absorbs work product via share_artifact — there is no
+      deliverables slot in v1.
+    operations: [publish_update, share_artifact, portal_status]
+    optional_capabilities: [revoke_share]
+    gated_operations: [publish_update, share_artifact]
+    artifact_ref_is: reference-never-bytes
+    recommendation_allowed: true
+    empty_behaviour: dated update notes in the engagement folder; nothing published
+    # D2 — narrowed and marked deferred by the credentialed parity run, because a
+    # declared-but-fictional operation in a frozen contract is worse than a
+    # missing one. The old return shape promised `reachable` as an
+    # ENGAGEMENT-level fact. For a portal behind authentication that is not
+    # obtainable: a real engagement slug, another firm's engagement slug and a
+    # slug invented for the test all returned the same authenticated shell, so a
+    # `reachable: true` derived from a transport-level response asserts something
+    # the evidence cannot support. `last_published_at` had no source at all.
+    operation_status:
+      portal_status:
+        implemented_by: none
+        state: deferred
+        deferred_reason: >-
+          No pack skill implements it, and the v1 return shape could not be
+          populated honestly. It stays in the contract because the QUESTION is
+          real — an operator needs to know which surface a client sees and when
+          it last changed — but its shape is now narrowed to what a binding can
+          actually assert, and it is marked unimplemented rather than left
+          looking available.
+        return_shape: {surface_label: string, surface_reachable: 'true|false|unknown', last_published_at: 'timestamp|undeclared'}
+        rules:
+          - surface_reachable is a SURFACE-level claim, never an engagement-level
+            one. It answers "is the client-facing surface up", not "does this
+            engagement have a page on it".
+          - surface_reachable MUST be `unknown` unless the binding can make a
+            CONTENT-level assertion that distinguishes a real engagement from a
+            fabricated one. A transport-level response code is never sufficient
+            on an authenticated surface.
+          - last_published_at is UNDECLARED unless the binding has a real source
+            for it. The pack's own publish events are recorded in the engagement
+            record; that is the honest local source. Never synthesize one.
+          - surface_label is local — it comes from the binding's
+            `mapping.defaults.surface_label` — and is always answerable.
+
+  transcripts:
+    required: false
+    operations: [list_calls, fetch_transcript, transcripts_status]
+    pointer_binding_allowed: true
+    pointer_unsupported_operations: [list_calls]
+    recommendation_allowed: true
+    empty_behaviour: whatever the operator pastes into the engagement folder; nothing polled
+
+# ---------------------------------------------------------------------------
+# Error catalogue — every failure is named. No generic parse failures.
+# ---------------------------------------------------------------------------
+errors:
+  E_ENV_YQ_MISSING: yq is not installed — the validator cannot read YAML
+  E_ENV_SCHEMA_MISSING: this schema file could not be found next to the validator
+  E_USAGE: the validator was invoked with wrong arguments
+  E_CONFIG_NOT_FOUND: config file does not exist or is not readable
+  E_CONFIG_NOT_YAML: file is not parseable YAML
+  E_CONFIG_NOT_MAPPING: top level of the config is not a mapping
+  E_SCHEMA_KEY_MISSING: required top-level key is missing
+  E_SCHEMA_NAME_WRONG: schema key is not hq.client-service.config
+  E_SCHEMA_VERSION_NOT_INT: schema_version is not an integer
+  E_SCHEMA_VERSION_UNSUPPORTED_MAJOR: config major version is newer than this validator
+  E_FIRM_SLUG_INVALID: firm is not a valid HQ company slug
+  E_SLOTS_NOT_MAPPING: slots is present but is not a mapping
+  E_SLOT_NOT_MAPPING: a slot entry is not a mapping
+  E_SLOT_DUAL_BINDING: a slot declares both binding and pointer
+  E_BINDING_NOT_MAPPING: binding is present with a non-null, non-mapping value
+  E_BINDING_FIELD_MISSING: binding is missing a required field
+  E_BINDING_CONNECTOR_INVALID: connector is not one of the declared connectors
+  E_BINDING_TOOL_NAME_INVALID: tool_name is empty or not a string
+  E_BINDING_MAPPING_NOT_MAPPING: mapping is present but is not a mapping
+  E_BINDING_SECRET_NAME_INVALID: secret_name does not look like a vault name
+  E_INLINE_CREDENTIAL_KEY: a denylisted credential key appears in the config
+  E_POINTER_NOT_MAPPING: pointer is present but is not a mapping
+  E_POINTER_FIELD_MISSING: pointer is missing a required field
+  E_POINTER_KIND_INVALID: pointer kind is not one of the declared kinds
+  E_RECOMMENDATION_ON_BOUND_SLOT: a bound slot carries a recommendation
+  E_RECOMMENDATION_TOOL_MISSING: a recommendation has no tool
+  E_RECOMMENDATION_REQUIRED_TRUE: a recommendation is marked required
+  E_CAPABILITIES_NOT_LIST: mapping.capabilities is present but is not a list
+  E_LAYOUT_NOT_MAPPING: engagement_layout is present but is not a mapping
+  E_LAYOUT_TRACKER_SOURCES_NOT_LIST: engagement_layout tracker_sources is present but is not a list
+  E_LAYOUT_OVERRIDES_NOT_MAPPING: engagement_layout.overrides is present but is not a mapping
+  E_LAYOUT_OVERRIDE_NOT_MAPPING: an engagement_layout override entry is not a mapping
+  E_LAYOUT_DEDUPE_KEYS_NOT_MAPPING: engagement_layout dedupe_keys is present but is not a mapping keyed by slot name
+  E_LAYOUT_DEDUPE_KEY_NOT_SCALAR: an engagement_layout dedupe_keys entry is neither a string nor an explicit null
+
+warnings:
+  W_SLOT_UNDECLARED: a known slot key is absent — treated as undeclared, never as empty
+  W_SLOT_BINDING_UNDECLARED: slot exists but has no binding key — undeclared, never empty
+  W_SLOT_UNKNOWN: an unrecognised slot key (probably from a newer pack version)
+  W_SLOT_FIELD_UNKNOWN: an unrecognised field inside a slot
+  W_TOP_LEVEL_KEY_UNKNOWN: an unrecognised top-level key
+  W_CAPABILITY_UNKNOWN: a capability this pack version does not know
+  W_SECRET_VALUE_SHAPE: a value looks like a credential literal
+  W_LAYOUT_FIELD_UNKNOWN: an unrecognised field inside engagement_layout (probably from a newer pack version)
+  W_LAYOUT_DEDUPE_KEY_SLOT_UNKNOWN: a dedupe_keys entry names a slot this pack version does not know — ignored, never an error
+  W_LAYOUT_DEDUPE_KEY_SHADOWS_SLOT: this engagement's general dedupe_key outranks a firm-level per-slot key, so that slot will join on the general value — declare the slot key on the override entry to say which value it should use

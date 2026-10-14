@@ -1,0 +1,15 @@
+/* AI Builders Agency Kit design tokens. Source: joinaibuilders.com. */
+:root {
+  --aib-bg: #090909;
+  --aib-surface: rgba(255, 255, 255, 0.03);
+  --aib-surface-strong: rgba(255, 255, 255, 0.08);
+  --aib-text: #ffffff;
+  --aib-text-secondary: rgba(255, 255, 255, 0.72);
+  --aib-accent: #ffb58e;
+  --aib-accent-2: #ad9cda;
+  --aib-muted: #a4a4a4;
+  --aib-line: #303030;
+  --aib-font: Inter, Arial, sans-serif;
+  --aib-radius: 2px;
+  --aib-radius-md: 4px;
+}

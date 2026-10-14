@@ -18,7 +18,7 @@ The installer:
 2. Extracts into `packages/{name}/`.
 3. Validates `package.yaml` against the schema.
 4. Registers contributions in `modules/modules.yaml` under `strategy: package`.
-5. Symlinks declared contributions into `.claude/commands/`, `.claude/skills/`, `workers/`, `knowledge/`, etc. on the next session start via `scripts/scan-packages.sh`.
+5. Symlinks declared contributions into `.claude/commands/`, `.claude/skills/`, `workers/`, `knowledge/`, etc. on the next session start via `hq core scan-packages`.
 
 ## Recommended packs
 

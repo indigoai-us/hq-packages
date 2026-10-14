@@ -1,0 +1,29 @@
+name: hq-pack-anatomy
+version: 1.0.1
+publisher: '@indigoai-us'
+access: public
+description: "Anatomy by Ryan (@wheresryan22): build crafted, interactive isometric SVG figures that explain a technical idea as a real physical object, with optional WebGL shaders and a 3D mode. Ported from wheresryan22/anatomy (MIT)."
+license: 'MIT'
+repository: 'https://github.com/wheresryan22/anatomy'
+keywords: ['hq', 'hq-pack', 'anatomy', 'isometric', 'svg', 'diagram', 'illustration']
+requires:
+  hqCore: '>=12.0.0'
+contributes:
+  skills:
+    - anatomy
+author:
+  uid: 'cmt_wheresryan22'
+  handle: 'wheresryan22'
+  displayName: 'Ryan'
+upstream:
+  repo: 'https://github.com/wheresryan22/anatomy'
+  ref: 'main'
+  ported_commit: '689dcf966e63d92be10a5d593c6e19e10acd4422'
+  license: 'MIT'
+  ported_at: '2026-10-12T13:32:45Z'
+  kind: port
+initialization:
+  entrypoint: '/anatomy'
+capabilities:   # derived by static inspection of the skill's .mjs scripts
+  - fs        # example build.mjs scripts and kit/audit write HTML pages and PNG captures next to the figure
+  - network   # scripts/capture.mjs, drive.mjs and turn-check.mjs launch local headless Chrome and talk to it over the 127.0.0.1 DevTools port only; no outbound requests

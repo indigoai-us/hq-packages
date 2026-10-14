@@ -8,7 +8,7 @@ HQ content pack: curated style packs (registry + pack schema + reference MDCs) f
 hq install @indigoai-us/hq-pack-design-styles
 ```
 
-This drops `knowledge/design-styles/` into your HQ instance's `packages/hq-pack-design-styles/` directory and symlinks it into `knowledge/public/design-styles/` via `scripts/scan-packages.sh` on the next session start.
+This drops `knowledge/design-styles/` into your HQ instance's `packages/hq-pack-design-styles/` directory and symlinks it into `knowledge/public/design-styles/` via `hq core scan-packages` on the next session start.
 
 ## Contents
 
@@ -22,4 +22,5 @@ This drops `knowledge/design-styles/` into your HQ instance's `packages/hq-pack-
 
 ## Requires
 
-- `hq-core >= 12.0.0`
+- `hq-core >= 15.0.179` (requires hq-cli >= 5.269.0; the
+  `hq core scan-packages` command is available from hq-cli 5.89.0)

@@ -1,0 +1,60 @@
+# examples/broken.yaml — DELIBERATELY INVALID
+#
+# This file is valid YAML. It parses cleanly and then fails validation with
+# NAMED errors, one per fault, so the validator is proven to discriminate on
+# contract semantics rather than on syntax.
+#
+# Planted faults (each must be reported by code):
+#   1. E_BINDING_CONNECTOR_INVALID     — portal connector is not mcp|cli|api
+#   2. E_RECOMMENDATION_ON_BOUND_SLOT  — crm is bound AND carries a recommendation
+#   3. E_INLINE_CREDENTIAL_KEY         — billing inlines a credential-shaped key
+#   4. E_SLOT_DUAL_BINDING             — agreements declares binding and pointer
+#
+# No real credential appears here. Fault 3 is detected by KEY NAME, so the
+# placeholder value is inert.
+
+schema: hq.client-service.config
+schema_version: 1
+firm: broken-firm
+description: Deliberately invalid fixture for validate-config.sh.
+
+slots:
+  # Fault 2: the firm already chose a CRM, so a recommendation is contradictory.
+  crm:
+    binding:
+      tool_name: crm-platform
+      connector: mcp
+      mapping:
+        dedupe_field: external_ref
+      secret_name: BROKEN_FIRM_CRM_CREDENTIAL
+    recommended:
+      tool: attio
+      reason: Contradicts the binding above — a bound slot has nothing to recommend.
+      required: false
+
+  # Fault 3: credentials belong in the vault, referenced by name.
+  billing:
+    binding:
+      tool_name: payments-platform
+      connector: api
+      mapping:
+        api_key: PLACEHOLDER-NOT-A-REAL-CREDENTIAL
+
+  # Fault 4: binding and pointer are alternatives, not layers.
+  agreements:
+    binding:
+      tool_name: esign-service
+      connector: api
+    pointer:
+      kind: folder
+      location: 'hq://companies/{firm}/clients/{slug}/agreements/'
+
+  # Fault 1: connector is transport, and webhook is not one of the three.
+  portal:
+    binding:
+      tool_name: project-tracker
+      connector: webhook
+      secret_name: BROKEN_FIRM_PORTAL_CREDENTIAL
+
+  transcripts:
+    binding: null

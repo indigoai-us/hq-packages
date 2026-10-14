@@ -1,5 +1,5 @@
 name: hq-anywhere
-version: 0.1.0
+version: 0.1.1
 publisher: '@indigoai-us'
 access: public
 description: 'HQ skills, daemon-backed Codex hooks, and the HQ MCP server for Codex.'

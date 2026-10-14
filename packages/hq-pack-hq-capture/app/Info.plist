@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleIdentifier</key><string>com.indigo.local-screen-recorder</string>
+  <key>CFBundleName</key><string>HQ Capture</string>
+  <key>CFBundleDisplayName</key><string>HQ Capture</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
+  <key>CFBundleExecutable</key><string>LocalScreenRecorder</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>0.3.2</string>
+  <key>CFBundleVersion</key><string>4</string>
+  <key>LSMinimumSystemVersion</key><string>26.0</string>
+  <key>LSApplicationCategoryType</key><string>public.app-category.productivity</string>
+  <key>NSCameraUsageDescription</key><string>HQ Capture records a separate webcam track for your local video.</string>
+  <key>NSMicrophoneUsageDescription</key><string>HQ Capture records narration locally for your video and process draft.</string>
+  <key>NSScreenCaptureUsageDescription</key><string>HQ Capture records your selected screen or window locally.</string>
+</dict>
+</plist>

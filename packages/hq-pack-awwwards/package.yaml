@@ -1,0 +1,26 @@
+name: hq-pack-awwwards
+version: 1.0.0
+publisher: '@indigoai-us'
+access: public
+description: "Awwwards — build award-caliber websites from a one-line prompt: concept, art direction, typography, motion, WebGL, page transitions, then real-browser QA. Next.js by default, Astro for static showcases. Ported from juliobsz/skills (MIT) by Julio (juliobsz)."
+license: 'MIT'
+repository: 'https://github.com/juliobsz/skills'
+requires:
+  hqCore: '>=12.0.0'
+contributes:
+  skills:
+    - awwwards
+author:
+  uid: 'cmt_juliobsz'
+  handle: 'juliobsz'
+  displayName: 'Julio'
+upstream:
+  repo: 'https://github.com/juliobsz/skills'
+  ref: 'main'
+  ported_commit: '5bdb14f72d14bcaebe461f95fe6640210857384c'
+  license: 'MIT'
+  ported_at: '2026-10-12T00:00:00Z'
+  kind: port
+capabilities:   # derived by static inspection of skills/awwwards/scripts/*.mjs; no contributes.scripts/hooks
+  - network     # font.mjs (Google Fonts / Fontshare), photos.mjs (picsum.photos), shoot.mjs (axe-core@4.14.0 from jsdelivr fallback), audit.mjs (local server)
+  - fs          # writes fonts, photos, screenshots and reports into the user's project

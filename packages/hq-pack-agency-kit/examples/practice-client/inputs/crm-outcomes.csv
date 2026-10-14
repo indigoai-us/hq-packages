@@ -1,0 +1,14 @@
+month,source_campaign,company_size,leads,sales_qualified_opps,closed_won_usd
+2026-09,Cloud - Free Trial - Search,1-49,150,0,0
+2026-09,Cloud - Free Trial - Search,50-499,25,1,0
+2026-09,Cloud - Free Trial - Search,500+,3,0,0
+2026-09,Cloud - Brand - Search,1-49,30,0,0
+2026-09,Cloud - Brand - Search,50-499,12,2,18000
+2026-09,Cloud - Brand - Search,500+,4,2,0
+2026-09,Cloud - Enterprise - Search,50-499,2,1,0
+2026-09,Cloud - Enterprise - Search,500+,6,3,0
+2026-09,Cloud - Lead Gen Form - LinkedIn,1-49,8,0,0
+2026-09,Cloud - Lead Gen Form - LinkedIn,50-499,12,1,0
+2026-09,Cloud - Lead Gen Form - LinkedIn,500+,11,4,0
+2026-09,Edge - Search,50-499,6,0,0
+2026-09,Edge - Search,500+,5,2,0

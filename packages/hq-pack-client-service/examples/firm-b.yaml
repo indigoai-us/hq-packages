@@ -1,0 +1,73 @@
+# examples/firm-b.yaml — a MOSTLY EMPTY firm
+#
+# The second validation firm's shape (US-000 decision D2), de-branded. Three of
+# the five slots are empty: the firm runs no CRM, no billing tool and no
+# agreements tool inside HQ. Its client-facing surface is a SaaS project tool,
+# not a repo. Its call record is a document a human maintains.
+#
+# This config is the reason the contracts look the way they do. If it does not
+# validate and run, the pack only fits one firm and US-002 has failed.
+#
+# Secrets are referenced by VAULT NAME ONLY. There are no secret values here.
+
+schema: hq.client-service.config
+schema_version: 1
+firm: firm-b
+description: Mostly-empty firm — three slots unbound, portal on a SaaS project tool.
+
+slots:
+  # EMPTY, written explicitly. `binding: null` is a decision the firm made, not
+  # a gap in the file. An absent `crm:` key would mean something different
+  # (undeclared / unknown) and would get asked about instead of assumed.
+  crm:
+    binding: null
+    recommended:
+      tool: attio
+      reason: No CRM is wired in; this one is a low-lift starting point if the firm wants a pipeline mirror.
+      required: false
+
+  billing:
+    binding: null
+    recommended:
+      tool: stripe
+      reason: No billing tool is wired in; invoices are drafted locally until the firm picks one.
+      # `required` omitted on purpose — absent resolves to false. A recommendation
+      # can never become mandatory, and the validator rejects `required: true`.
+
+  agreements:
+    binding: null
+    recommended:
+      tool: pandadoc
+      reason: No e-signature tool is wired in; agreements render locally and are signed by hand.
+      required: false
+
+  # Bound to a SaaS project tool. There is no repo here, nothing to build and
+  # nothing to deploy — the reason the portal contract is publish_update /
+  # share_artifact / portal_status rather than build / deploy.
+  #
+  # `capabilities: []` is written explicitly: DECLARED NONE. The project tool
+  # cannot revoke a share, so the skills skip revoke_share without attempting it.
+  # That is different from omitting the key, which would mean undeclared.
+  portal:
+    binding:
+      tool_name: project-tracker
+      connector: mcp
+      mapping:
+        capabilities: []
+        objects:
+          update: task
+          artifact: attachment-link
+        defaults:
+          surface_label: Client project board
+      secret_name: FIRM_B_PORTAL_CREDENTIAL
+
+  # POINTER binding, not a tool binding. This firm has no capture service; its
+  # call record is a document. A pointer is a bound state — the question is
+  # answered — and list_calls resolves as unsupported rather than fabricating a
+  # call list.
+  transcripts:
+    pointer:
+      kind: document
+      location: 'hq://companies/{firm}/clients/{slug}/calls/index.md'
+      maintained_by: human
+      note: Call notes are pasted in after each call; there is nothing to poll.
