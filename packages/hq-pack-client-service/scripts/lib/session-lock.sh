@@ -6,7 +6,7 @@
 #
 # A session is locked to one company by default. On hq-core with multi-company
 # session locks (hooks.multi-company-session-lock), a session can hold several:
-# the primary plus companies added with `hq-session.sh add company <slug>`.
+# the primary plus companies added with `hq core hq-session add company <slug>`.
 # A phase may write into a company only if that company is in the lock set.
 #
 # Unknown is never authorization: if the lock set cannot be read, the result is
@@ -17,15 +17,13 @@
 #   <explicit> is the --session-company value (one slug or a comma list); when
 #   set it wins, for running outside a session (CI, fixtures).
 session_lock_companies() {
-  local root="$1" explicit="${2:-}" out rc=0 session
+  local root="$1" explicit="${2:-}" out rc=0
   if [ -n "$explicit" ]; then printf '%s' "$explicit"; return 0; fi
-  session="${root}/core/scripts/hq-session.sh"
-  [ -f "$session" ] || { printf ''; return 0; }
-  out="$(bash "$session" get company_slugs 2>/dev/null)" || rc=$?
+  out="$(HQ_ROOT="$root" hq core hq-session get company_slugs 2>/dev/null)" || rc=$?
   [ "$rc" -eq 0 ] || out=""
   if [ -z "$out" ] || [ "$out" = "null" ]; then
     rc=0
-    out="$(bash "$session" get company_slug 2>/dev/null)" || rc=$?
+    out="$(HQ_ROOT="$root" hq core hq-session get company_slug 2>/dev/null)" || rc=$?
     [ "$rc" -eq 0 ] || out=""
   fi
   [ "$out" = "null" ] && out=""

@@ -45,6 +45,18 @@ injected break.
 
 ## Unreleased
 
+### Changed — call core commands directly
+
+- `e2e-smoke.sh` now calls `hq core scan-packages` against its synthetic HQ root.
+  Session lock checks call `hq core hq-session` directly and preserve the
+  `company_slugs` to `company_slug` compatibility read. The fixture returns only
+  synthetic company names and blocks every other `hq` command and network tool.
+- The pack requires hq-core >=16.0.4. hq-cli 5.345.48 is the first published CLI
+  binary with multi-company hq-session operations; hq-core 16.0.4 is the first
+  release whose `requiresHqCli` is at least that version (it declares >=5.345.67).
+- `new-client-verify.sh` and `e2e-smoke.sh` use portable `mktemp` templates so
+  their targeted Linux runs work with the system `mktemp` implementation.
+
 ### Fixed — `e2e-smoke.sh` install step, after `scan-packages.sh` became a CLI forwarder
 
 **Platform change, recorded here because it is durable and not specific to this

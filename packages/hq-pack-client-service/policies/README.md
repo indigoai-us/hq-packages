@@ -3,13 +3,13 @@
 **status: landed (US-004).**
 
 The `client-services` worker's hard rules, in enforceable form. Each is declared
-in `../package.yaml` under `contributes.policies`; `scan-packages.sh` symlinks
+in `../package.yaml` under `contributes.policies`; `hq core scan-packages` symlinks
 `policies/{id}.md` into `core/policies/{id}.md` at install time.
 
 Per policy `hq-pack-policies-excluded-from-core-release`, these are deliberately
 **not** promoted into the `hq-core` release set — a host that has not installed
 this pack must not inherit client-service guardrails. They reach a host only
-through `hq install` plus `scan-packages.sh`.
+through `hq install` plus `hq core scan-packages`.
 
 | Policy | Rule in one line |
 |---|---|

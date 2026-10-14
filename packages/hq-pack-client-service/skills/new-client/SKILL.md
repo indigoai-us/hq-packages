@@ -43,11 +43,11 @@ the firm's session. Create the client company if needed, then add it to the same
 session and run `client-home`:
 
 ```bash
-bash core/scripts/hq-session.sh add company {client}
+hq core hq-session add company {client}
 ```
 
 The firm stays the primary company. Remove the client from the session when you
-are done with it (`hq-session.sh remove company {client}`).
+are done with it (`hq core hq-session remove company {client}`).
 
 **Two sessions (older hq-core, or by preference).** Run `engagement` in a
 firm-bound session and `client-home` in a session bound to the client.
@@ -58,7 +58,7 @@ slug and display name as **provenance**: a name, an audit fact. Phase 2 never
 dereferences it as a path and never opens the firm tree, even when the firm is in
 the same session (policy `client-service-materialize-not-mount`).
 
-The engine reads the session's lock set (`hq-session.sh get company_slugs`) and
+The engine reads the session's lock set (`hq core hq-session get company_slugs`) and
 refuses when the target company is not in it, or when it cannot read it:
 
 ```
@@ -144,7 +144,7 @@ gated.
 ## Step 3 — The client company (session that holds the CLIENT)
 
 Either add the client to the firm's session
-(`bash core/scripts/hq-session.sh add company {slug}`, once the company exists)
+(`hq core hq-session add company {slug}`, once the company exists)
 or switch to a session bound to the client. See "The operating requirement"
 above.
 
