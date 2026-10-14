@@ -4,6 +4,9 @@
 
 ### Changed
 
+- Run package registration through `hq core scan-packages` without a shell
+  forwarder fallback. The package requires hq-core 15.0.179 or newer, whose
+  CLI floor includes hq-cli 5.89.0.
 - `progress` / `report` no longer posts a placeholder ("Project work is in
   progress.") when `--summary` is missing. No summary and no task transition
   is a no-op (`posted:false`, `skipReason:no_summary`, exit 0); a task

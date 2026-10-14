@@ -110,9 +110,7 @@ resolve_company() {
   local requested="${1:-}" bound=""
   root="$(find_hq_root)" || fail no-hq "Run /record-process from inside an HQ folder."
   root="$(realpath_of "$root")"
-  if [ -f "$root/core/scripts/hq-session.sh" ]; then
-    bound="$(bash "$root/core/scripts/hq-session.sh" get company_slug 2>/dev/null || true)"
-  fi
+  bound="$(HQ_ROOT="$root" hq core hq-session get company_slug 2>/dev/null || true)"
   [ "$bound" = personal ] && bound=""
   if [ -n "$requested" ] && [ -z "$bound" ]; then
     fail no-company "This session isn't working in a company, so --company can't be used. Pick the company for the session first, then run /record-process again."

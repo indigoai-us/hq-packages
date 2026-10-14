@@ -93,7 +93,7 @@ check "workspace rerun reports kept files" 'printf "%s" "$out" | grep -q "writte
 
 mkdir -p "$R/companies/acme-agency/clients/beta" && : > "$R/companies/acme-agency/clients/beta/engagement.md"
 out="$(bash "$WORKSPACE" --firm acme-agency --client beta --mode company --root "$R" 2>&1)"
-check "workspace company mode prints the next steps" 'printf "%s" "$out" | grep -q "hq-session.sh add company beta"'
+check "workspace company mode prints the next steps" 'printf "%s" "$out" | grep -q "hq core hq-session add company beta"'
 check "workspace company mode records the mode" 'grep -q "in \*\*company\*\* mode" "$R/companies/acme-agency/clients/beta/README.md"'
 check "workspace company mode writes nothing outside the firm" '[ ! -d "$R/companies/beta" ]'
 bash "$WORKSPACE" --firm acme-agency --client beta --mode sideways --root "$R" >/dev/null 2>&1; rc=$?

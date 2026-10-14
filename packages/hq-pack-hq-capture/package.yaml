@@ -4,7 +4,7 @@ publisher: '@indigoai-us'
 access: private
 description: 'HQ Capture for HQ: /record-process records a process on your Mac from a company session, with screen, camera and narration as separate layers saved to that company''s recordings folder. The agent in the session then summarizes, trims, places the camera, exports the video and drafts a step-by-step guide. The app is built on your Mac from source in this pack. Capture, transcription and guide drafting run on the Mac. The session agent reads the transcript, the guide drafts and the stills it shows so you can edit by conversation. Nothing is uploaded to any other service or shared with another company, and the recording syncs to the company vault only when you ask.'
 requires:
-  hqCore: '>=12.0.0'
+  hqCore: '>=15.0.179'
   # Runtime prerequisites:
   #   - Apple Silicon Mac on macOS 26 or later
   #   - Apple Command Line Tools (xcode-select --install); full Xcode is not needed

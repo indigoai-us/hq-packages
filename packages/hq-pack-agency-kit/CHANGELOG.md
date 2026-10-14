@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Instructions and workspace setup output call `hq core hq-session` directly;
+  the hq-core requirement now carries the matching CLI floor.
+
 ## 0.4.19 (2026-10-12)
 
 - Setup asks for the agency's website, reads it, and records its look (logo,
