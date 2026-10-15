@@ -1,0 +1,406 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hqforwork.com/schemas/hq-booking/booking.schema.json",
+  "title": "HQ Booking configuration (booking.yaml)",
+  "description": "One file per company at companies/{co}/booking/booking.yaml. It describes every host, event type, form and workflow. Cross-field rules (host references, kinds, seats) are checked in config.ts after this schema.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "company", "hosts", "eventTypes"],
+  "properties": {
+    "version": { "const": 1, "description": "Schema version. Always 1 for this release." },
+    "company": { "$ref": "#/$defs/slug", "description": "HQ company slug that owns these booking pages." },
+    "timezone": { "$ref": "#/$defs/timezone", "description": "Default time zone for hosts that do not set one." },
+    "hosts": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/host" }
+    },
+    "eventTypes": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/eventType" }
+    },
+    "routing": { "$ref": "#/$defs/routing" },
+    "notifications": { "$ref": "#/$defs/notifications" },
+    "webhooks": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/webhook" }
+    },
+    "embed": { "$ref": "#/$defs/embed" },
+    "theme": { "$ref": "#/$defs/theme" },
+    "dataRetention": { "$ref": "#/$defs/dataRetention" }
+  },
+  "$defs": {
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
+      "description": "Lowercase letters, digits and hyphens."
+    },
+    "timezone": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "IANA time zone, for example America/New_York. Checked against the runtime's zone list."
+    },
+    "date": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "description": "Calendar date YYYY-MM-DD in the host's time zone."
+    },
+    "range": {
+      "type": "string",
+      "pattern": "^([01]\\d|2[0-3]):[0-5]\\d-(([01]\\d|2[0-3]):[0-5]\\d|24:00)$",
+      "description": "Local time range HH:MM-HH:MM. 24:00 means end of day."
+    },
+    "ranges": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/range" }
+    },
+    "email": {
+      "type": "string",
+      "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$",
+      "maxLength": 254
+    },
+    "httpsUrl": {
+      "type": "string",
+      "pattern": "^https://[^\\s]+$",
+      "maxLength": 2048
+    },
+    "secretName": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9_]{1,127}$",
+      "description": "Name of an HQ vault secret. Never the secret value itself."
+    },
+    "weeklyHours": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mon": { "$ref": "#/$defs/ranges" },
+        "tue": { "$ref": "#/$defs/ranges" },
+        "wed": { "$ref": "#/$defs/ranges" },
+        "thu": { "$ref": "#/$defs/ranges" },
+        "fri": { "$ref": "#/$defs/ranges" },
+        "sat": { "$ref": "#/$defs/ranges" },
+        "sun": { "$ref": "#/$defs/ranges" }
+      }
+    },
+    "override": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["date", "hours"],
+      "properties": {
+        "date": { "$ref": "#/$defs/date" },
+        "hours": { "$ref": "#/$defs/ranges", "description": "Replaces the weekly hours for that date. An empty list means unavailable." }
+      }
+    },
+    "calendarRef": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source", "account", "calendar"],
+          "properties": {
+            "source": { "const": "google" },
+            "account": { "$ref": "#/$defs/email" },
+            "calendar": { "type": "string", "minLength": 1, "maxLength": 256, "description": "Calendar id, or primary." }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source", "account", "calendar"],
+          "properties": {
+            "source": { "const": "microsoft" },
+            "account": { "$ref": "#/$defs/email" },
+            "calendar": { "type": "string", "minLength": 1, "maxLength": 256 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source", "secret"],
+          "properties": {
+            "source": { "const": "ical" },
+            "label": { "type": "string", "maxLength": 80 },
+            "secret": { "$ref": "#/$defs/secretName", "description": "Vault secret holding the private iCal subscription link." }
+          }
+        }
+      ]
+    },
+    "host": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "email", "hours"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "email": { "$ref": "#/$defs/email" },
+        "timezone": { "$ref": "#/$defs/timezone" },
+        "hours": { "$ref": "#/$defs/weeklyHours" },
+        "overrides": { "type": "array", "items": { "$ref": "#/$defs/override" } },
+        "holidays": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/date" } },
+        "calendars": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["conflicts"],
+          "properties": {
+            "conflicts": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/calendarRef" } },
+            "bookInto": { "$ref": "#/$defs/calendarRef" }
+          }
+        },
+        "roundRobin": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "weight": { "type": "number", "minimum": 0.1, "maximum": 100 },
+            "priority": { "type": "integer", "minimum": 0, "maximum": 10, "description": "Higher is preferred when several hosts are free." }
+          }
+        },
+        "links": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "custom": { "$ref": "#/$defs/httpsUrl" },
+            "phone": { "type": "string", "pattern": "^\\+?[0-9 ()-]{6,32}$" }
+          }
+        }
+      }
+    },
+    "location": {
+      "oneOf": [
+        { "type": "object", "additionalProperties": false, "required": ["type"], "properties": { "type": { "const": "meet" } } },
+        { "type": "object", "additionalProperties": false, "required": ["type"], "properties": { "type": { "const": "zoom" } } },
+        { "type": "object", "additionalProperties": false, "required": ["type"], "properties": { "type": { "const": "teams" } } },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type"],
+          "properties": {
+            "type": { "const": "custom" },
+            "url": { "$ref": "#/$defs/httpsUrl", "description": "Defaults to each host's links.custom." },
+            "label": { "type": "string", "maxLength": 60 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "caller"],
+          "properties": {
+            "type": { "const": "phone" },
+            "caller": { "enum": ["host", "invitee"], "description": "host calls the invitee, or invitee calls the host's links.phone." }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "address"],
+          "properties": {
+            "type": { "const": "in-person" },
+            "address": { "type": "string", "minLength": 3, "maxLength": 300 }
+          }
+        }
+      ]
+    },
+    "question": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "type"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "label": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "type": { "enum": ["text", "textarea", "email", "phone", "select", "radio", "checkbox", "number"] },
+        "required": { "type": "boolean" },
+        "options": { "type": "array", "minItems": 1, "maxItems": 50, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 120 } },
+        "maxLength": { "type": "integer", "minimum": 1, "maximum": 5000 }
+      }
+    },
+    "eventType": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "kind", "hosts", "durations", "locations"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "description": { "type": "string", "maxLength": 2000 },
+        "kind": { "enum": ["one-on-one", "round-robin", "collective", "group"] },
+        "hosts": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/slug" } },
+        "durations": { "type": "array", "minItems": 1, "maxItems": 6, "uniqueItems": true, "items": { "type": "integer", "minimum": 5, "maximum": 720 }, "description": "Meeting lengths in minutes the invitee can pick from." },
+        "defaultDuration": { "type": "integer", "minimum": 5, "maximum": 720 },
+        "startIncrement": { "type": "integer", "minimum": 5, "maximum": 240, "description": "Minutes between offered start times. Defaults to 15." },
+        "buffers": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "before": { "type": "integer", "minimum": 0, "maximum": 240 },
+            "after": { "type": "integer", "minimum": 0, "maximum": 240 }
+          }
+        },
+        "minimumNotice": { "type": "integer", "minimum": 0, "maximum": 43200, "description": "Minutes between now and the earliest start." },
+        "bookingWindow": { "type": "integer", "minimum": 1, "maximum": 365, "description": "Days ahead that can be booked. Defaults to 60." },
+        "dailyLimit": { "type": "integer", "minimum": 1, "maximum": 100, "description": "Most bookings of this event type per host per day." },
+        "seats": { "type": "integer", "minimum": 2, "maximum": 1000, "description": "Group events only: attendees per slot." },
+        "guests": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "max": { "type": "integer", "minimum": 0, "maximum": 20 } }
+        },
+        "secret": { "type": "boolean", "description": "Hidden from the company page; reachable only by its link." },
+        "locations": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/location" } },
+        "questions": { "type": "array", "maxItems": 30, "items": { "$ref": "#/$defs/question" } },
+        "policy": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "cancelCutoffHours": { "type": "integer", "minimum": 0, "maximum": 720 },
+            "rescheduleCutoffHours": { "type": "integer", "minimum": 0, "maximum": 720 },
+            "requireCancelReason": { "type": "boolean" }
+          }
+        },
+        "confirmation": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "message": { "type": "string", "maxLength": 2000 },
+            "redirectUrl": { "$ref": "#/$defs/httpsUrl" }
+          }
+        }
+      }
+    },
+    "routingRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["when", "to"],
+      "properties": {
+        "when": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["question"],
+          "properties": {
+            "question": { "$ref": "#/$defs/slug" },
+            "equals": { "type": "string", "maxLength": 200 },
+            "in": { "type": "array", "minItems": 1, "items": { "type": "string", "maxLength": 200 } },
+            "gte": { "type": "number" },
+            "lte": { "type": "number" }
+          }
+        },
+        "to": { "$ref": "#/$defs/routingTarget" }
+      }
+    },
+    "routingTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "eventType": { "$ref": "#/$defs/slug" },
+        "hosts": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/slug" } },
+        "url": { "$ref": "#/$defs/httpsUrl" }
+      }
+    },
+    "routing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["forms"],
+      "properties": {
+        "forms": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "title", "questions", "rules", "default"],
+            "properties": {
+              "id": { "$ref": "#/$defs/slug" },
+              "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+              "questions": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/question" } },
+              "rules": { "type": "array", "items": { "$ref": "#/$defs/routingRule" } },
+              "default": { "$ref": "#/$defs/routingTarget" }
+            }
+          }
+        }
+      }
+    },
+    "notifications": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "confirmation": { "type": "boolean" },
+        "reminders": { "type": "array", "maxItems": 5, "uniqueItems": true, "items": { "type": "integer", "minimum": 5, "maximum": 20160 }, "description": "Minutes before the meeting." },
+        "followUp": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "afterMinutes": { "type": "integer", "minimum": 0, "maximum": 10080 }
+          }
+        },
+        "hostBrief": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "minutesBefore": { "type": "integer", "minimum": 5, "maximum": 1440 }
+          }
+        },
+        "meetingNotes": { "type": "boolean", "description": "Hand booked calls to HQ meetings for notes." }
+      }
+    },
+    "webhook": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "events", "signingSecret"],
+      "properties": {
+        "url": { "$ref": "#/$defs/httpsUrl" },
+        "events": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["booked", "canceled", "rescheduled", "no-show"] } },
+        "signingSecret": { "$ref": "#/$defs/secretName" }
+      }
+    },
+    "embed": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "modes": { "type": "array", "uniqueItems": true, "items": { "enum": ["inline", "popup-button", "popup-text"] } },
+        "allowedOrigins": { "type": "array", "uniqueItems": true, "items": { "type": "string", "pattern": "^https://[a-z0-9.-]+(:[0-9]{2,5})?$" } }
+      }
+    },
+    "theme": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "source": { "enum": ["brand-pack", "custom"], "description": "brand-pack reads the company's design-styles brand pack; custom uses the values below." },
+        "brandPack": { "$ref": "#/$defs/slug" },
+        "colors": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "primary": { "$ref": "#/$defs/color" },
+            "background": { "$ref": "#/$defs/color" },
+            "surface": { "$ref": "#/$defs/color" },
+            "text": { "$ref": "#/$defs/color" },
+            "muted": { "$ref": "#/$defs/color" },
+            "accent": { "$ref": "#/$defs/color" }
+          }
+        },
+        "fonts": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "heading": { "type": "string", "maxLength": 80 },
+            "body": { "type": "string", "maxLength": 80 }
+          }
+        },
+        "radius": { "type": "integer", "minimum": 0, "maximum": 32 },
+        "logo": { "type": "string", "maxLength": 2048 },
+        "image": { "type": "string", "maxLength": 2048 }
+      }
+    },
+    "color": {
+      "type": "string",
+      "pattern": "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"
+    },
+    "dataRetention": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "inviteeDataDays": { "type": "integer", "minimum": 30, "maximum": 3650, "description": "Days after a meeting before invitee names, emails and answers are deleted." }
+      }
+    }
+  }
+}

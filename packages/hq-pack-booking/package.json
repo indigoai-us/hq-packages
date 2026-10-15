@@ -1,0 +1,28 @@
+{
+  "name": "@indigoai-us/hq-pack-booking",
+  "version": "0.1.0",
+  "private": true,
+  "description": "HQ content pack: HQ Booking. Branded booking pages for an HQ company, configured by conversation with the agent and hosted on hq-deploy. This release ships the booking.yaml schema, its validator and the availability engine.",
+  "files": [
+    "skills",
+    "knowledge",
+    "scripts",
+    "template",
+    "package.yaml",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/indigoai-us/hq-packages.git",
+    "directory": "packages/hq-pack-booking"
+  },
+  "keywords": [
+    "hq",
+    "hq-pack",
+    "booking",
+    "scheduling",
+    "calendar"
+  ],
+  "license": "MIT"
+}

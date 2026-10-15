@@ -1,0 +1,32 @@
+# A weekly onboarding class with seats, run by two trainers.
+version: 1
+company: northwind
+timezone: Europe/London
+
+hosts:
+  - id: mia
+    name: Mia Brown
+    email: mia@northwind.example
+    hours:
+      wed: ["14:00-16:00"]
+  - id: leo
+    name: Leo Garcia
+    email: leo@northwind.example
+    hours:
+      wed: ["13:00-17:00"]
+
+eventTypes:
+  - id: onboarding-class
+    title: Onboarding class
+    kind: group
+    hosts: [mia, leo]
+    durations: [60]
+    startIncrement: 60
+    seats: 12
+    bookingWindow: 90
+    locations: [{ type: meet }]
+    questions:
+      - { id: role, label: Your role, type: radio, options: [Admin, Member] }
+
+notifications:
+  reminders: [60]

@@ -1,0 +1,21 @@
+{
+  "name": "hq-booking-template",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "HQ Booking app template. shared/ holds the booking.yaml schema, validator and availability engine used by the launcher, the booking app and its API.",
+  "engines": {
+    "node": ">=22.6.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node --experimental-strip-types --no-warnings --test --experimental-test-coverage --test-coverage-lines=90 --test-coverage-include=shared/*.ts --test-coverage-exclude=shared/*.test.ts --test-coverage-exclude=shared/cli.ts shared/*.test.ts"
+  },
+  "dependencies": {
+    "yaml": "^2.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.8.0"
+  }
+}

@@ -1,0 +1,30 @@
+name: hq-pack-booking
+version: 0.1.0
+publisher: '@indigoai-us'
+access: private
+description: 'HQ Booking: branded booking pages for your company, set up by talking to the agent and hosted on hq-deploy. One-on-one, round-robin, everyone-free and group events, checked against your real calendars. This first release ships the booking settings file, its checker, and the engine that works out open times. Setup, hosting and calendar connection arrive in later releases.'
+requires:
+  hqCore: '>=15.0.179'
+  # Runtime prerequisites:
+  #   - Node.js 22.6 or newer (runs the TypeScript sources directly)
+  #   - npm (installs the template's one runtime dependency, yaml, on first use)
+  #   - bash
+contributes:
+  workers: []
+  knowledge:
+    - booking
+  skills:
+    - booking
+  hooks: []
+  policies: []
+  commands: []
+  scripts:
+    - hq-booking.sh
+keywords:
+  - hq
+  - hq-pack
+  - booking
+  - scheduling
+  - calendar
+license: MIT
+repository: 'https://github.com/indigoai-us/hq-packages'
