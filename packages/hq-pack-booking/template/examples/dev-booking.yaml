@@ -1,0 +1,110 @@
+# A fuller config for trying the pages locally:
+#   npm run build && npm run dev -- --config examples/dev-booking.yaml
+# One-on-one with questions and guests, a secret event, a round-robin demo
+# with a routing form, and a neutral theme.
+version: 1
+company: northwind
+timezone: America/New_York
+
+hosts:
+  - id: alex
+    name: Alex Rivera
+    email: alex@northwind.example
+    hours:
+      mon: ["09:00-12:00", "13:00-17:00"]
+      tue: ["09:00-12:00", "13:00-17:00"]
+      wed: ["09:00-12:00"]
+      thu: ["09:00-12:00", "13:00-17:00"]
+      fri: ["10:00-15:00"]
+    links:
+      custom: https://whereby.example/alex
+  - id: sam
+    name: Sam Lee
+    email: sam@northwind.example
+    timezone: America/Chicago
+    hours:
+      mon: ["09:00-17:00"]
+      tue: ["09:00-17:00"]
+      wed: ["09:00-17:00"]
+      thu: ["09:00-17:00"]
+    roundRobin: { weight: 2 }
+  - id: priya
+    name: Priya Shah
+    email: priya@northwind.example
+    timezone: America/Los_Angeles
+    hours:
+      mon: ["08:00-16:00"]
+      tue: ["08:00-16:00"]
+      thu: ["08:00-16:00"]
+
+eventTypes:
+  - id: intro-call
+    title: Intro call
+    description: A short call to see if we're a fit.
+    kind: one-on-one
+    hosts: [alex]
+    durations: [15, 30]
+    defaultDuration: 30
+    startIncrement: 15
+    buffers: { after: 10 }
+    minimumNotice: 240
+    bookingWindow: 45
+    guests: { max: 2 }
+    locations:
+      - { type: meet }
+      - { type: phone, caller: host }
+    questions:
+      - { id: company, label: Company name, type: text, required: true }
+      - { id: goal, label: What would you like to talk about?, type: textarea, maxLength: 1000 }
+    policy: { cancelCutoffHours: 4, rescheduleCutoffHours: 4 }
+    confirmation: { message: "Alex will send a short agenda the day before." }
+
+  - id: demo
+    title: Product demo
+    description: A walkthrough of the product with someone from the sales team.
+    kind: round-robin
+    hosts: [sam, priya]
+    durations: [30, 45]
+    minimumNotice: 120
+    locations: [{ type: zoom }]
+    questions:
+      - { id: seats, label: How many people would use it?, type: number, required: true }
+      - { id: size, label: Company size, type: select, options: ["1-10", "11-50", "51-500", "500+"] }
+
+  - id: strategy-session
+    title: Strategy session
+    kind: one-on-one
+    hosts: [alex]
+    durations: [60, 90]
+    secret: true
+    locations:
+      - { type: zoom }
+      - { type: in-person, address: "200 Main St, Suite 4, Boston, MA" }
+    policy: { cancelCutoffHours: 24, requireCancelReason: true }
+
+routing:
+  forms:
+    - id: talk-to-sales
+      title: Talk to sales
+      questions:
+        - { id: seats, label: How many people would use it?, type: number, required: true }
+      rules:
+        - when: { question: seats, gte: 200 }
+          to: { eventType: demo, hosts: [sam] }
+      default: { eventType: demo }
+
+notifications:
+  confirmation: true
+  reminders: [1440, 60]
+  followUp: { enabled: true, afterMinutes: 60 }
+  hostBrief: { enabled: true, minutesBefore: 30 }
+
+embed:
+  modes: [inline, popup-button, popup-text]
+
+theme:
+  source: custom
+  radius: 10
+
+dataRetention:
+  inviteeDataDays: 365
