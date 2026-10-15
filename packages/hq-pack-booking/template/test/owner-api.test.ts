@@ -16,7 +16,11 @@ test("owner routes need the owner key", async () => {
   assert.equal((await h.call("GET", "/api/owner/bookings", undefined, { authorization: "Bearer wrong-key-123" })).status, 401);
   assert.equal((await h.call("GET", "/api/owner/bookings", undefined, { authorization: OWNER_KEY })).status, 401);
   const ok = await h.owner("GET", "/api/owner/session");
-  assert.deepEqual(ok.body, { ok: true, company: "acme", provider: "sandbox", sandbox: true, store: "memory" });
+  const { hosts, eventTypes, ...session } = ok.body;
+  assert.deepEqual(session, { ok: true, company: "acme", provider: "sandbox", sandbox: true, store: "memory" });
+  assert.ok(hosts.length > 0 && hosts.every((x: { id: string; name: string; timezone: string }) => x.id && x.name && x.timezone));
+  assert.ok(eventTypes.some((e: { id: string; secret: boolean }) => e.id === "vip" && e.secret === true), "session lists secret event types for the owner");
+  assert.ok(!JSON.stringify(hosts).includes("@"), "session must not list host emails");
   let last;
   for (let i = 0; i < 21; i++) last = await h.call("GET", "/api/owner/session", undefined, { authorization: "Bearer guessing-1234", "x-forwarded-for": "198.51.100.200" });
   assert.equal(last?.status, 429);

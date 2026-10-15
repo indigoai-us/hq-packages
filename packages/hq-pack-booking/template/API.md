@@ -284,7 +284,7 @@ untrusted data.
 
 | Method and path | Body or query | Answer |
 |---|---|---|
-| `GET /api/owner/session` | | `{ ok, company, provider, sandbox, store }` |
+| `GET /api/owner/session` | | `{ ok, company, provider, sandbox, store, hosts: [{ id, name, timezone }], eventTypes: [{ id, title, kind, secret, durations }] }` (secret event types included; no host emails) |
 | `GET /api/owner/bookings` | `status` (`confirmed`/`canceled`), `eventType`, `host`, `email`, `createdBy`, `from`, `to` (on start time), `order` (`asc`, default newest first), `limit`, `offset` | `{ total, limit, offset, bookings: [OwnerBooking] }` |
 | `GET /api/owner/bookings/{id}` | | `{ booking: OwnerBooking, audit: [{ at, actor, action, detail }] }` |
 | `POST /api/owner/bookings/{id}/cancel` | `{ reason? }` | `{ booking }`; no cutoff or reason rule for the owner |

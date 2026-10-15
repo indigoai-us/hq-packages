@@ -264,7 +264,16 @@ export async function runJobs(s: Services) {
 }
 
 export function registerOwnerRoutes(r: Router<Services>): void {
-  r.get("/api/owner/session", owner(({ services: s }) => ({ ok: true, company: s.config.company, provider: s.providers.calendar.name, sandbox: isSandbox(s), store: s.store.kind })));
+  r.get("/api/owner/session", owner(({ services: s }) => ({
+    ok: true,
+    company: s.config.company,
+    provider: s.providers.calendar.name,
+    sandbox: isSandbox(s),
+    store: s.store.kind,
+    // The owner pages need host ids (calendar, filters) and every event type, secret ones included (links).
+    hosts: s.config.hosts.map((h) => ({ id: h.id, name: h.name, timezone: h.timezone ?? s.config.timezone ?? "UTC" })),
+    eventTypes: s.config.eventTypes.map((e) => ({ id: e.id, title: e.title, kind: e.kind, secret: e.secret === true, durations: e.durations })),
+  })));
 
   r.get("/api/owner/bookings", owner(async ({ services: s, query }) => {
     const { limit, offset } = page(query);
