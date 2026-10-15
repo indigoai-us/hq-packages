@@ -43,7 +43,7 @@ export function Outbox() {
   return (
     <>
       <PageHead title="Outbox" sub="Every email the app would send to invitees and guests." />
-      <SandboxNote>Sandbox email: stored here, not sent. Real emails go out from the host's Gmail through your HQ Google connection.</SandboxNote>
+      <SandboxNote>Stored here, not sent.</SandboxNote>
       <Loadable state={res} minHeight={420}>
         {(d) => {
           if (!d.emails.length) return <Empty title="No emails yet">Book a time on the booking page and the confirmation appears here.</Empty>;
@@ -145,7 +145,7 @@ export function Notifications() {
           </select>
         </label>
       </PageHead>
-      <SandboxNote>Sandbox HQ DMs: shown here only. Real ones arrive in the recipient's HQ direct messages.</SandboxNote>
+      <SandboxNote>Shown here only, not sent as HQ DMs.</SandboxNote>
       <Loadable state={res} minHeight={360}>
         {(d) =>
           d.notifications.length === 0 ? (

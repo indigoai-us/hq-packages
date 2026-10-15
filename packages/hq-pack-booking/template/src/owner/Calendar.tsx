@@ -1,6 +1,7 @@
 import { useState } from "preact/hooks";
 import { qs } from "../lib/api.ts";
 import { useAsync } from "../lib/hooks.ts";
+import { assignLanes } from "../lib/owner-format.ts";
 import { navigate } from "../lib/router.ts";
 import { addDays, clockMinutes, formatClock, formatDateShort, wall, weekStart, zonedInstant, zoneLabel } from "../lib/time.ts";
 import { Button, Icon, SandboxNote } from "../ui.tsx";
@@ -34,13 +35,54 @@ interface Block {
   height: number;
   label: string;
   time: string;
+  /** Start time alone, for blocks too short or narrow for the range. */
+  startTime: string;
   kind: "busy" | "booking" | "canceled";
   bookingId: string | null;
+  /** Side-by-side placement when blocks overlap in time. */
+  lane: number;
+  lanes: number;
+}
+
+function isShort(b: Block): boolean {
+  return b.height < 36;
+}
+
+function blockClass(b: Block): string {
+  return `ow-block ${b.kind === "booking" && b.bookingId ? "ow-block-booking" : "ow-block-busy"}${b.lanes > 1 ? " is-split" : ""}${isShort(b) ? " is-short" : ""}`;
+}
+
+/** Short blocks lead with the start time so it survives truncation; the full range is in the tooltip. */
+function BlockText({ b }: { b: Block }) {
+  if (isShort(b) || b.lanes > 1)
+    return (
+      <>
+        {isShort(b) && <span class="ow-block-time">{b.startTime}</span>}
+        <span class="ow-block-title">{b.label}</span>
+        {!isShort(b) && <span class="ow-block-time">{b.startTime}</span>}
+      </>
+    );
+  return (
+    <>
+      <span class="ow-block-title">{b.label}</span>
+      <span class="ow-block-time">{b.time}</span>
+    </>
+  );
+}
+
+function placement(b: Block): Record<string, string | number> {
+  const w = 100 / b.lanes;
+  return { top: b.top, height: b.height, left: `calc(${w * b.lane}% + 4px)`, width: `calc(${w}% - 8px)` };
 }
 
 function blocksFor(items: { key: string; start: string; end: string; label: string; kind: Block["kind"]; bookingId: string | null }[], days: string[], tz: string, startHour: number, hour12: boolean): Block[] {
   const out: Block[] = [];
+  const seen = new Set<string>();
   for (const it of items) {
+    // The same busy time can come from more than one calendar; draw it once.
+    const sig = `${it.kind}|${it.start}|${it.end}|${it.label}`;
+    if (seen.has(sig)) continue;
+    seen.add(sig);
     const a = wall(it.start, tz);
     const b = wall(it.end, tz);
     const day = days.indexOf(a.date);
@@ -49,8 +91,9 @@ function blocksFor(items: { key: string; start: string; end: string; label: stri
     const endMin = b.date === a.date ? clockMinutes(b.time) : 24 * 60;
     const top = ((startMin - startHour * 60) / 60) * HOUR_PX;
     const height = Math.max(18, ((endMin - startMin) / 60) * HOUR_PX - 2);
-    out.push({ key: it.key, day, top, height, label: it.label, time: `${formatClock(a.time, hour12)} – ${formatClock(b.time, hour12)}`, kind: it.kind, bookingId: it.bookingId });
+    out.push({ key: it.key, day, top, height, label: it.label, time: `${formatClock(a.time, hour12)} – ${formatClock(b.time, hour12)}`, startTime: formatClock(a.time, hour12), kind: it.kind, bookingId: it.bookingId, lane: 0, lanes: 1 });
   }
+  assignLanes(out);
   return out;
 }
 
@@ -84,7 +127,7 @@ export function Calendar() {
           </select>
         </label>
       </PageHead>
-      <SandboxNote>Sandbox calendar. Real calendars connect through your HQ Google connection once Google approves booking access.</SandboxNote>
+      <SandboxNote>Simulated busy times, not a real calendar.</SandboxNote>
       <div class="ow-cal-bar">
         <div class="ow-cal-nav">
           <button type="button" class="bk-icon-btn" aria-label="Previous week" onClick={() => setWeek(addDays(week, -7))}>
@@ -109,7 +152,7 @@ export function Calendar() {
         {(d) => {
           if (!d) return <p class="ow-dim">Add a host to booking.yaml to see a calendar.</p>;
           const items = [
-            ...d.events.map((e) => ({ key: e.id, start: e.start, end: e.end, label: e.kind === "booking" ? e.title : e.title || "Busy", kind: (e.kind === "busy" ? "busy" : e.status === "canceled" ? "canceled" : "booking") as Block["kind"], bookingId: e.bookingId })),
+            ...d.events.map((e) => ({ key: e.id, start: e.start, end: e.end, label: e.kind === "booking" ? e.title || "Booked" : e.title || "Busy", kind: (e.kind === "busy" ? "busy" : e.status === "canceled" ? "canceled" : "booking") as Block["kind"], bookingId: e.bookingId })),
             ...d.busy.filter((b) => !d.events.some((e) => e.start === b.start && e.end === b.end)).map((b, i) => ({ key: `busy-${i}`, start: b.start, end: b.end, label: "Busy", kind: "busy" as const, bookingId: null })),
           ].filter((x) => x.kind !== "canceled");
           let startHour = 8;
@@ -151,14 +194,12 @@ export function Calendar() {
                         .filter((b) => b.day === i)
                         .map((b) =>
                           b.kind === "booking" && b.bookingId ? (
-                            <button key={b.key} type="button" class="ow-block ow-block-booking" style={{ top: b.top, height: b.height }} onClick={() => navigate(`/owner/bookings/${encodeURIComponent(b.bookingId as string)}`)}>
-                              <span class="ow-block-title">{b.label}</span>
-                              <span class="ow-block-time">{b.time}</span>
+                            <button key={b.key} type="button" class={blockClass(b)} style={placement(b)} title={`${b.label}, ${b.time}`} onClick={() => navigate(`/owner/bookings/${encodeURIComponent(b.bookingId as string)}`)}>
+                              <BlockText b={b} />
                             </button>
                           ) : (
-                            <div key={b.key} class="ow-block ow-block-busy" style={{ top: b.top, height: b.height }}>
-                              <span class="ow-block-title">{b.label}</span>
-                              <span class="ow-block-time">{b.time}</span>
+                            <div key={b.key} class={blockClass(b)} style={placement(b)} title={`${b.label}, ${b.time}`}>
+                              <BlockText b={b} />
                             </div>
                           ),
                         )}

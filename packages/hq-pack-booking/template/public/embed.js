@@ -202,8 +202,13 @@
     if (e.origin !== base || !e.data || typeof e.data.type !== "string") return;
     var entry = entryFor(e.source);
     if (!entry) return;
-    if (e.data.type === "hq-booking:resize" && !entry.popup && typeof e.data.height === "number") {
-      entry.frame.style.height = Math.max(320, Math.min(4000, Math.ceil(e.data.height))) + "px";
+    if (e.data.type === "hq-booking:resize" && typeof e.data.height === "number") {
+      var h = Math.max(320, Math.min(4000, Math.ceil(e.data.height)));
+      // A popup fits its content up to the window height (full screen on phones).
+      if (entry.popup) {
+        var dialog = entry.frame.parentNode;
+        if (dialog && dialog.style && win.innerWidth > 640) dialog.style.height = Math.min(h, win.innerHeight - 48) + "px";
+      } else entry.frame.style.height = h + "px";
     }
     if (e.data.type === "hq-booking:booked") {
       var detail = { bookingId: e.data.bookingId, eventType: e.data.eventType, start: e.data.start };

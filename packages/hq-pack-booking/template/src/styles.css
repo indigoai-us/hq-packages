@@ -146,7 +146,19 @@ html.is-embedded .bk-main {
   padding: 8px;
 }
 
+/* In the popup the dialog is the card: drop the inner border so the close
+   button does not sit on the card corner. */
+html.is-popup .bk-main > .bk-card {
+  border-color: transparent;
+}
+
 .bk-narrow {
+  max-width: 720px;
+}
+
+/* Header and footer line up with a narrow content column. */
+.bk-page:has(> .bk-main.bk-narrow) > .bk-header,
+.bk-page:has(> .bk-main.bk-narrow) > .bk-footer {
   max-width: 720px;
 }
 
@@ -472,6 +484,10 @@ html.is-embedded .bk-footer {
   border: 1px solid var(--bk-border);
 }
 
+.bk-card-pad > .bk-notice:first-child {
+  margin: 0 0 24px;
+}
+
 .bk-notice-danger {
   background: var(--bk-danger-soft);
   border-color: color-mix(in srgb, var(--bk-danger) 25%, var(--bk-bg));
@@ -558,10 +574,13 @@ html.is-embedded .bk-footer {
 select.bk-input {
   appearance: none;
   padding-right: 34px;
-  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
+  /* Thin chevron drawn with two 1.5px diagonal strokes. */
+  background-image:
+    linear-gradient(45deg, transparent calc(50% - 0.8px), currentColor calc(50% - 0.8px), currentColor calc(50% + 0.8px), transparent calc(50% + 0.8px)),
+    linear-gradient(135deg, transparent calc(50% - 0.8px), currentColor calc(50% - 0.8px), currentColor calc(50% + 0.8px), transparent calc(50% + 0.8px));
   background-position:
-    calc(100% - 17px) 50%,
-    calc(100% - 12px) 50%;
+    calc(100% - 20px) calc(50% + 1px),
+    calc(100% - 15px) calc(50% + 1px);
   background-size: 5px 5px;
   background-repeat: no-repeat;
 }
@@ -811,6 +830,7 @@ select.bk-input {
 .bk-stage {
   padding: 32px;
   min-width: 0;
+  container-type: inline-size;
 }
 
 .bk-stage-title {
@@ -1050,6 +1070,7 @@ select.bk-input {
   padding: 6px 4px;
   border-radius: var(--bk-radius-sm);
   max-width: 260px;
+  field-sizing: content;
   cursor: pointer;
 }
 
@@ -1078,6 +1099,7 @@ select.bk-input {
 .bk-times-list {
   display: flex;
   flex-direction: column;
+  align-content: start;
   gap: 8px;
   height: 380px;
   overflow-y: auto;
@@ -1252,6 +1274,23 @@ select.bk-input {
   max-width: 460px;
 }
 
+/* The picker stacks when its column is narrow (reschedule, embeds, owner
+   panels), whatever the window width. */
+@container (max-width: 600px) {
+  .bk-slotpicker {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 20px;
+  }
+  .bk-times-list {
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    overflow: visible;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 /* ------------------------------------------------------------ Responsive */
 
 @media (max-width: 960px) {
@@ -1269,6 +1308,10 @@ select.bk-input {
 }
 
 @media (max-width: 640px) {
+  .ow-table th,
+  .ow-table td {
+    white-space: nowrap;
+  }
   .bk-main {
     padding: 24px 16px 32px;
   }
@@ -1557,7 +1600,14 @@ select.bk-input {
   flex: 1 1 220px;
 }
 
+/* A field next to a full-size button matches the button height. */
+.ow-inline-form .ow-filter .bk-input {
+  min-height: 44px;
+}
+
 .ow-table-wrap {
+  /* Contains absolutely placed screen-reader text so it cannot widen the page. */
+  position: relative;
   overflow-x: auto;
   border: 1px solid var(--bk-border);
   border-radius: var(--bk-radius-lg);
@@ -1984,6 +2034,33 @@ select.bk-input {
   font-variant-numeric: tabular-nums;
 }
 
+/* Short blocks put start time and title on one line. */
+.ow-block.is-short {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  padding-top: 0;
+  padding-bottom: 0;
+  white-space: nowrap;
+}
+
+.ow-block.is-short .ow-block-time {
+  flex: none;
+}
+
+.ow-block.is-short .ow-block-title {
+  min-width: 0;
+}
+
+.ow-block.is-split {
+  padding-left: 5px;
+  padding-right: 5px;
+}
+
+.ow-block.is-split .ow-block-time {
+  white-space: nowrap;
+}
+
 /* Outbox */
 .ow-mail {
   display: grid;
@@ -2198,6 +2275,37 @@ select.bk-input {
   align-items: start;
 }
 
+/* Hints go under the input so inputs in one row line up. */
+.ow-form-grid > .bk-field {
+  display: flex;
+  flex-direction: column;
+}
+
+.ow-form-grid > .bk-field > .bk-hint {
+  order: 2;
+  margin: 6px 0 0;
+}
+
+.ow-form-grid > .bk-field > .bk-field-error {
+  order: 3;
+}
+
+.ow-form-grid > .bk-field > .bk-hint + .bk-input,
+.ow-form-grid > .bk-field > .bk-hint + select,
+.ow-form-grid > .bk-field > .bk-hint + textarea {
+  margin-top: 0;
+}
+
+.ow-form-webhook {
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+}
+
+@media (max-width: 860px) {
+  .ow-form-webhook {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .ow-form-check {
   grid-column: 1 / -1;
   margin: 0 0 16px;
@@ -2387,34 +2495,125 @@ select.bk-input {
 
 .ow-two-embed {
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  align-items: start;
 }
 
 .ow-chart {
   margin: 0;
 }
 
-.ow-chart svg {
-  width: 100%;
-  height: auto;
+/* Horizontal bars */
+.ow-hbars {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  font-size: 13px;
+}
+
+.ow-hbar-row {
+  display: grid;
+  grid-template-columns: minmax(80px, 140px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+}
+
+.ow-hbar-label {
+  color: var(--bk-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ow-hbar-track {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-right: 28px;
+}
+
+.ow-hbar-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ow-hbar {
   display: block;
-  overflow: visible;
+  height: 8px;
+  min-width: 2px;
+  border-radius: 2px;
 }
 
-.ow-grid {
-  stroke: var(--bk-border);
-  stroke-width: 1;
-}
-
-.ow-axis,
-.ow-value {
-  fill: var(--bk-muted);
-  font-size: 11px;
+.ow-hbar-value,
+.ow-hbar-axis,
+.ow-vbars-axis,
+.ow-vbar-label {
+  color: var(--bk-muted);
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 
-.ow-label {
-  fill: var(--bk-text);
-  font-size: 12.5px;
+.ow-hbar-value {
+  line-height: 1;
+}
+
+.ow-hbar-axis .ow-hbar-track {
+  flex-direction: row;
+  justify-content: space-between;
+  border-top: 1px solid var(--bk-border);
+  padding-top: 6px;
+}
+
+/* Vertical week bars */
+.ow-vbars {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+}
+
+.ow-vbars-axis {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-end;
+  height: 180px;
+  margin-top: -7px;
+  line-height: 14px;
+}
+
+.ow-vbars-plot {
+  display: flex;
+  gap: 4px;
+  background: linear-gradient(var(--bk-border), var(--bk-border)) 0 0 / 100% 1px no-repeat, linear-gradient(var(--bk-border), var(--bk-border)) 0 90px / 100% 1px no-repeat;
+}
+
+.ow-vbar-week {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.ow-vbar-bars {
+  height: 180px;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 2px;
+  border-bottom: 1px solid var(--bk-border-strong);
+}
+
+.ow-vbar {
+  width: min(10px, 22%);
+  border-radius: 2px 2px 0 0;
+}
+
+.ow-vbar-label {
+  margin-top: 8px;
+  white-space: nowrap;
+  min-height: 1.3em;
 }
 
 .ow-s1 {
@@ -2484,6 +2683,7 @@ select.bk-input {
 @media (max-width: 860px) {
   .ow {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
   }
   .ow-side {
     position: static;

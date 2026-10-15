@@ -3,6 +3,7 @@ import SlotPicker from "../components/SlotPicker.tsx";
 import { qs } from "../lib/api.ts";
 import { useAction, useAsync } from "../lib/hooks.ts";
 import { locationTitle, nameList } from "../lib/labels.ts";
+import { auditActionLabel, calendarStatusLabel, humanizeKey } from "../lib/owner-format.ts";
 import { navigate } from "../lib/router.ts";
 import { formatRange, zoneLabel } from "../lib/time.ts";
 import type { EventType, OwnerBooking, Slot } from "../lib/types.ts";
@@ -239,7 +240,7 @@ export function BookingDetail({ id }: { id: string }) {
                     <dl class="ow-kv">
                       {Object.entries(b.answers).map(([k, v]) => (
                         <>
-                          <dt key={`${k}-k`}>{k}</dt>
+                          <dt key={`${k}-k`}>{humanizeKey(k)}</dt>
                           <dd key={`${k}-v`} class="ow-pre">
                             {Array.isArray(v) ? v.join(", ") : String(v)}
                           </dd>
@@ -265,7 +266,7 @@ export function BookingDetail({ id }: { id: string }) {
                     <dt>Booked by</dt>
                     <dd>{createdByLabel(b)}</dd>
                     <dt>Calendar</dt>
-                    <dd>{b.calendarStatus}</dd>
+                    <dd>{calendarStatusLabel(b.calendarStatus)}</dd>
                     <dt>Created</dt>
                     <dd>
                       <When iso={b.createdAt} />
@@ -340,7 +341,7 @@ export function BookingDetail({ id }: { id: string }) {
                   <ol class="ow-audit">
                     {audit.map((a, i) => (
                       <li key={i}>
-                        <span class="ow-audit-action">{a.action}</span>
+                        <span class="ow-audit-action">{auditActionLabel(a.action)}</span>
                         <span class="ow-cell-sub">
                           {actorLabel(a.actor)} · <When iso={a.at} />
                         </span>

@@ -1,6 +1,7 @@
-// Bookings, cancels and no-shows by event type, host and week. Plain SVG.
+// Bookings, cancels and no-shows by event type, host and week. Plain HTML bars.
 
 import { useAsync } from "../lib/hooks.ts";
+import { fillWeeks } from "../lib/owner-format.ts";
 import { formatDateShort } from "../lib/time.ts";
 import { useOwner } from "./context.ts";
 import { Empty, Loadable, PageHead, Section } from "./parts.tsx";
@@ -35,50 +36,39 @@ function niceMax(n: number): number {
   return 10 * pow;
 }
 
-/** Horizontal grouped bars: one row per key. */
+/** Horizontal grouped bars: one row per key. HTML, so text keeps its real size. */
 function HBars({ rows, label, name }: { rows: Tally[]; label: string; name: (k: string) => string }) {
   if (!rows.length) return <p class="ow-dim">No data yet.</p>;
   const max = niceMax(Math.max(...rows.map((r) => r.bookings)));
-  const labelW = 150;
-  const width = 560;
-  const barW = width - labelW - 40;
-  const rowH = 46;
-  const height = rows.length * rowH + 24;
   return (
     <figure class="ow-chart">
-      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={label} preserveAspectRatio="xMinYMin meet">
-        {[0, 0.5, 1].map((t) => (
-          <g key={t}>
-            <line x1={labelW + t * barW} x2={labelW + t * barW} y1={0} y2={height - 20} class="ow-grid" />
-            <text x={labelW + t * barW} y={height - 6} class="ow-axis" text-anchor="middle">
-              {Math.round(t * max)}
-            </text>
-          </g>
+      <div class="ow-hbars" aria-hidden="true">
+        {rows.map((r) => (
+          <div key={r.key} class="ow-hbar-row">
+            <span class="ow-hbar-label" title={name(r.key)}>
+              {name(r.key)}
+            </span>
+            <span class="ow-hbar-track">
+              {SERIES.map((s) =>
+                r[s.key] > 0 ? (
+                  <span key={s.key} class="ow-hbar-line">
+                    <span class={`ow-hbar ${s.cls}`} style={{ width: `${(r[s.key] / max) * 100}%` }} />
+                    <span class="ow-hbar-value">{r[s.key]}</span>
+                  </span>
+                ) : null,
+              )}
+            </span>
+          </div>
         ))}
-        {rows.map((r, i) => {
-          const y = i * rowH + 6;
-          return (
-            <g key={r.key}>
-              <text x={0} y={y + 16} class="ow-label">
-                {name(r.key).length > 20 ? `${name(r.key).slice(0, 19)}…` : name(r.key)}
-              </text>
-              {SERIES.map((s, j) => {
-                const v = r[s.key];
-                return (
-                  <g key={s.key}>
-                    <rect x={labelW} y={y + j * 11} width={Math.max(v ? 2 : 0, (v / max) * barW)} height={9} rx={2} class={s.cls} />
-                    {v > 0 && (
-                      <text x={labelW + (v / max) * barW + 6} y={y + j * 11 + 8} class="ow-value">
-                        {v}
-                      </text>
-                    )}
-                  </g>
-                );
-              })}
-            </g>
-          );
-        })}
-      </svg>
+        <div class="ow-hbar-row ow-hbar-axis">
+          <span />
+          <span class="ow-hbar-track">
+            <span>0</span>
+            <span>{max / 2}</span>
+            <span>{max}</span>
+          </span>
+        </div>
+      </div>
       <table class="bk-sr">
         <caption>{label}</caption>
         <thead>
@@ -108,40 +98,27 @@ function HBars({ rows, label, name }: { rows: Tally[]; label: string; name: (k: 
 function WeekBars({ rows }: { rows: Tally[] }) {
   if (!rows.length) return <p class="ow-dim">No data yet.</p>;
   const max = niceMax(Math.max(...rows.map((r) => r.bookings)));
-  const width = 720;
-  const height = 220;
-  const left = 28;
-  const plotH = height - 40;
-  const slot = (width - left) / rows.length;
-  const bw = Math.min(10, (slot - 8) / 3);
   return (
     <figure class="ow-chart">
-      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Bookings per week" preserveAspectRatio="xMinYMin meet">
-        {[0, 0.5, 1].map((t) => (
-          <g key={t}>
-            <line x1={left} x2={width} y1={plotH - t * plotH + 4} y2={plotH - t * plotH + 4} class="ow-grid" />
-            <text x={left - 6} y={plotH - t * plotH + 8} class="ow-axis" text-anchor="end">
-              {Math.round(t * max)}
-            </text>
-          </g>
-        ))}
-        {rows.map((r, i) => {
-          const x0 = left + i * slot + (slot - bw * 3 - 4) / 2;
-          return (
-            <g key={r.key}>
-              {SERIES.map((s, j) => {
-                const h = (r[s.key] / max) * plotH;
-                return <rect key={s.key} x={x0 + j * (bw + 2)} y={plotH - h + 4} width={bw} height={h} rx={2} class={s.cls} />;
-              })}
-              {(rows.length <= 8 || i % 2 === 0) && (
-                <text x={left + i * slot + slot / 2} y={height - 14} class="ow-axis" text-anchor="middle">
-                  {formatDateShort(r.key).replace(/^\w+, /, "")}
-                </text>
-              )}
-            </g>
-          );
-        })}
-      </svg>
+      <div class="ow-vbars" aria-hidden="true">
+        <div class="ow-vbars-axis">
+          <span>{max}</span>
+          <span>{max / 2}</span>
+          <span>0</span>
+        </div>
+        <div class="ow-vbars-plot">
+          {rows.map((r, i) => (
+            <div key={r.key} class="ow-vbar-week">
+              <div class="ow-vbar-bars">
+                {SERIES.map((s) => (
+                  <span key={s.key} class={`ow-vbar ${s.cls}`} style={{ height: `${(r[s.key] / max) * 100}%` }} />
+                ))}
+              </div>
+              <span class="ow-vbar-label">{rows.length <= 8 || (rows.length - 1 - i) % 2 === 0 ? formatDateShort(r.key).replace(/^\w+, /, "") : ""}</span>
+            </div>
+          ))}
+        </div>
+      </div>
       <table class="bk-sr">
         <caption>Bookings per week (week starting Monday)</caption>
         <thead>
@@ -206,7 +183,7 @@ export function Analytics() {
             ) : (
               <>
                 <Section title="By week">
-                  <WeekBars rows={d.byWeek} />
+                  <WeekBars rows={fillWeeks(d.byWeek, d.from, d.to)} />
                 </Section>
                 <div class="ow-two">
                   <Section title="By event type">
