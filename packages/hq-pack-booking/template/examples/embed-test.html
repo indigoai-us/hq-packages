@@ -1,0 +1,74 @@
+<!doctype html>
+<!--
+  Test host page for embed.js. Serve it from a different origin than the
+  booking app to test the real cross-origin case, for example:
+
+    npm run build && npm run dev                      # app on http://127.0.0.1:5180
+    npx http-server examples -p 5190                  # or any static server
+    open "http://127.0.0.1:5190/embed-test.html?app=http://127.0.0.1:5180&utm_source=test-page"
+
+  ?app= sets the booking app origin (default http://127.0.0.1:5180) and
+  ?event= the event type id (default intro-call). The page's own utm_*,
+  name, email and a_* parameters are passed through to the booking.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Embed test host page</title>
+    <style>
+      body { font: 15px/1.5 system-ui, -apple-system, sans-serif; margin: 0; color: #1b1b1a; background: #f4f4f1; }
+      main { max-width: 1100px; margin: 0 auto; padding: 32px 20px 80px; }
+      h1 { font: 400 30px/1.2 Georgia, serif; margin: 0 0 6px; }
+      h2 { font-size: 16px; font-weight: 500; margin: 36px 0 10px; }
+      .box { background: #fff; border: 1px solid #e3e3df; border-radius: 12px; padding: 16px; }
+      #log { font: 12.5px/1.5 ui-monospace, Menlo, monospace; white-space: pre-wrap; min-height: 3em; }
+      .row { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Acme Inc. (embed test page)</h1>
+      <p>This page stands in for a client's website. It loads embed.js from the booking app.</p>
+
+      <h2>Events posted to this page</h2>
+      <div class="box"><div id="log" aria-live="polite">Nothing booked yet.</div></div>
+
+      <h2>Popup button and popup text</h2>
+      <div class="box row">
+        <button id="popup-button" data-hq-booking="intro-call" data-hq-mode="popup-button" data-hq-params="a_company=Acme%20Inc." style="font:500 15px system-ui;padding:12px 18px;border-radius:10px;border:0;background:#1b1b1a;color:#fff;cursor:pointer">Book a call</button>
+        <a id="popup-text" href="#" data-hq-booking="intro-call" data-hq-mode="popup-text">or book a call through this link</a>
+        <span data-hq-booking="intro-call" data-hq-mode="popup-button" data-hq-text="Script-made button"></span>
+      </div>
+
+      <h2>Inline</h2>
+      <div class="box"><div id="inline" data-hq-booking="intro-call" data-hq-name="Test Visitor" data-hq-email="visitor@acme.example"></div></div>
+    </main>
+    <script>
+      (function () {
+        var q = new URLSearchParams(location.search);
+        var app = q.get("app") || "http://127.0.0.1:5180";
+        var ev = q.get("event");
+        if (ev) document.querySelectorAll("[data-hq-booking]").forEach(function (el) { el.setAttribute("data-hq-booking", ev); });
+        document.getElementById("popup-text").href = app + "/" + (ev || "intro-call");
+        var log = document.getElementById("log");
+        var lines = [];
+        window.bookedMessages = [];
+        window.addEventListener("message", function (e) {
+          if (e.origin !== app || !e.data || e.data.type !== "hq-booking:booked") return;
+          window.bookedMessages.push(e.data);
+          lines.push("postMessage " + JSON.stringify(e.data));
+          log.textContent = lines.join("\n");
+        });
+        document.addEventListener("hq-booking:booked", function (e) {
+          lines.push("DOM event " + JSON.stringify(e.detail));
+          log.textContent = lines.join("\n");
+        });
+        var s = document.createElement("script");
+        s.src = app + "/embed.js";
+        s.async = true;
+        document.body.appendChild(s);
+      })();
+    </script>
+  </body>
+</html>

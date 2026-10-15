@@ -1,0 +1,5 @@
+// Every /api route with 4 path segments after /api comes here; the app's own
+// router (api/_lib/http.ts) matches the full path. See knowledge/booking/hosting.md.
+import { serveDeployed } from "../../../_lib/deployed.ts";
+
+export default serveDeployed;

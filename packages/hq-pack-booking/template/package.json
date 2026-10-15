@@ -1,0 +1,28 @@
+{
+  "name": "hq-booking-template",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "HQ Booking app template. shared/ holds the booking.yaml schema, validator and availability engine; api/ is the booking API for hq-deploy; src/ is the booking pages and owner dashboard (Vite + Preact, built to dist/); dev/ runs it locally.",
+  "engines": {
+    "node": ">=22.6.0"
+  },
+  "scripts": {
+    "dev": "node --experimental-strip-types --no-warnings dev/server.ts",
+    "stage": "node --experimental-strip-types --no-warnings dev/stage.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.build.json && tsc --noEmit -p tsconfig.app.json",
+    "test": "node --experimental-strip-types --no-warnings --test --experimental-test-coverage --test-coverage-lines=90 --test-coverage-include=shared/*.ts --test-coverage-include=api/_lib/*.ts --test-coverage-exclude=shared/*.test.ts --test-coverage-exclude=shared/cli.ts --test-coverage-exclude=api/_lib/db.ts --test-coverage-exclude=api/_lib/deployed.ts shared/*.test.ts test/*.test.ts",
+    "build": "vite build",
+    "dev:ui": "vite",
+    "test:ui": "node --experimental-strip-types --no-warnings --test test/frontend.test.ts"
+  },
+  "dependencies": {
+    "yaml": "^2.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.8.0",
+    "vite": "7.3.7",
+    "preact": "10.29.8"
+  }
+}
