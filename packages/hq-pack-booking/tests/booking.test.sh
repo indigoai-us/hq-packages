@@ -2,7 +2,8 @@
 # Pack tests for hq-pack-booking. Runs on any OS with Node.js 22.6+ and npm.
 #
 # 1. Installs the template's dependencies, runs its typecheck and unit tests
-#    (schema, validator, availability engine; line coverage must stay >= 90%).
+#    (schema, validator, availability engine, booking API, stores, providers,
+#    dev server; line coverage must stay >= 90%), then stages a deploy copy.
 # 2. Exercises scripts/hq-booking.sh against a fake HQ root with two companies
 #    and a stub `hq` CLI that reports the session company.
 #
@@ -34,6 +35,13 @@ if out="$(cd "$tmp/template-ci" && npm test --silent 2>&1)"; then
   ok "template unit tests and coverage"
 else
   bad "template unit tests and coverage" "$(printf '%s' "$out" | grep -E '✖|not ok|coverage threshold|Error' | head -20)"
+fi
+# The deploy stage: a self-contained api/ + db/migrations/ for hq-deploy's app type.
+if out="$(cd "$tmp/template-ci" && node --experimental-strip-types --no-warnings dev/stage.ts "$pack/knowledge/booking/examples/sales-round-robin.yaml" "$tmp/stage-out" 2>&1)" \
+  && printf '%s' "$out" | grep -q '"ok":true' && [ -f "$tmp/stage-out/api/_lib/shared/availability.ts" ] && [ -f "$tmp/stage-out/db/migrations/001_create_bookings.sql" ]; then
+  ok "deploy stage is self-contained"
+else
+  bad "deploy stage is self-contained" "$out"
 fi
 
 # --- 2. launcher ---------------------------------------------------------------
