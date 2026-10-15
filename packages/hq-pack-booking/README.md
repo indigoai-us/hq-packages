@@ -27,24 +27,39 @@ offer.
 - The launcher refuses a config inside another company's folder, including
   through a symlink.
 
-Not built yet: calendar connection (hq-pro), the hosted booking pages and
-API (hq-deploy), emails and reminders, the agent's setup and management flow,
-and agent-to-agent booking. Each is a later story in the project plan.
+Unreleased, the sandbox prototype. Verified by the pack tests:
+
+- The booking API for hq-deploy (public, owner and agent routes), its
+  database migrations, and sandbox calendar, video, email and DM providers.
+- `hq-booking.sh setup`, `build`, `deploy`, `dev`, `owner`, `agent` and
+  `hosts`. The owner key goes to the vault and never appears in output,
+  booking.yaml or deploy.json. `deploy` follows the `/deploy` skill's request
+  sequence, tested against a fake hq-deploy API. `owner` and `agent` are
+  tested against a local dev instance, including an outside company's agent
+  asking for time, the host approving, and a revoked key being refused.
+- Every new command refuses another company's files, folders, `--company`
+  and app URLs.
+
+Not verified yet: a real deploy to hq-deploy (the first one is done by hand),
+real calendars, video and email (they need Google, Zoom and Microsoft
+approvals, see `knowledge/booking/approvals.md`), the `hq booking` and
+`hq book` CLI commands, and hq-pro's company directory.
 
 ## Contents
 
 | Path | Purpose |
 |------|---------|
 | `skills/booking/` | The `/booking` skill |
-| `scripts/hq-booking.sh` | `doctor`, `path`, `validate`, `slots` |
-| `knowledge/booking/` | Setup, the settings reference, three example configs |
-| `template/shared/` | Schema, checker, availability engine and their tests (shared by the launcher and, later, the booking app) |
-| `tests/` | Pack tests (any OS) and an end-to-end install check |
+| `scripts/hq-booking.sh` | `doctor`, `path`, `validate`, `slots`, `setup`, `build`, `deploy`, `dev`, `owner`, `agent`, `hosts` |
+| `knowledge/booking/` | Setup, operations, agent booking, sandbox and approvals, the settings reference, hosting, the hq-pro contract, three example configs |
+| `template/` | The booking app: pages, `api/`, `db/migrations/`, `shared/` engine, `dev/` (dev server, stage, launcher helpers) and tests |
+| `tests/` | Pack tests (any OS), their fixtures, and an end-to-end install check |
 | `cover.jpg` | Marketplace card image (`hq-road-sunrise` from the HQ wallpaper set) |
 
 ## Tests
 
 ```bash
-bash packages/hq-pack-booking/tests/booking.test.sh   # typecheck, unit tests with coverage, launcher
+bash packages/hq-pack-booking/tests/booking.test.sh   # typecheck, unit tests with coverage, launcher flows
+BOOKING_TEST_STUB_DEPLOY=1 bash packages/hq-pack-booking/tests/booking.test.sh   # deploy with the stand-in /deploy scripts, as on CI
 bash packages/hq-pack-booking/tests/e2e-install.sh    # installs into a throwaway HQ with the real hq CLI
 ```

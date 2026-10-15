@@ -38,7 +38,9 @@
       "description": "Prototype settings written by the launcher. Holds only the SHA-256 of the owner key, never the key.",
       "properties": {
         "ownerKeySha256": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "Lowercase hex SHA-256 of the owner key. Owner API calls send the key itself as a Bearer token." },
-        "provider": { "enum": ["sandbox", "hqpro"], "description": "sandbox keeps calendars, video links, email and DMs inside the app database. hqpro calls the hq-pro booking route. Defaults to sandbox." }
+        "provider": { "enum": ["sandbox", "hqpro"], "description": "sandbox keeps calendars, video links, email and DMs inside the app database. hqpro calls the hq-pro booking route. Defaults to sandbox." },
+        "appName": { "$ref": "#/$defs/slug", "description": "hq-deploy app name. Defaults to booking-{company}." },
+        "companyName": { "type": "string", "minLength": 1, "maxLength": 120, "description": "Company name to show on the booking pages." }
       }
     },
     "agentBooking": {

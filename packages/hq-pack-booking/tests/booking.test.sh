@@ -6,6 +6,9 @@
 #    dev server; line coverage must stay >= 90%), then stages a deploy copy.
 # 2. Exercises scripts/hq-booking.sh against a fake HQ root with two companies
 #    and a stub `hq` CLI that reports the session company.
+# 3. tests/launcher-flows.sh: setup, hosts, build, deploy (fake hq-deploy
+#    API), dev, owner and agent (a local dev instance), and the cross-company
+#    and owner-key checks for each.
 #
 # The real install into an HQ tree is covered by tests/e2e-install.sh.
 # No -e: every check runs and failures are counted, then the exit code reports them.
@@ -53,18 +56,51 @@ L="$tmp/pack/scripts/hq-booking.sh"
 hq="$tmp/hq"
 mkdir -p "$hq/companies/acme/booking" "$hq/companies/other/booking" "$tmp/bin"
 printf 'companies:\n  acme:\n    name: Acme\n  other:\n    name: Other\n' >"$hq/companies/manifest.yaml"
+# Stub `hq`: the session company, a file-backed vault (values never printed),
+# and the member list. TEST_VAULT_FAIL=1 makes `secrets set` fail;
+# TEST_MEMBERS_FAIL=1 makes `members list` unavailable.
+mkdir -p "$tmp/vault" "$tmp/members"
 cat >"$tmp/bin/hq" <<'EOF'
 #!/usr/bin/env bash
+vault="$TEST_VAULT_DIR"
 if [ "$*" = "core hq-session get company_slug" ]; then printf '%s' "${TEST_SESSION_COMPANY:-}"; exit 0; fi
+if [ "${1:-}" = "secrets" ] && [ "${2:-}" = "--company" ]; then
+  co="$3"; sub="$4"; name="$5"
+  case "$sub" in
+    exists) [ -f "$vault/$co/$name" ] && exit 0; exit 1 ;;
+    set)
+      [ "${6:-}" = "--from-stdin" ] || exit 64
+      [ "${TEST_VAULT_FAIL:-}" = "1" ] && { echo "Error: not signed in" >&2; exit 1; }
+      mkdir -p "$vault/$co"; cat >"$vault/$co/$name"; echo "Secret $name saved." >&2; exit 0 ;;
+  esac
+  exit 9
+fi
+if [ "${1:-}" = "secrets" ] && [ "${2:-}" = "exec" ]; then
+  shift 2; only=""; co=""
+  while [ $# -gt 0 ] && [ "$1" != "--" ]; do
+    case "$1" in --only) only="$2"; shift 2 ;; --company) co="$2"; shift 2 ;; *) exit 64 ;; esac
+  done
+  shift
+  [ -f "$vault/$co/$only" ] || { echo "Error: secret $only not found" >&2; exit 1; }
+  export "$only=$(cat "$vault/$co/$only")"
+  exec "$@"
+fi
+if [ "${1:-}" = "members" ] && [ "${2:-}" = "--company" ] && [ "${4:-}" = "list" ]; then
+  [ "${TEST_MEMBERS_FAIL:-}" = "1" ] && { echo "error: unknown command 'members'" >&2; exit 1; }
+  printf 'EMAIL                ROLE\n'; cat "$TEST_MEMBERS_DIR/$3" 2>/dev/null; exit 0
+fi
 exit 9
 EOF
 chmod +x "$tmp/bin/hq"
-export PATH="$tmp/bin:$PATH" HQ_ROOT="$hq"
+export PATH="$tmp/bin:$PATH" HQ_ROOT="$hq" TEST_VAULT_DIR="$tmp/vault" TEST_MEMBERS_DIR="$tmp/members"
+ALL_OUT="$tmp/all-output.log"
+: >"$ALL_OUT"
 
 run() { # expected-exit name cmd...
   local want="$1" name="$2" got=0
   shift 2
   OUT="$("$@" 2>"$tmp/stderr")" || got=$?
+  { printf '%s\n' "$OUT"; cat "$tmp/stderr"; } >>"$ALL_OUT"
   if [ "$got" -ne "$want" ]; then bad "$name (exit $got, want $want)" "$OUT $(cat "$tmp/stderr")"; return 1; fi
   if ! printf '%s' "$OUT" | node -e 'JSON.parse(require("fs").readFileSync(0,"utf8"))' 2>/dev/null; then bad "$name (output is not one JSON object)" "$OUT"; return 1; fi
   ok "$name"
@@ -151,8 +187,12 @@ export TEST_SESSION_COMPANY="../other"
 run 1 "a bad company slug is refused" bash "$L" validate && has "bad-company error" '"error":"bad-company"'
 export TEST_SESSION_COMPANY=acme
 
-run 2 "unknown command" bash "$L" deploy
+run 2 "unknown command" bash "$L" publish
 run 2 "validate with two files" bash "$L" validate a b
+
+# Not named *.test.sh: CI runs those on their own, and this one is sourced.
+# shellcheck source=launcher-flows.sh
+. "$here/launcher-flows.sh"
 
 printf '\n%d passed, %d failed\n' "$pass" "$failures"
 [ "$failures" -eq 0 ]

@@ -17,7 +17,38 @@ Booking app backend prototype (sandbox providers).
   `POST /api/owner/jobs/run`.
 - `npm run dev` local server and `npm run stage` deploy copy;
   knowledge/booking/hosting.md records how hq-deploy hosts it.
-- booking.yaml: optional `prototype` and per-event-type `agentBooking`.
+- booking.yaml: optional `prototype` and per-event-type `agentBooking`;
+  `prototype.appName` and `prototype.companyName`.
+
+Launcher and `/booking` skill for the prototype.
+
+- `hq-booking.sh setup`: booking.yaml from an example, an owner key saved in
+  the company vault (`BOOKING_OWNER_KEY`, via stdin) with only its SHA-256 in
+  the file; re-runs keep the key, `--rotate-owner-key` replaces it.
+- `build`: copies the template to `workspace/booking-builds/{co}/`, applies
+  `companies/{co}/booking/overrides/`, builds and stages the upload, and
+  refuses more than 100 files.
+- `deploy`: uploads as an hq-deploy `app` with a database through the
+  `/deploy` skill's helper scripts; sets the access gate (password by default)
+  before the upload; follows the database billing rule (Indigo exempt, others
+  need `--accept-database-billing`); records `deploy.json` without secrets.
+- `owner`: bookings, cancel, reschedule, no-show, links, a plain-text "times
+  for an email" snippet, analytics, outbox, notifications, approvals, agent
+  keys and delegation, webhooks, audit, invitee deletion and the jobs run. The
+  owner key is read from the vault per call and sent only to the company's
+  own app or a local dev server.
+- `agent`: event types, offered times, book, list, cancel and reschedule with
+  another company's app using an agent key from the vault (prototype of
+  `hq book <company>/<event>`).
+- `hosts list|add|remove`: members only; sandbox hosts are booking ready at
+  once.
+- `dev`: the app locally with the vault's owner key.
+- Every new command refuses another company (`--company`, linked files,
+  linked folders, other apps' URLs). Pack tests cover each against a fake HQ
+  with two companies, a stub vault, a local dev instance and a fake hq-deploy
+  API.
+- Docs: the rewritten skill, `operations.md`, `agent-booking.md` and
+  `approvals.md`; setup and config reference updated.
 
 ## 0.1.0
 

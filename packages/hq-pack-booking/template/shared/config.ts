@@ -94,6 +94,8 @@ export interface Notifications {
 export interface PrototypeSettings {
   ownerKeySha256?: string;
   provider?: "sandbox" | "hqpro";
+  appName?: string;
+  companyName?: string;
 }
 
 export interface RoutingTarget {

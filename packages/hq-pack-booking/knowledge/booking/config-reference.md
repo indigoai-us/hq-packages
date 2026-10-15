@@ -68,7 +68,12 @@ Set by the launcher, not by hand.
 | Key | Meaning |
 |-----|---------|
 | `ownerKeySha256` | Lowercase hex SHA-256 of the owner key. Owner API calls send the key itself as `Authorization: Bearer <key>`. The key is never written to this file. |
-| `provider` | `sandbox` (default): calendars, video links, email and HQ DMs stay in the app database and are labelled sandbox. `hqpro`: calendars, email and DMs go through the hq-pro booking route (see hq-pro-contract.md); needs `HQ_BOOKING_API_URL` and the `HQ_BOOKING_KEY` secret. |
+| `provider` | `sandbox` (default): calendars, video links, email and HQ DMs stay in the app database and are labelled sandbox. `hqpro`: calendars, email and DMs go through the hq-pro booking route (see hq-pro-contract.md); needs `HQ_BOOKING_API_URL` and the `HQ_BOOKING_KEY` secret. `setup` writes `sandbox`. |
+| `appName` | hq-deploy app name (a slug). Defaults to `booking-{company}`. Changing it makes the next deploy create a new app. |
+| `companyName` | The company name to show on the booking pages. `setup --company-name` writes it. |
+
+`setup` writes `ownerKeySha256` and `provider`; see operations.md for the
+owner key.
 
 ## Rules across fields
 
