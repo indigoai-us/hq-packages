@@ -68,6 +68,32 @@ export interface EventType {
   questions?: Question[];
   policy?: { cancelCutoffHours?: number; rescheduleCutoffHours?: number; requireCancelReason?: boolean };
   confirmation?: { message?: string; redirectUrl?: string };
+  agentBooking?: AgentBookingRules;
+}
+
+/** Per event type: who may book through an HQ agent and how. */
+export interface AgentBookingRules {
+  sameCompany?: "book" | "ask" | "deny";
+  approvedCompanies?: string[];
+  approvedMode?: "book" | "ask";
+  others?: "ask" | "deny";
+  blockedCompanies?: string[];
+  lookupsPerHour?: number;
+  bookingsPerWeek?: number;
+}
+
+export interface Notifications {
+  confirmation?: boolean;
+  reminders?: number[];
+  followUp?: { enabled?: boolean; afterMinutes?: number };
+  hostBrief?: { enabled?: boolean; minutesBefore?: number };
+  meetingNotes?: boolean;
+}
+
+/** Launcher-written prototype settings. Only the hash of the owner key is stored. */
+export interface PrototypeSettings {
+  ownerKeySha256?: string;
+  provider?: "sandbox" | "hqpro";
 }
 
 export interface RoutingTarget {
@@ -91,11 +117,12 @@ export interface BookingConfig {
   hosts: Host[];
   eventTypes: EventType[];
   routing?: { forms: RoutingForm[] };
-  notifications?: Record<string, unknown>;
+  notifications?: Notifications;
   webhooks?: { url: string; events: string[]; signingSecret: string }[];
   embed?: { modes?: string[]; allowedOrigins?: string[] };
   theme?: Record<string, unknown>;
   dataRetention?: { inviteeDataDays?: number };
+  prototype?: PrototypeSettings;
 }
 
 export interface CheckResult {
@@ -280,6 +307,15 @@ function crossFieldIssues(cfg: BookingConfig, structural: Issue[]): Issue[] {
     }
 
     checkQuestions(arr<Question>(ev.questions), `${path}.questions`, add);
+
+    if (isObj(ev.agentBooking) && !broken(`${path}.agentBooking`)) {
+      const blocked = new Set(arr<string>(ev.agentBooking.blockedCompanies));
+      arr<string>(ev.agentBooking.approvedCompanies).forEach((slug, i) => {
+        if (blocked.has(slug)) {
+          add(`${path}.agentBooking.approvedCompanies[${i}]`, "company-approved-and-blocked", `${path}.agentBooking lists "${slug}" as both approved and blocked.`);
+        }
+      });
+    }
 
     const seenLocations = new Set<string>();
     arr<Location>(ev.locations).forEach((loc, i) => {

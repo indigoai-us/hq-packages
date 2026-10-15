@@ -28,9 +28,33 @@
     },
     "embed": { "$ref": "#/$defs/embed" },
     "theme": { "$ref": "#/$defs/theme" },
-    "dataRetention": { "$ref": "#/$defs/dataRetention" }
+    "dataRetention": { "$ref": "#/$defs/dataRetention" },
+    "prototype": { "$ref": "#/$defs/prototype" }
   },
   "$defs": {
+    "prototype": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Prototype settings written by the launcher. Holds only the SHA-256 of the owner key, never the key.",
+      "properties": {
+        "ownerKeySha256": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "Lowercase hex SHA-256 of the owner key. Owner API calls send the key itself as a Bearer token." },
+        "provider": { "enum": ["sandbox", "hqpro"], "description": "sandbox keeps calendars, video links, email and DMs inside the app database. hqpro calls the hq-pro booking route. Defaults to sandbox." }
+      }
+    },
+    "agentBooking": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Who may book this event type through an HQ agent, and whether it books at once or asks the host first.",
+      "properties": {
+        "sameCompany": { "enum": ["book", "ask", "deny"], "description": "Agents acting for members of this company. Default book." },
+        "approvedCompanies": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/slug" } },
+        "approvedMode": { "enum": ["book", "ask"], "description": "Agents from approvedCompanies. Default book." },
+        "others": { "enum": ["ask", "deny"], "description": "Agents from any other company. Default ask." },
+        "blockedCompanies": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/slug" }, "description": "Refused without showing any times." },
+        "lookupsPerHour": { "type": "integer", "minimum": 1, "maximum": 1000, "description": "Offered-time lookups per host per hour. Default 30." },
+        "bookingsPerWeek": { "type": "integer", "minimum": 1, "maximum": 200, "description": "Agent bookings plus pending approvals per host per week. Default 10." }
+      }
+    },
     "slug": {
       "type": "string",
       "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
@@ -263,7 +287,8 @@
             "message": { "type": "string", "maxLength": 2000 },
             "redirectUrl": { "$ref": "#/$defs/httpsUrl" }
           }
-        }
+        },
+        "agentBooking": { "$ref": "#/$defs/agentBooking" }
       }
     },
     "routingRule": {

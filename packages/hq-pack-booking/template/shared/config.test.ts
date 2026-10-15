@@ -320,5 +320,26 @@ test("checker handles number types and generic oneOf", () => {
 
 test("schema documents every top-level section", () => {
   const props = Object.keys((schema.properties ?? {}) as object).sort();
-  assert.deepEqual(props, ["company", "dataRetention", "embed", "eventTypes", "hosts", "notifications", "routing", "theme", "timezone", "version", "webhooks"]);
+  assert.deepEqual(props, ["company", "dataRetention", "embed", "eventTypes", "hosts", "notifications", "prototype", "routing", "theme", "timezone", "version", "webhooks"]);
+});
+
+test("prototype section takes only a hex owner key hash and a provider", () => {
+  const cfg = minimal();
+  cfg.prototype = { ownerKeySha256: "a".repeat(64), provider: "sandbox" };
+  assert.equal(checkConfig(cfg).ok, true);
+  cfg.prototype = { ownerKeySha256: "not-a-hash", provider: "google" };
+  assert.deepEqual(codes(cfg).sort(), ["prototype.ownerKeySha256 bad-format", "prototype.provider not-allowed"].sort());
+  cfg.prototype = { ownerKey: "plain" };
+  assert.deepEqual(codes(cfg), ["prototype.ownerKey unknown-key"]);
+});
+
+test("agentBooking rules are checked", () => {
+  const cfg = minimal();
+  cfg.eventTypes[0].agentBooking = { sameCompany: "book", approvedCompanies: ["globex"], approvedMode: "ask", others: "deny", blockedCompanies: ["initech"], lookupsPerHour: 20, bookingsPerWeek: 5 };
+  assert.equal(checkConfig(cfg).ok, true);
+  cfg.eventTypes[0].agentBooking = { others: "book", approvedCompanies: ["globex"], blockedCompanies: ["globex"] };
+  const got = codes(cfg);
+  assert.ok(got.includes("eventTypes[0].agentBooking.others not-allowed"), got.join());
+  cfg.eventTypes[0].agentBooking = { approvedCompanies: ["globex"], blockedCompanies: ["globex"] };
+  assert.deepEqual(codes(cfg), ["eventTypes[0].agentBooking.approvedCompanies[0] company-approved-and-blocked"]);
 });
