@@ -4,8 +4,12 @@
 import { useState } from "preact/hooks";
 import { qs } from "../lib/api.ts";
 import { useAsync } from "../lib/hooks.ts";
+import { formatInstant } from "../lib/time.ts";
 import { Link, SandboxNote } from "../ui.tsx";
-import { useOwner } from "./context.ts";
+import { ownerZone, useOwner } from "./context.ts";
+
+/** DM text carries ISO times; show them in the owner's zone. */
+const readable = (text: string) => text.replace(/\d{4}-\d\d-\d\dT\d\d:\d\d(?::\d\d(?:\.\d+)?)?Z/g, (iso) => formatInstant(iso, ownerZone(), true));
 import { Chip, Empty, Loadable, PageHead, When } from "./parts.tsx";
 
 interface Email {
@@ -27,6 +31,7 @@ const KIND_LABEL: Record<string, string> = {
   canceled: "Cancellation",
   cancellation: "Cancellation",
   rescheduled: "Rescheduled",
+  reschedule: "Rescheduled",
 };
 
 const kindLabel = (k: string) => KIND_LABEL[k] ?? k.replace(/[-_]/g, " ");
@@ -105,6 +110,9 @@ interface Dm {
 
 const DM_LABEL: Record<string, string> = {
   booked: "New booking",
+  "booking-created": "New booking",
+  "booking-canceled": "Canceled",
+  "booking-rescheduled": "Rescheduled",
   "host-brief": "Host brief",
   brief: "Host brief",
   "approval-request": "Approval request",
@@ -160,8 +168,8 @@ export function Notifications() {
                       </span>
                       <Chip tone={n.kind.includes("approval") ? "warning" : "neutral"}>{DM_LABEL[n.kind] ?? n.kind.replace(/[-_]/g, " ")}</Chip>
                     </div>
-                    <p class="ow-dm-title">{n.title}</p>
-                    <p class="ow-dm-body">{n.body}</p>
+                    <p class="ow-dm-title">{readable(n.title)}</p>
+                    <p class="ow-dm-body">{readable(n.body)}</p>
                     <div class="ow-dm-links">
                       {n.approvalId && (
                         <Link href="/owner/approvals" class="bk-textlink">

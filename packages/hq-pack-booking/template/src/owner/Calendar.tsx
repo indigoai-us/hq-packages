@@ -25,7 +25,7 @@ interface CalData {
   events: CalEvent[];
 }
 
-const HOUR_PX = 44;
+const HOUR_PX = 56;
 
 interface Block {
   key: string;

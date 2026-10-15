@@ -614,6 +614,7 @@ select.bk-input {
 }
 
 .bk-option input {
+  flex: none;
   width: 18px;
   height: 18px;
   margin: 0;
@@ -1963,6 +1964,11 @@ select.bk-input {
 .ow-block-busy {
   background: repeating-linear-gradient(135deg, var(--bk-hover) 0 4px, var(--bk-surface) 4px 9px);
   border: 1px solid var(--bk-border-strong);
+  color: var(--bk-text);
+}
+
+.ow-block-busy .ow-block-time {
+  opacity: 1;
   color: var(--bk-muted);
 }
 
