@@ -10,6 +10,7 @@ Content packs for [HQ by Indigo](https://github.com/indigoai-us/hq-core) — the
 |------|--------------|
 | [`hq-pack-design-styles`](./packages/hq-pack-design-styles) | Curated style packs (brutalist, editorial, warm-neutral, etc.) — registry + pack schema + reference MDCs |
 | [`hq-pack-design-quality`](./packages/hq-pack-design-quality) | Typography, color, spatial, and motion quality references for design-audit skills |
+| [`hq-pack-design-engineering`](./packages/hq-pack-design-engineering) | Emil Kowalski's "Skills for Design Engineers" (MIT, ported verbatim): fifteen skills for motion, animation performance, Apple-style interaction, native-feeling mobile web, React Native/Expo animation, modern Swift, UI stress tests and animation review. Marketplace slug `design-engineering`. |
 | [`hq-pack-gemini`](./packages/hq-pack-gemini) | Six Gemini CLI workers (coder, reviewer, frontend, designer, stylist, ux-auditor) + `gemini-cli` knowledge. Conditional — skipped when `gemini` is not on `PATH` |
 | [`hq-pack-gstack`](./packages/hq-pack-gstack) | gstack-team workers (26 g-* skills) + `scripts/gstack-bridge.sh` |
 | [`hq-pack-slack-bot`](./packages/hq-pack-slack-bot) | Per-bot Slack mention watcher + spawned-worker template. Pairs with hq-pro `/hq-new-bot`. |
