@@ -33,7 +33,7 @@ export function ManagePage({ id }: { id: string }) {
   return (
     <div class="bk-page">
       <Header config={app.config} />
-      <main id="main" class="bk-main bk-narrow">
+      <main id="main" class={`bk-main${mode === "reschedule" && b && token ? "" : " bk-narrow"}`}>
         {!token ? (
           <div class="bk-card bk-card-pad">
             <h1 class="bk-title">This link is missing its key</h1>
@@ -62,7 +62,7 @@ export function ManagePage({ id }: { id: string }) {
         ) : (
           <div class="bk-card bk-card-pad">
             {done && (
-              <Notice tone="success" live>
+              <Notice tone={b.status === "canceled" ? "neutral" : "success"} live>
                 {done}
               </Notice>
             )}
@@ -115,7 +115,7 @@ export function ManagePage({ id }: { id: string }) {
                 </div>
               )}
             </dl>
-            {b.location?.sandbox && b.status === "confirmed" && <SandboxNote>The join link is a placeholder in the prototype.</SandboxNote>}
+            {b.location?.sandbox && b.status === "confirmed" && <SandboxNote>The join link is a placeholder.</SandboxNote>}
             {b.status === "confirmed" && mode === "cancel" ? (
               <CancelForm
                 booking={b}

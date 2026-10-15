@@ -209,7 +209,7 @@ export function Agents() {
   return (
     <>
       <PageHead title="Agents" sub="Keys that let a member's HQ agent book with you on their behalf, inside the limits you set." />
-      <SandboxNote>Sandbox agent keys: for testing agent-to-agent booking. Real agents sign in with their HQ identity and the member's delegation.</SandboxNote>
+      <SandboxNote>Test keys. Real agents sign in with HQ.</SandboxNote>
       <Section title="New agent key" sub="The key stands for one member's agent acting for that member.">
         <form
           class="ow-form-grid"
@@ -432,6 +432,7 @@ interface Delivery {
 }
 
 const EVENTS = ["booked", "canceled", "rescheduled", "no-show"];
+const EVENT_LABELS: Record<string, string> = { booked: "Booked", canceled: "Canceled", rescheduled: "Rescheduled", "no-show": "No-show" };
 
 export function Webhooks() {
   const { call } = useOwner();
@@ -461,7 +462,7 @@ export function Webhooks() {
       <PageHead title="Webhooks" sub="Signed POSTs to your own systems when bookings change. Failed deliveries retry after 1, 5, 30, 120 and 720 minutes." />
       <Section title="Add an endpoint">
         <form
-          class="ow-form-grid"
+          class="ow-form-grid ow-form-webhook"
           onSubmit={(e) => {
             e.preventDefault();
             setSecret(null);
@@ -477,7 +478,7 @@ export function Webhooks() {
               {EVENTS.map((ev) => (
                 <label key={ev} class="bk-option">
                   <input type="checkbox" checked={events.includes(ev)} onChange={() => setEvents(events.includes(ev) ? events.filter((x) => x !== ev) : [...events, ev])} />
-                  <span>{ev}</span>
+                  <span>{EVENT_LABELS[ev] ?? ev}</span>
                 </label>
               ))}
             </div>
@@ -702,7 +703,7 @@ export function Jobs() {
   return (
     <>
       <PageHead title="Jobs" sub="Reminders, follow-ups, host briefs, webhook retries and expired holds. A scheduled job runs these every few minutes." />
-      <SandboxNote>On hq-deploy an Outpost scheduled job calls this every few minutes; the dev server runs it every 30 seconds.</SandboxNote>
+      <SandboxNote>The dev server runs due jobs every 30 seconds.</SandboxNote>
       <Button variant="primary" busy={run.busy} onClick={() => void run.run()}>
         Run due jobs now
       </Button>
@@ -721,10 +722,10 @@ export function Jobs() {
             </span>
           </div>
           <div class="ow-tile">
-            <span class="ow-tile-label">Webhooks</span>
+            <span class="ow-tile-label">Webhooks delivered</span>
             <span class="ow-tile-value">{last.webhooks.delivered}</span>
             <span class="ow-tile-sub">
-              delivered, {last.webhooks.retrying} retrying, {last.webhooks.failed} failed
+              {last.webhooks.retrying} retrying, {last.webhooks.failed} failed
             </span>
           </div>
           <div class="ow-tile">
@@ -735,10 +736,10 @@ export function Jobs() {
             </span>
           </div>
           <div class="ow-tile">
-            <span class="ow-tile-label">Retention</span>
+            <span class="ow-tile-label">Invitee data removed</span>
             <span class="ow-tile-value">{last.retention.redacted}</span>
             <span class="ow-tile-sub">
-              redacted · ran <When iso={last.ranAt} />
+              Ran <When iso={last.ranAt} />
             </span>
           </div>
         </div>

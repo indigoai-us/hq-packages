@@ -43,7 +43,7 @@ export function Approvals() {
           onChange={setStatus}
         />
       </PageHead>
-      <SandboxNote>Sandbox approvals: requests come from test agent keys. Real requests come from other HQ members' agents and arrive as an HQ DM with Approve and Decline.</SandboxNote>
+      <SandboxNote>Requests here come from test agent keys.</SandboxNote>
       <Loadable state={res} minHeight={300}>
         {(d) =>
           d.approvals.length === 0 ? (

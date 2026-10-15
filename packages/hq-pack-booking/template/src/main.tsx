@@ -68,7 +68,8 @@ function useEmbedResize(enabled: boolean, origin: string | null) {
     if (!enabled || window.parent === window) return;
     let last = 0;
     const post = () => {
-      const h = Math.ceil(document.documentElement.scrollHeight);
+      // Content height (not the frame height), so a popup can shrink to fit.
+      const h = Math.ceil(document.body.getBoundingClientRect().height);
       if (h === last) return;
       last = h;
       window.parent.postMessage({ type: "hq-booking:resize", height: h }, origin ?? "*");
@@ -91,7 +92,8 @@ function PublicApp() {
   }, [config.data]);
   useEffect(() => {
     document.documentElement.classList.toggle("is-embedded", embed.embedded);
-  }, [embed.embedded]);
+    document.documentElement.classList.toggle("is-popup", embed.embedded && (embed.mode === "popup-button" || embed.mode === "popup-text"));
+  }, [embed.embedded, embed.mode]);
   useEmbedResize(embed.embedded, embed.origin);
 
   if (config.loading && !config.data) {

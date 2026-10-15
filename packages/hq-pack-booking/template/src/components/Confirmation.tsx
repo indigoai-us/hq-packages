@@ -67,7 +67,7 @@ export default function Confirmation({ result, eventType, timezone, hour12, embe
           </div>
         )}
       </dl>
-      {loc?.sandbox && <SandboxNote>This join link is a placeholder. Real bookings get a {locationTitle(loc)} link from the host's connected account.</SandboxNote>}
+      {loc?.sandbox && <SandboxNote>The join link is a placeholder.</SandboxNote>}
       <div class="bk-actions">
         <a class="bk-btn bk-btn-primary bk-btn-md" href={result.icsUrl} download={`${b.eventType.id}.ics`}>
           <Icon name="download" size={16} />

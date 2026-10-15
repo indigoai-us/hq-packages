@@ -10,6 +10,7 @@ import { runInNewContext } from "node:vm";
 import { pagesModuleSource, resolveSlot, routeFromPageFile, scanOverrides, SLOT_NAMES } from "../build/overrides-core.ts";
 import { companyName, kindLabel, locationDetail, locationTitle, nameList } from "../src/lib/labels.ts";
 import { answersForApi, carryParams, embedAllowed, parseEmbed, parseGuests, parsePrefill, parseUtm } from "../src/lib/params.ts";
+import { assignLanes, auditActionLabel, calendarStatusLabel, fillWeeks, humanizeKey } from "../src/lib/owner-format.ts";
 import { contrast, DEFAULT_THEME, ensureContrast, fontStylesheet, mix, onColor, safeAssetUrl, themeVars } from "../src/lib/theme.ts";
 import { addDays, addMonths, formatClock, formatCountdown, formatDuration, formatRange, monthGrid, wall, weekStart, zonedInstant, zoneLabel } from "../src/lib/time.ts";
 import type { Question } from "../src/lib/types.ts";
@@ -260,4 +261,47 @@ test("a build with overrides uses the override header and adds its pages; a brok
     else process.env.BOOKING_OVERRIDES_DIR = prev;
     rmSync(company, { recursive: true, force: true });
   }
+});
+
+/* ------------------------------------------------ owner dashboard helpers */
+
+test("owner labels: internal keys read as plain words", () => {
+  assert.equal(humanizeKey("company"), "Company");
+  assert.equal(humanizeKey("company_size"), "Company size");
+  assert.equal(calendarStatusLabel("updated"), "Updated on the host's calendar");
+  assert.equal(calendarStatusLabel("some-new-state"), "Some new state");
+  assert.equal(auditActionLabel("booking.created"), "Booked");
+  assert.equal(auditActionLabel("booking.rescheduled"), "Rescheduled");
+  assert.equal(auditActionLabel("link.created"), "Link created");
+});
+
+test("analytics weeks: the whole range shows, empty weeks included", () => {
+  const rows = fillWeeks([{ key: "2026-10-12", bookings: 6, canceled: 2, noShows: 0 }], "2026-07-27T00:00:00.000Z", "2026-10-19T00:00:00.000Z");
+  assert.equal(rows.length, 12);
+  assert.equal(rows[0]?.key, "2026-07-27");
+  assert.equal(rows[11]?.key, "2026-10-12");
+  assert.equal(rows[11]?.bookings, 6);
+  assert.equal(rows[5]?.bookings, 0);
+});
+
+test("owner calendar: overlapping blocks get side-by-side lanes, others keep the full width", () => {
+  const b = (day: number, top: number, height: number) => ({ day, top, height, lane: 0, lanes: 1 });
+  const busy = b(4, 250, 84); // 12:30-2:00
+  const inner = b(4, 278, 26); // 1:00-1:30, inside the busy block
+  const later = b(4, 400, 50); // after both
+  const otherDay = b(0, 250, 84); // same time, other day
+  assignLanes([inner, busy, later, otherDay]);
+  assert.deepEqual([busy.lane, busy.lanes], [0, 2]);
+  assert.deepEqual([inner.lane, inner.lanes], [1, 2]);
+  assert.deepEqual([later.lane, later.lanes], [0, 1]);
+  assert.deepEqual([otherDay.lane, otherDay.lanes], [0, 1]);
+});
+
+test("layout guards: narrow slot pickers stack, table scrollers contain hidden text", () => {
+  const css = readFileSync(join(here, "..", "src", "styles.css"), "utf8");
+  assert.match(css, /\.bk-stage \{[^}]*container-type: inline-size/);
+  assert.match(css, /@container \(max-width: 600px\) \{\s*\.bk-slotpicker \{\s*grid-template-columns: minmax\(0, 1fr\)/);
+  assert.match(css, /\.ow-table-wrap \{[^}]*position: relative/);
+  const manage = readFileSync(join(here, "..", "src", "pages", "ManagePage.tsx"), "utf8");
+  assert.match(manage, /mode === "reschedule"[^\n]*bk-narrow/, "the reschedule view leaves the narrow column");
 });
