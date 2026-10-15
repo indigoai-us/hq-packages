@@ -2,9 +2,8 @@
 
 ## 0.7.0 (2026-10-13)
 
-- Renamed to the HQ Agency Kit. The AI Builders name, the `ai-builders`
-  keyword and the joinaibuilders.com palette are gone; `brand/` now carries
-  the HQ palette and type (black ground, white text at 70% and 50%, hairline
+- Renamed to the HQ Agency Kit. The previous partner name, keyword and
+  palette are gone; `brand/` now carries the HQ palette and type (black ground, white text at 70% and 50%, hairline
   rules, Geist, square corners). Commands, slugs and file layout are
   unchanged, so existing installs and playbooks keep working.
 - growth-scout: a prepared run in `growth/reddit/{date}-{site}/` (teardown,
@@ -341,14 +340,14 @@
   overwrites.
 - `/agency-setup` asks for the default client workspace mode and writes it to
   `agency-profile.md` (`--client-mode folder|company`, default folder).
-- AI Builders brand: `brand/BRAND.md` and `brand/tokens.css`, with the rule that
+- Partner brand: `brand/BRAND.md` and `brand/tokens.css`, with the rule that
   HQ and its commands are never renamed. Install welcome and README updated.
 - Pack now lives in the hq-packages repo under `packages/hq-pack-agency-kit`.
 - Tests cover the workspace script (placeholders, modes, keep-on-rerun, dry run,
   missing engagement) and the new playbook field.
 
-Not yet built: members-only distribution tied to AI Builders VIP, a branded
-install page, a `/agency-tutorial` for the course modules, a monthly report
+Not yet built: members-only distribution, an install page, an
+`/agency-tutorial`, a monthly report
 skill, a client health check, and service add-on bundles.
 
 ## 0.1.0 (2026-10-09)
