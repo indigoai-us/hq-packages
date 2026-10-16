@@ -10,6 +10,7 @@ Content packs for [HQ by Indigo](https://github.com/indigoai-us/hq-core) — the
 |------|--------------|
 | [`hq-pack-design-styles`](./packages/hq-pack-design-styles) | Curated style packs (brutalist, editorial, warm-neutral, etc.) — registry + pack schema + reference MDCs |
 | [`hq-pack-design-quality`](./packages/hq-pack-design-quality) | Typography, color, spatial, and motion quality references for design-audit skills |
+| [`hq-pack-design-engineering`](./packages/hq-pack-design-engineering) | Emil Kowalski's "Skills for Design Engineers" (MIT, ported verbatim): fifteen skills for motion, animation performance, Apple-style interaction, native-feeling mobile web, React Native/Expo animation, modern Swift, UI stress tests and animation review. Marketplace slug `design-engineering`. |
 | [`hq-pack-gemini`](./packages/hq-pack-gemini) | Six Gemini CLI workers (coder, reviewer, frontend, designer, stylist, ux-auditor) + `gemini-cli` knowledge. Conditional — skipped when `gemini` is not on `PATH` |
 | [`hq-pack-gstack`](./packages/hq-pack-gstack) | gstack-team workers (26 g-* skills) + `scripts/gstack-bridge.sh` |
 | [`hq-pack-slack-bot`](./packages/hq-pack-slack-bot) | Per-bot Slack mention watcher + spawned-worker template. Pairs with hq-pro `/hq-new-bot`. |
@@ -19,6 +20,8 @@ Content packs for [HQ by Indigo](https://github.com/indigoai-us/hq-core) — the
 | [`hq-pack-client-service`](./packages/hq-pack-client-service) | Turn any HQ company into a client-service firm: engagement lifecycle worker, `/onboard-firm`, `/new-client`, `/client-pack`, `/handover-client`, dual-home client model. |
 | [`hq-pack-agency-kit`](./packages/hq-pack-agency-kit) | HQ Agency Kit. Builds on client-service. Ships the Agency Guide bot (`setup:` block): agency setup, practice client and client onboarding from the HQ app chat. Also as Claude Code commands: agency playbook, `/client-workspace` (folder or own-company clients), `/client-onboarding` with approval gates, practice client, `/scope-check`, `/weekly-update`, `/proposal`. |
 | [`hq-pack-vyg-email-blocks`](./packages/hq-pack-vyg-email-blocks) | Brand-agent pack for unconstrained interactive VYG email (cart / subscription / AMP): design, validate, three-tier preview, test-send, publish. |
+| [`hq-pack-screen-recorder`](./packages/hq-pack-screen-recorder) | HQ Capture: `/record-process` opens a local Mac recorder for screen, camera and narration, saved to the company vault. The session agent then trims, places the camera, exports the video and drafts a step-by-step guide by conversation. macOS 26 only; builds locally with Command Line Tools. Git-only (`private` on npm for now). |
+| [`hq-pack-hq-capture`](./packages/hq-pack-hq-capture) | HQ Capture (marketplace slug `hq-capture`): `/record-process` opens a local Mac recorder for screen, camera and narration, saved to the company vault. The session agent then trims, places the camera, exports the video and drafts a step-by-step guide by conversation. macOS 26 only; builds locally with Command Line Tools. Continues `hq-pack-screen-recorder` from 0.3.2. Git-only (`private` on npm for now). |
 
 ## Retired packs
 

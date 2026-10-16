@@ -4,7 +4,7 @@
 the frozen v1 contract surface.
 
 This is the pack's single contributed knowledge entry
-(`contributes.knowledge: [client-service]`). `scan-packages.sh` links it to
+(`contributes.knowledge: [client-service]`). `hq core scan-packages` links it to
 `core/knowledge/public/client-service` in the installing host.
 
 Contents:

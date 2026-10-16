@@ -1,0 +1,75 @@
+# One person offering intro calls and paid strategy sessions.
+version: 1
+company: northwind
+timezone: America/New_York
+
+hosts:
+  - id: alex
+    name: Alex Rivera
+    email: alex@northwind.example
+    hours:
+      mon: ["09:00-12:00", "13:00-17:00"]
+      tue: ["09:00-12:00", "13:00-17:00"]
+      wed: ["09:00-12:00"]
+      thu: ["09:00-12:00", "13:00-17:00"]
+      fri: ["10:00-15:00"]
+    overrides:
+      - date: "2026-11-27"
+        hours: []
+    holidays: ["2026-12-25", "2027-01-01"]
+    calendars:
+      conflicts:
+        - { source: google, account: alex@northwind.example, calendar: primary }
+        - { source: ical, label: Personal, secret: ALEX_PERSONAL_ICAL }
+      bookInto: { source: google, account: alex@northwind.example, calendar: primary }
+    links:
+      custom: https://whereby.example/alex
+
+eventTypes:
+  - id: intro-call
+    title: Intro call
+    description: A short call to see if we're a fit.
+    kind: one-on-one
+    hosts: [alex]
+    durations: [15, 30]
+    defaultDuration: 30
+    startIncrement: 15
+    buffers: { after: 10 }
+    minimumNotice: 240
+    bookingWindow: 30
+    dailyLimit: 6
+    guests: { max: 2 }
+    locations:
+      - { type: meet }
+      - { type: custom }
+    questions:
+      - { id: company, label: Company name, type: text, required: true }
+      - { id: goal, label: What would you like to talk about?, type: textarea, maxLength: 1000 }
+    policy: { cancelCutoffHours: 4, rescheduleCutoffHours: 4 }
+
+  - id: strategy-session
+    title: Strategy session
+    kind: one-on-one
+    hosts: [alex]
+    durations: [60, 90]
+    secret: true
+    locations:
+      - { type: zoom }
+      - { type: in-person, address: "200 Main St, Suite 4, Boston, MA" }
+    policy: { cancelCutoffHours: 24, requireCancelReason: true }
+
+notifications:
+  confirmation: true
+  reminders: [1440, 60]
+  followUp: { enabled: true, afterMinutes: 60 }
+  hostBrief: { enabled: true, minutesBefore: 30 }
+  meetingNotes: true
+
+theme:
+  source: custom
+  colors: { primary: "#1f4d3a", background: "#ffffff", text: "#111111", accent: "#e8b04b" }
+  fonts: { heading: Fraunces, body: Inter }
+  radius: 8
+
+dataRetention:
+  inviteeDataDays: 365

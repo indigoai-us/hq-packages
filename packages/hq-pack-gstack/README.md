@@ -15,4 +15,4 @@ hq install @indigoai-us/hq-pack-gstack
 
 ## Requires
 
-- `hq-core >= 12.0.0`
+- `hq-core >= 15.0.179`

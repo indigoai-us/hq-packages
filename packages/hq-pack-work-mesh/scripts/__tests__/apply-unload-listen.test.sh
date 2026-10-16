@@ -26,6 +26,21 @@ echo "\$*" >>"$LAUNCHCTL_LOG"
 exit 0
 EOF
 chmod +x "$TMP/bin/launchctl"
+HQ_CLI_LOG="$TMP/hq-cli.log"
+HQ_SHELL_FALLBACK_LOG="$TMP/shell-fallback.log"
+cat >"$TMP/bin/hq" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$HQ_CLI_LOG"
+exit "${HQ_CLI_EXIT:-0}"
+EOF
+chmod +x "$TMP/bin/hq"
+mkdir -p "$TMP/hq/core/scripts"
+cat >"$TMP/hq/core/scripts/scan-packages.sh" <<'EOF'
+#!/usr/bin/env bash
+printf 'legacy fallback invoked\n' >>"$HQ_SHELL_FALLBACK_LOG"
+EOF
+chmod +x "$TMP/hq/core/scripts/scan-packages.sh"
+export HQ_CLI_LOG HQ_SHELL_FALLBACK_LOG HQ_CLI_EXIT=0
 export PATH="$TMP/bin:$PATH"
 
 # Minimal PRD skill so patch-prd-genesis succeeds.
@@ -50,6 +65,8 @@ out="$(bash "$PACK/scripts/apply.sh")"
 echo "$out" | grep -q "removed legacy LaunchAgent $LABEL"
 test ! -e "$PLIST"
 grep -Eq "bootout|unload" "$LAUNCHCTL_LOG"
+grep -qx 'core scan-packages' "$HQ_CLI_LOG"
+test ! -e "$HQ_SHELL_FALLBACK_LOG"
 
 # Must not install the isolated listen bin.
 test ! -e "$HOME/.hq/work-mesh/bin/work-mesh.mjs"
@@ -60,6 +77,7 @@ echo "$out" | grep -q "no longer installed"
 # Idempotent second apply with no plist.
 out2="$(bash "$PACK/scripts/apply.sh")"
 echo "$out2" | grep -q "no legacy LaunchAgent plist"
+HQ_CLI_EXIT=42
 
 # Reused-PID case: pidfile points at a live process that is NOT the legacy
 # listener. Fake /proc cmdline (like launchctl above) so ownership check fails;
@@ -75,6 +93,8 @@ export HQ_WORK_MESH_PROC_ROOT="$TMP/proc"
 
 out3="$(bash "$PACK/scripts/apply.sh")"
 echo "$out3" | grep -q "pid $reuse_pid in listen.pid was not owned by legacy listener"
+test "$(wc -l <"$HQ_CLI_LOG" | tr -d ' ')" = 3
+test ! -e "$HQ_SHELL_FALLBACK_LOG"
 test ! -f "$HOME/.hq/work-mesh/listen.pid"
 kill -0 "$reuse_pid" 2>/dev/null
 kill "$reuse_pid" 2>/dev/null || true

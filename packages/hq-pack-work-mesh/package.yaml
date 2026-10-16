@@ -7,7 +7,7 @@ description: >
   hq mesh daemon. The legacy listen/watch cache daemon is removed — install
   presence with `hq mesh daemon install` from hq-cli.
 requires:
-  hqCore: '>=12.0.0'
+  hqCore: '>=15.0.179'
 initialization:
   entrypoint: work-mesh
   prompt: >

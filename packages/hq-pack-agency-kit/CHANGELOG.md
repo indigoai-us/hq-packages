@@ -3,12 +3,14 @@
 ## 0.7.0 (2026-10-13)
 
 - Renamed to the HQ Agency Kit. The previous partner name, keyword and
-  palette are gone; `brand/` now carries the HQ palette and type (black ground, white text at 70% and 50%, hairline
-  rules, Geist, square corners). Commands, slugs and file layout are
+  palette are gone; `brand/` now carries the HQ palette and type (black
+  ground, white text at 70% and 50%, hairline rules, Geist, square corners). Commands, slugs and file layout are
   unchanged, so existing installs and playbooks keep working.
 - growth-scout: a prepared run in `growth/reddit/{date}-{site}/` (teardown,
   reply, preview) is sent as-is before any research; `report.md` is sent
   word for word when present.
+- Instructions and workspace setup output call `hq core hq-session` directly;
+  the hq-core requirement now carries the matching CLI floor.
 
 ## 0.6.2 (2026-10-13)
 

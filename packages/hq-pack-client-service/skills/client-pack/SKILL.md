@@ -1,6 +1,6 @@
 ---
 name: client-pack
-description: Bundle a firm's own skills and knowledge into a firm pack and move it into client HQ companies by copy-with-provenance. Verbs — scaffold, apply, update, remove. Apply writes .hq-pack-manifest.json recording sourceFirm, packName, version, per-file sha256, and appliedAt; update rewrites only unforked manifest-owned files; remove deletes only unforked manifest-owned files. Client edits are detected as forks and always survive. Client-side writes need a session that holds the CLIENT company (bound to it, or added with hq-session.sh add company).
+description: Bundle a firm's own skills and knowledge into a firm pack and move it into client HQ companies by copy-with-provenance. Verbs — scaffold, apply, update, remove. Apply writes .hq-pack-manifest.json recording sourceFirm, packName, version, per-file sha256, and appliedAt; update rewrites only unforked manifest-owned files; remove deletes only unforked manifest-owned files. Client edits are detected as forks and always survive. Client-side writes need a session that holds the CLIENT company (bound to it, or added with hq core hq-session add company).
 triggers:
   - client pack
   - create a firm pack
@@ -28,7 +28,7 @@ Fixture regression suite: `../../scripts/client-pack-verify.sh`.
 | `apply` / `update` / `remove` | the **CLIENT** | the staged bundle in `workspace/` + the client tree | `companies/{client}/` only |
 
 On hq-core with multi-company session locks, one firm session can do both:
-scaffold, then `bash core/scripts/hq-session.sh add company {client}` and apply.
+scaffold, then `hq core hq-session add company {client}` and apply.
 Otherwise use a firm-bound session for `scaffold` and a client-bound session for
 the rest.
 
@@ -39,7 +39,7 @@ provenance metadata — a name, an audit fact, a revoke key. It is **never** use
 as a path to read at client runtime, and the tool never dereferences it.
 
 The script enforces this itself by reading the session's lock set
-(`hq-session.sh get company_slugs`). If it cannot determine the lock set, it
+(`hq core hq-session get company_slugs`). If it cannot determine the lock set, it
 **refuses to write** — unknown is not authorization. Outside a session (CI,
 fixtures) state it explicitly with `--session-company <slug>` or a
 comma-separated set (`firm,client`).

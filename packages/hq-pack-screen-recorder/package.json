@@ -1,0 +1,28 @@
+{
+  "name": "@indigoai-us/hq-pack-screen-recorder",
+  "version": "0.3.2",
+  "private": true,
+  "description": "HQ content pack: /record-process opens HQ Capture to record a process on your Mac from a company session, then the agent summarizes, trims, places the camera, exports the video and drafts a step-by-step guide. The app builds locally from source.",
+  "files": [
+    "app",
+    "skills",
+    "knowledge",
+    "scripts",
+    "package.yaml",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/indigoai-us/hq-packages.git",
+    "directory": "packages/hq-pack-screen-recorder"
+  },
+  "keywords": [
+    "hq",
+    "hq-pack",
+    "screen-recorder",
+    "sop",
+    "macos"
+  ],
+  "license": "MIT"
+}

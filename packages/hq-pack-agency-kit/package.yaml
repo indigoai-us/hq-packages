@@ -13,7 +13,7 @@ capabilities:
   - scripts
   - fs
 requires:
-  hqCore: '>=16.0.0-beta.50'
+  hqCore: '>=16.0.4'
   packs:
     - name: hq-pack-client-service
       version: '>=0.2.0'

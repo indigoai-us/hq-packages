@@ -122,12 +122,12 @@ this script. Next, in this session:
   1. Create the company (skip if companies/$CLIENT already exists):
        /newcompany $CLIENT
   2. Add it to the session alongside the firm:
-       bash core/scripts/hq-session.sh add company $CLIENT
+       hq core hq-session add company $CLIENT
   3. Create the client-facing home:
        bash core/packages/hq-pack-client-service/scripts/new-client.sh client-home \\
          --client $CLIENT --client-name "$CLIENT_NAME" --local-only --company-scaffold auto
   4. When done working in the client company:
-       bash core/scripts/hq-session.sh remove company $CLIENT
+       hq core hq-session remove company $CLIENT
 
 Nothing in clients/$CLIENT/ is copied into companies/$CLIENT/. Firm skills reach
 the client company only through /client-pack.

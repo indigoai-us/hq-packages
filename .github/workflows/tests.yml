@@ -29,6 +29,11 @@ jobs:
         run: bash tests/hq-anywhere-runtime-flag.test.sh
       - name: HQ Anywhere plugin and Codex shim parity
         run: bash tests/hq-anywhere-shim-parity.test.sh
+      # hq-pack-booking runs its TypeScript with Node's built-in type stripping
+      # (Node 22.6+), so pin a Node version rather than relying on the image.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
       - name: Run all pack test scripts
         run: |
           set -euo pipefail

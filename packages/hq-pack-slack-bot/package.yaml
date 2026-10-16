@@ -22,7 +22,7 @@ contributes:
   policies: []
   commands: []
   # scripts/ payload ships the watcher + parsers + vendored Claude
-  # worker dispatcher. scan-packages.sh (S3) symlinks these into the
+  # worker dispatcher. `hq core scan-packages` (S3) symlinks these into the
   # host instance's scripts/ directory at install time. The pack is
   # self-contained — claude-worker.sh + claude-worker-template.sh +
   # claude-pty-spawn.py are vendored copies of personal/tools/ originals

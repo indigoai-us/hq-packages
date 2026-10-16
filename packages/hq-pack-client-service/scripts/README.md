@@ -56,12 +56,10 @@ Contents:
   real one — so the smoke can be demonstrated going red; a seeded run that still
   passes is itself reported as a failure.
 
-  Its offline proof is a PATH shim dir, and the `hq` shim is **selective**, for a
-  durable platform reason rather than a local workaround. `core/scripts/scan-packages.sh`
-  is no longer self-contained bash: it is a **forwarder** that exec's
-  `hq core --hq-root <root> scan-packages`, because the pack-contribution mapping
-  is now single-sourced in the CLI (`src/utils/pack-contributions.ts`). So `hq` is
-  two different things at once, and the shim splits them:
+  Its offline proof is a PATH shim dir. The smoke calls `hq core scan-packages`
+  directly on its synthetic HQ root, so the `hq` shim delegates local core
+  operations to a resolved real CLI and keeps every network-facing command
+  blocked:
 
   - `hq core …` — local host operations (symlinking a pack's contributions into an
     HQ root). Delegated to a resolved real CLI and recorded in a separate local-call
@@ -78,8 +76,8 @@ Contents:
   shim by absolute path, so delegation can never re-enter the shim by name. The probe
   is for the **capability**, not liveness — it reads `core --help` and requires
   `scan-packages` to be listed, because a dangling npm symlink is `command -v`-visible
-  while broken, and an older CLI answers `--version` happily and then dies on `core`
-  with `unknown command`. Order: `hq` on PATH, then `node <HQ root>/repos/private/hq-cli/dist/index.js`,
+  while broken, and an older CLI may answer `--version` before this command fails.
+  Order: `hq` on PATH, then `node <HQ root>/repos/private/hq-cli/dist/index.js`,
   overridable with `HQ_SMOKE_CLI`. If nothing qualifies the harness exits **2** with a
   named environment error rather than silently skipping the install step. Note that
   `hq core scan-packages --help` is *not* a help path — it wires packs into whatever

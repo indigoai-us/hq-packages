@@ -1,0 +1,85 @@
+# hq-pack-design-engineering — HQ marketplace module manifest
+#
+# Listing type: SKILL (default; this pack contributes skills only, no worker).
+# A skill-dominant module: fifteen design-engineering skills ported verbatim from
+# Emil Kowalski's open-source "Skills for Design Engineers" repo (MIT).
+# Spec: repos/public/knowledge-hq-core/package-yaml-spec.md (hq-core v12+).
+
+name: hq-pack-design-engineering
+version: 0.2.0
+publisher: '@indigoai-us'
+access: public
+description: "Fifteen design-engineering skills from Emil Kowalski (ex-Vercel, ex-Linear) that give agents taste: right easing and transform-origin, sub-300ms motion, building animations from scratch on the web and in React Native/Expo, frame-budget animation performance, native-feeling mobile web, modern Swift, an animation-vocabulary reverse glossary, Apple-style interaction principles, worst-case data stress tests, a Sonner toast guide, a curated UI-library picker, a divergent prototyping harness, and strict animation review/audit workflows."
+
+requires:
+  hqCore: '>=12.0.0'
+
+# author — marketplace attribution. This pack is published on behalf of Emil
+# Kowalski; his creator profile is seeded/claimed by email. uid is stamped by
+# the server on publish (the server is authoritative for author identity).
+author:
+  uid: 'prs_PENDING_CLAIM'
+  handle: 'emil'
+  displayName: 'Emil Kowalski'
+
+# upstream — port provenance. This pack copies upstream skill content verbatim;
+# the MIT LICENSE is preserved at the pack root and each skill is unmodified.
+upstream:
+  repo: 'https://github.com/emilkowalski/skills'
+  ref: 'main'
+  ported_commit: '2d228630ba1446365f614a108cb8252f1feda202'
+  license: 'MIT'
+  ported_at: '2026-10-14T00:00:00Z'
+  kind: port
+
+# Sensitive surfaces. These skills read a project's source/UI and (in the case
+# of `prototype`) write throwaway prototype files into an isolated surface.
+# No network, no secrets, no hooks, no shell scripts wired into the host.
+capabilities:
+  - fs
+
+contributes:
+  skills:
+    - animate
+    - animate-expo
+    - animation-performance
+    - animation-vocabulary
+    - apple-design
+    - ask-sonner
+    - break-ui
+    - emil-design-eng
+    - find-animation-opportunities
+    - improve-animations
+    - mobile-native
+    - pick-ui-library
+    - prototype
+    - review-animations
+    - write-swift
+  workers: []
+  knowledge: []
+  commands: []
+  hooks: []
+  policies: []
+  scripts: []
+  mcp: []
+
+# Post-install get-started entrypoint. Points at the headline skill this pack
+# ships, so HQ can auto-generate a trustworthy get-started line.
+initialization:
+  entrypoint: '/emil-design-eng'
+
+license: 'MIT'
+repository: 'https://github.com/emilkowalski/skills'
+keywords:
+  - hq
+  - hq-pack
+  - design
+  - design-engineering
+  - animation
+  - motion
+  - ui
+  - frontend
+  - apple
+  - react-native
+  - swift
+  - mobile

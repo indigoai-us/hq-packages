@@ -15,7 +15,7 @@ capabilities:
   - scripts
   - fs
 requires:
-  hqCore: '>=15.0.0'
+  hqCore: '>=16.0.4'
 contributes:
   workers:
     - client-services

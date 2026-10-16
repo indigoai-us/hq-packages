@@ -1,0 +1,79 @@
+# A sales team sharing demo calls, with a routing form and an everyone-free
+# event for enterprise deals.
+version: 1
+company: northwind
+timezone: America/Chicago
+
+hosts:
+  - id: sam
+    name: Sam Lee
+    email: sam@northwind.example
+    hours:
+      mon: ["09:00-17:00"]
+      tue: ["09:00-17:00"]
+      wed: ["09:00-17:00"]
+      thu: ["09:00-17:00"]
+      fri: ["09:00-13:00"]
+    roundRobin: { weight: 2, priority: 1 }
+  - id: priya
+    name: Priya Shah
+    email: priya@northwind.example
+    timezone: America/Los_Angeles
+    hours:
+      mon: ["08:00-16:00"]
+      tue: ["08:00-16:00"]
+      wed: ["08:00-16:00"]
+      thu: ["08:00-16:00"]
+    roundRobin: { weight: 1 }
+  - id: jordan
+    name: Jordan Kim
+    email: jordan@northwind.example
+    hours:
+      tue: ["10:00-16:00"]
+      thu: ["10:00-16:00"]
+
+eventTypes:
+  - id: demo
+    title: Product demo
+    kind: round-robin
+    hosts: [sam, priya]
+    durations: [30]
+    buffers: { before: 5, after: 5 }
+    minimumNotice: 120
+    locations: [{ type: meet }, { type: zoom }]
+    questions:
+      - { id: size, label: Company size, type: select, required: true, options: ["1-10", "11-50", "51-500", "500+"] }
+
+  - id: enterprise-review
+    title: Enterprise review
+    kind: collective
+    hosts: [sam, jordan]
+    durations: [45]
+    minimumNotice: 1440
+    locations: [{ type: meet }]
+
+routing:
+  forms:
+    - id: talk-to-sales
+      title: Talk to sales
+      questions:
+        - { id: seats, label: How many people would use it?, type: number, required: true }
+      rules:
+        - when: { question: seats, gte: 200 }
+          to: { eventType: enterprise-review }
+        - when: { question: seats, gte: 1, lte: 199 }
+          to: { eventType: demo }
+      default: { eventType: demo }
+
+webhooks:
+  - url: https://hooks.northwind.example/booking
+    events: [booked, canceled, rescheduled, no-show]
+    signingSecret: BOOKING_WEBHOOK_SECRET
+
+embed:
+  modes: [inline, popup-button]
+  allowedOrigins: ["https://www.northwind.example"]
+
+theme:
+  source: brand-pack
+  brandPack: northwind

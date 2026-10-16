@@ -56,15 +56,17 @@ for bin in jq python3 shasum; do
   command -v "$bin" >/dev/null 2>&1 || { printf 'E_ENV: %s is required\n' "$bin" >&2; exit 2; }
 done
 
-WORK="$(mktemp -d -t handover-client-verify)"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/handover-client-verify.XXXXXX")"
 cleanup() { [ "$KEEP" -eq 1 ] || rm -rf "$WORK"; }
 trap cleanup EXIT
 
 SHIMS="${WORK}/shims"
 EXTLOG="${WORK}/external-calls.log"
+LOCALHQLOG="${WORK}/local-hq-calls.log"
 MOCKLOG="${WORK}/mock-hq-calls.log"
 MOCK_HQ="${WORK}/mock-hq"
 : > "$EXTLOG"
+: > "$LOCALHQLOG"
 : > "$MOCKLOG"
 
 mkdir -p "$SHIMS"
@@ -76,6 +78,27 @@ exit 97
 SHIM
   chmod +x "${SHIMS}/${cmd}"
 done
+
+# Session reads are local CLI calls. Return only synthetic lock names for the
+# exact hq-session commands; every other hq invocation remains blocked.
+cat > "${SHIMS}/hq" <<SHIM
+#!/usr/bin/env bash
+case "\$*" in
+  'core hq-session get company_slugs')
+    printf '%s\n' "\$*" >> "${LOCALHQLOG}"
+    printf '%s\n' "\${HQ_VERIFY_SESSION_COMPANIES:-}"
+    exit 0
+    ;;
+  'core hq-session get company_slug')
+    printf '%s\n' "\$*" >> "${LOCALHQLOG}"
+    printf '%s\n' "\${HQ_VERIFY_SESSION_COMPANY:-}"
+    exit 0
+    ;;
+esac
+printf '%s %s\n' "\$(basename "\$0")" "\$*" >> "${EXTLOG}"
+exit 97
+SHIM
+chmod +x "${SHIMS}/hq"
 
 # ---------------------------------------------------------------------------
 # the MOCKED transfer surface — a fake `hq`, recording every argv
@@ -119,7 +142,7 @@ assert_no_external_call() {
   if [ -s "$EXTLOG" ]; then
     bad "$1 — external call(s) attempted: $(tr '\n' '; ' < "$EXTLOG")"
   else
-    ok "$1 (shim log empty: curl/wget/hq/gh/aws/ssh/scp/nc/open were never invoked)"
+    ok "$1 (no external call; direct local hq core hq-session reads are logged separately)"
   fi
 }
 
@@ -245,7 +268,12 @@ set_args "$ROOT1"
 # ===========================================================================
 hdr "1  a COMPLETE checklist verifies READY"
 : > "$EXTLOG"
-run "$HC" verify "${ARGS[@]}" --roster "${ROOT1}/rosters/before.json"
+HQ_VERIFY_SESSION_COMPANIES="$CLIENT"
+export HQ_VERIFY_SESSION_COMPANIES
+run "$HC" verify --pack-dir "$PACK" --hq-root "$ROOT1" \
+  --client "$CLIENT" --hq-bin "$MOCK_HQ" --firm-domain "$FIRM_DOMAIN" \
+  --roster "${ROOT1}/rosters/before.json"
+unset HQ_VERIFY_SESSION_COMPANIES
 assert_eq "verify exits 0" "0" "$RC"
 assert_has "  ... verdict READY" "$OUT" "VERDICT  READY"
 assert_has "  ... the client team is verified from the roster, not the box" "$OUT" "active client-side member(s)"
@@ -253,6 +281,8 @@ assert_has "  ... a client-side owner/admin exists" "$OUT" "client-side owner/ad
 assert_has "  ... the declared end state is read off the checklist" "$OUT" "the firm retains NO access after sign-off"
 assert_eq "  ... zero incomplete/unknown" "0" \
   "$(printf '%s\n' "$OUT" | grep -cE '^  (INCOMPLETE|UNKNOWN) ' || true)"
+assert_has "the live lock set was read through hq core hq-session" \
+  "$(cat "$LOCALHQLOG")" "core hq-session get company_slugs"
 assert_no_external_call "verify made no external call"
 
 # ===========================================================================

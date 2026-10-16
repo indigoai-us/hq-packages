@@ -69,14 +69,14 @@ The script prints the steps. Run them in order, confirming with the user before
 each one that creates or changes something:
 
 1. `/newcompany {slug}` if `companies/{slug}/` does not exist yet.
-2. `bash core/scripts/hq-session.sh add company {slug}` to work in both
+2. `hq core hq-session add company {slug}` to work in both
    companies from this session. The firm stays the primary company. If this
    reports that multi-company sessions are off, stop and tell the user an HQ
    administrator has to enable `hooks.multi-company-session-lock`; the folder
    half of the workspace is complete and usable in the meantime.
 3. `new-client.sh client-home` as printed, to write the client's
    `handover-checklist.md` in the client company.
-4. `bash core/scripts/hq-session.sh remove company {slug}` when finished.
+4. `hq core hq-session remove company {slug}` when finished.
 
 Client-team invites are outward-facing and stay behind `/new-client`'s approval
 gate. Do not send any from here.

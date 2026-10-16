@@ -1,0 +1,21 @@
+CREATE TABLE IF NOT EXISTS approvals (
+  id text NOT NULL,
+  event_type_id text,
+  duration bigint,
+  start_at bigint,
+  end_at bigint,
+  host_ids text,
+  claim_keys text,
+  agent_key_id text,
+  member_id text,
+  member_name text,
+  member_email text,
+  member_company text,
+  topic text,
+  status text,
+  expires_at bigint,
+  created_at bigint,
+  decided_at bigint,
+  booking_id text,
+  PRIMARY KEY (id)
+);

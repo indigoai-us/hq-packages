@@ -1,12 +1,13 @@
 ---
 id: hq-work-mesh-prd-genesis
 title: Cloud-backed /prd must run work-mesh genesis after board upsert
-when: prd || genesis || new project || board upsert
+when: prd || genesis || (new && project) || (board && upsert)
 on: [UserPromptSubmit, AssistantIntent]
 enforcement: hard
 tier: 1
-version: 1
+version: 2
 created: 2026-08-16
+updated: 2026-10-08
 public: true
 ---
 
