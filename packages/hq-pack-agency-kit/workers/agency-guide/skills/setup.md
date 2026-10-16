@@ -195,12 +195,26 @@ bash core/packages/hq-pack-agency-kit/scripts/import-clients.sh \
 
 Then fill each client's `client-profile.md` and `access-and-assets.md` from
 what you already read, every fact with its source, blank where you have
-nothing. With a notetaker connected, add the client's recent meetings to its
+nothing. Record the client's website address and where their brand guide,
+product details, competitor list and exports live (the tool and the document
+name), so a later workflow can fetch them without asking. With a notetaker connected, add the client's recent meetings to its
 profile (date, who, what was agreed, what is next); with a project tool, add
 its open projects and their status. Put each client's Slack channels in its `access-and-assets.md`
 (channel name, whether it is shared with the client, and its purpose). Systems are names only; never copy a credential.
 
 ## Finishing
+
+Before the closing message, put the pack's skills into the agency's own
+skills directory with `bash scripts/skills-library-install.sh --firm {firm}`,
+so the team sees them in the company's Skills view. It is safe to re-run and
+never overwrites a skill the agency already has. Mention the skills library in
+the summary in one line (where it is and roughly how many skills).
+
+Setup ends with exactly one message. It is the summary with the next-step
+buttons at its end; there is no separate "Setup is finished" or "All done"
+message before or after it, and nothing follows it until the person replies.
+Record `Setup: finished` and the date in your progress note before you send
+it, so that the next turn does not send a second closing message.
 
 Tell them what you set up: the playbook and SOPs, the client homes, what you
 connected and linked, and anything not done, each with where to find it in
@@ -208,10 +222,16 @@ Files. Lead with the client workspaces: name each client and what you filled
 in for it. Then offer the next step as a real choice: open one client's
 workspace and walk through what is in it, or run a workflow on one client
 (onboarding with `skills/onboarding.md`, a scope check or a weekly update with
-`skills/clients.md`). Name the buttons so they never read as unfinished setup:
-"Walk me through {Client}" and "Kick off {Client}" (the onboarding), not
-"Onboard {Client}". Record `Setup: finished` and the date in your progress
-note.
+`skills/clients.md`, a conversion audit with `skills/funnel-audit.md`, a site
+rebuild with `skills/site-build.md`, or finding leads with
+`skills/reddit-scout.md`). Pick the workflows that fit what the agency sells
+and where each client is: a client whose proposal, SOW or CRM deal names an
+audit package gets "Run the conversion audit for {Client}"; otherwise an
+agency that does web or conversion work gets "Build a new site for {Client}"
+first. Name the buttons so they never read as unfinished setup:
+"Walk me through {Client}", "Run the conversion audit for {Client}",
+"Build a new site for {Client}" and "Kick off {Client}" (the onboarding),
+not "Onboard {Client}". At most four buttons.
 
 Only if they have no clients at all, offer a practice run on Northwind Labs,
 a made-up client with problems hidden in its documents, loaded with

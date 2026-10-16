@@ -1,6 +1,6 @@
 # Agency Kit: how it fits together
 
-The AI Builders Agency Kit is an operating system for a service agency inside
+The HQ Agency Kit is an operating system for a service agency inside
 HQ. It sits on top of `hq-pack-client-service`, which provides the client
 folders, engagement records and handover.
 
@@ -12,7 +12,7 @@ folders, engagement records and handover.
 | Engagement record | One source of truth per client (from client-service) | `companies/{firm}/clients/{slug}/engagement.md` |
 | Client workspace | The standard layout around the engagement record: profile, access tracker, documents in, onboarding and reports out | `companies/{firm}/clients/{slug}/` |
 | Client company (optional) | The client's own HQ, for client-facing work and handover | `companies/{client}/` |
-| Brand | AI Builders palette, type and voice for what the pack shows students | `brand/` in the pack |
+| Brand | HQ palette, type and voice for what the pack shows the agency's team | `brand/` in the pack |
 
 ## Folder or company
 

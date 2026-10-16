@@ -1,0 +1,8 @@
+version: '1'
+modules:
+  - name: hq-pack-agency-kit
+    strategy: package
+    source: /Users/jacobposel/Documents/HQ/workspace/worktrees/hq-packages/cro-kit/packages/hq-pack-agency-kit
+    version: 0.6.2
+    installed_at_iso: '2026-10-13T14:03:57.631Z'
+    access: public

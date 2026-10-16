@@ -5,7 +5,7 @@
 # companies/{firm}/clients/{slug}/onboarding/inputs/, filling {{AGENCY_NAME}}.
 # Run it after the client-service engagement phase has created
 # companies/{firm}/clients/{slug}/. Refuses if inputs already exist, so a
-# student's practice work is never overwritten.
+# the person's practice work is never overwritten.
 #
 # Usage (from the HQ root):
 #   bash core/packages/hq-pack-agency-kit/scripts/practice-client.sh \

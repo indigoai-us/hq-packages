@@ -1,0 +1,88 @@
+---
+name: growth-scout
+description: "One-shot Reddit growth run with no questions: find a founder asking for site feedback, write the teardown, build the rebuilt hero on a private link, draft the reply for a person to post, log it in the tracker, and report everything in one message. Never posts to Reddit. Built for scheduled runs and Slack agents."
+triggers:
+  - run the growth scout
+  - growth scout
+  - run the reddit scout now
+  - daily reddit run
+maturity: HQ-native (authored for this package)
+---
+# /growth-scout
+
+The unattended version of `reddit-scout`. It runs start to finish without
+asking anything and ends with one message a person can act on. Use it from a
+scheduled job or from a Slack agent. The file formats are those of
+`skills/reddit-scout/SKILL.md`. Where this skill and `reddit-scout` differ,
+this skill wins: it does not apply reddit-scout's screening rules, approval
+gates, ICP checks, date limits or pricing-page requirement.
+
+## Rules for the whole run
+
+- Ask nothing. Decide every choice yourself.
+- Never post, comment, vote or message on Reddit.
+- Never show commands, file paths, cache details, routes, rate limits, tool
+  names or error text. The person sees results, not plumbing.
+- Keep the final message under 250 words plus the reply draft.
+
+## Step 0: Prepared runs come first (most runs end here)
+
+A person may have prepared a run in advance. Look in `growth/reddit/` for
+any folder named `{date}-{site}/` that contains `teardown.md`, `reply.md`
+and `preview.md`. Ignore `tracker.md` and the SOP for this check.
+
+If such a folder exists and `growth/reddit/tracker.md` does not already list
+that site with status `posted`, `replied`, `call booked` or `not qualified`,
+then that folder is today's run and there is nothing to research, screen,
+build or deploy:
+
+1. If the folder has `report.md`, send its contents as the final message,
+   word for word, with nothing added before or after it.
+2. Otherwise compose the Report (Step 8) from `teardown.md`, `preview.md`
+   and `reply.md`.
+3. Then make sure `growth/reddit/tracker.md` has a row for the site with
+   status `drafted` (add one if missing; keep an existing `drafted` row).
+
+Do not fetch the founder's site, do not search Reddit, do not judge whether
+the candidate fits, do not check how old the post is. The person who
+prepared the folder already did that. Stop after the message is sent.
+
+Only when no prepared folder exists, continue to Step 1.
+
+## Steps
+
+1. **Candidates.** Read the newest `growth/reddit/*-candidates.md`.
+   If it lists at least one candidate with a site that is not yet in
+   `growth/reddit/tracker.md`, use that list and do not search Reddit at all.
+   Only when the list is empty or exhausted, search the SOP's subreddits for
+   founders asking for feedback on a landing page, pricing page or site (last
+   30 days); if a search is refused, use whatever came back. Skip any site
+   already in the tracker.
+2. **Pick one.** Take the first candidate in the list whose site loads. A
+   listed candidate is already judged to fit; do not re-screen it against the
+   ICP, and do not require a pricing page. Only if no candidate anywhere has a
+   reachable site, stop and send one line: "No new feedback requests worth a
+   teardown today; I'll try again tomorrow."
+3. **Teardown.** Read the post and the site. Write the teardown as
+   `reddit-scout` describes: three specific findings with the evidence from
+   the page, in the agency's voice, naming the agency once, promising nothing.
+4. **Hero.** Build the rebuilt hero section in the founder's own brand (their
+   colours, fonts and wording where it works), one primary action, one proof
+   line if the site has real proof. No invented numbers or testimonials.
+5. **Publish.** Deploy the section to a private, password-protected link.
+6. **Reply.** Draft the Reddit reply (under 150 words): answer the question
+   with two or three observations from the teardown, offer the preview link,
+   name the agency once, no pitch.
+7. **Log.** Add the tracker row with status `drafted` (date, subreddit, post,
+   site, review link).
+8. **Report**, one message, in this order: founder and site; the three
+   findings as three short lines; the preview link and password; the reply
+   draft in full; one closing line: "Post the reply from your own account,
+   then tell me 'posted' or 'call booked with {site}' and I'll update the
+   tracker."
+
+## Afterwards
+
+"posted", "replied", "call booked with {site}" and "not qualified" move the
+tracker row forward and update the qualified-calls count; confirm in one
+line.

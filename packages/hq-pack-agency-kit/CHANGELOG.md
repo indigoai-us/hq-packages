@@ -1,9 +1,86 @@
 # Changelog
 
-## Unreleased
+## 0.7.0 (2026-10-13)
 
+- Renamed to the HQ Agency Kit. The previous partner name, keyword and
+  palette are gone; `brand/` now carries the HQ palette and type (black
+  ground, white text at 70% and 50%, hairline rules, Geist, square corners). Commands, slugs and file layout are
+  unchanged, so existing installs and playbooks keep working.
+- growth-scout: a prepared run in `growth/reddit/{date}-{site}/` (teardown,
+  reply, preview) is sent as-is before any research; `report.md` is sent
+  word for word when present.
 - Instructions and workspace setup output call `hq core hq-session` directly;
   the hq-core requirement now carries the matching CLI floor.
+
+## 0.6.2 (2026-10-13)
+
+- Quoted the descriptions of 17 library skills whose text contained a colon; the
+  unquoted form was invalid YAML and company sync refused to upload them.
+
+## 0.6.1 (2026-10-13)
+
+- Setup copies the pack's skills into `companies/{firm}/skills/` with the new
+  `scripts/skills-library-install.sh`, so the library shows in the company's
+  Skills view and syncs with the company. Existing company skills are kept.
+
+## 0.6.0 (2026-10-13)
+
+- New workflow, funnel-audit: the agency's conversion audit from the chat.
+  The Agency Guide reads the client's inputs (brand guide, product details,
+  competitors, proposal or SOW, CRM export, analytics export) and transcripts
+  from the workspace, scores the funnel against the playbook's audit
+  criteria with the evidence quoted per criterion (lost reasons with counts,
+  exits by page and device, transcript lines with timestamps), a severity
+  and a recommended test, then ranks the top five experiments. The draft is
+  published as a password-protected review page with comments on; "Needs
+  changes" or comments on the page revise and republish it with a list of
+  what changed. Approval is logged in the engagement record and the next
+  step offered is a Page Sprint proposal from the top experiment. Triggers:
+  "run the conversion audit for {Client}", "funnel audit", "audit {Client}".
+- reddit-scout drafts the reply a person posts after the hero section is
+  published: short, two or three observations from the teardown, the
+  preview link, the agency named once, no pitch; offered with "Looks good,
+  I'll post it" or "Rewrite it". A tracker at `growth/reddit/tracker.md`
+  keeps one row per teardown (date, subreddit, post, site, status, link)
+  with a "Qualified calls booked" count at the top; "I posted it", "update
+  the Reddit tracker" and "log a call with {site}" move a row forward
+  (drafted, posted, replied, call booked, not qualified).
+- Skills library: 25 small CRO skills, each a `SKILL.md` with a short
+  method. Research: customer-interview-synthesis, review-mining,
+  competitor-teardown, icp-statement, jobs-to-be-done-map. Audit:
+  heuristic-page-review, form-friction-audit, pricing-page-review,
+  mobile-ux-check, trust-and-proof-audit, analytics-leak-finder.
+  Experiments: hypothesis-writer, test-prioritization, ab-test-readout,
+  sample-size-check. Build: hero-rewrite, cta-hierarchy, pricing-table-copy,
+  landing-page-brief, objection-handling-section. Client: kickoff-agenda,
+  proposal-from-audit, case-study-draft (scope-check and weekly-update
+  already existed). Growth: newsletter-issue, linkedin-post-from-readout.
+  The Agency Guide's own skill list stays the workflows it runs.
+- Setup ends with exactly one closing message (the summary with the
+  next-step buttons), never a second "Setup is finished". A client whose
+  proposal, SOW or deal names an audit package is offered "Run the
+  conversion audit for {Client}".
+- Worker rule: shell commands never read from standard input (no `cat`
+  without a file, no `read`); the runtime's standard input is not a terminal.
+
+## 0.5.0 (2026-10-12)
+
+- New workflow, site-build: rebuild a client's website from the client's own
+  data. The Agency Guide gathers the brand guide, product details, competitors,
+  CRM export, analytics and call transcripts from the agency's tools, fetches
+  the current site, writes an evidence brief (who actually buys, why visitors
+  leave, what the site says and to whom), builds the new site in the client's
+  brand, writes a before/after with a data point behind every change, and
+  publishes a review link behind a password. Two approval gates; nothing is
+  sent to the client.
+- New workflow, reddit-scout: find founders asking for feedback on their site
+  on Reddit, draft a specific teardown, build an improved hero section in
+  their brand and publish it to a private link. `scripts/reddit.mjs` reads
+  Reddit only (an agency-registered app through the HQ vault, or the public
+  feeds with caching); posting is always a person's.
+- Setup records each client's website and where its brand, product and
+  export documents live, and offers "Build a new site for {Client}" first for
+  agencies that do web or conversion work.
 
 ## 0.4.19 (2026-10-12)
 
@@ -265,14 +342,14 @@
   overwrites.
 - `/agency-setup` asks for the default client workspace mode and writes it to
   `agency-profile.md` (`--client-mode folder|company`, default folder).
-- AI Builders brand: `brand/BRAND.md` and `brand/tokens.css`, with the rule that
+- Partner brand: `brand/BRAND.md` and `brand/tokens.css`, with the rule that
   HQ and its commands are never renamed. Install welcome and README updated.
 - Pack now lives in the hq-packages repo under `packages/hq-pack-agency-kit`.
 - Tests cover the workspace script (placeholders, modes, keep-on-rerun, dry run,
   missing engagement) and the new playbook field.
 
-Not yet built: members-only distribution tied to AI Builders VIP, a branded
-install page, a `/agency-tutorial` for the course modules, a monthly report
+Not yet built: members-only distribution, an install page, an
+`/agency-tutorial`, a monthly report
 skill, a client health check, and service add-on bundles.
 
 ## 0.1.0 (2026-10-09)

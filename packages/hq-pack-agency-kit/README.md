@@ -1,6 +1,6 @@
-# AI Builders Agency Kit
+# HQ Agency Kit
 
-An HQ pack for service agencies, built for the AI Builders cohort. It turns a
+An HQ pack for service agencies. It turns a
 signed client into a sourced client brief, an intake request, an account audit
 and a kickoff package a strategist can review before kickoff. It also writes
 every lesson the strategist catches back into the agency's playbook.
@@ -75,7 +75,7 @@ Worker:
 
 | Worker | What it does |
 |---|---|
-| `agency-guide` | The Agency Guide bot: pack setup in chat (six questions, tap to answer), Northwind onboarding with approval gates, and the real-client flows (`new client`, `onboard`, `is this in scope`, `weekly update for`). Drafts only, never sends. |
+| `agency-guide` | The Agency Guide bot: pack setup in chat (six questions, tap to answer), Northwind onboarding with approval gates, and the real-client flows (`new client`, `onboard`, `is this in scope`, `weekly update for`, `run the conversion audit for`, `new site for`, `find leads on Reddit`). Drafts only, never sends. |
 
 Claude Code skills (optional; the Guide runs the same methods):
 
@@ -88,6 +88,22 @@ Claude Code skills (optional; the Guide runs the same methods):
 | `/scope-check` | Checks a client request against the contract and scope rules, and drafts the reply. |
 | `/weekly-update` | Drafts the client's weekly update from the engagement record. |
 | `/proposal` | Drafts a proposal with an explicit scope and exclusions, so the contract and onboarding are clean. |
+| `/funnel-audit` | Scores a client's funnel against the playbook's audit criteria from the client's exports and transcripts, ranks the top five experiments, and publishes a review page for the team. |
+| `/site-build` | Rebuilds a client's site from the client's own data, every change traced to a data point, published to a review link. |
+| `/reddit-scout` | Finds founders asking for site feedback on Reddit, drafts a teardown, an improved hero section and the reply a person posts, and keeps the Reddit tracker. |
+
+Skills library (one `SKILL.md` each, usable from the app's Skills view or as
+Claude Code commands): research (`customer-interview-synthesis`,
+`review-mining`, `competitor-teardown`, `icp-statement`,
+`jobs-to-be-done-map`), audit (`heuristic-page-review`,
+`form-friction-audit`, `pricing-page-review`, `mobile-ux-check`,
+`trust-and-proof-audit`, `analytics-leak-finder`), experiments
+(`hypothesis-writer`, `test-prioritization`, `ab-test-readout`,
+`sample-size-check`), build (`hero-rewrite`, `cta-hierarchy`,
+`pricing-table-copy`, `landing-page-brief`, `objection-handling-section`),
+client (`kickoff-agenda`, `proposal-from-audit`, `case-study-draft`, with
+`scope-check` and `weekly-update` above) and growth (`newsletter-issue`,
+`linkedin-post-from-readout`).
 
 Policies:
 
@@ -95,8 +111,8 @@ Policies:
   source, gaps in the data are stated, nothing reaches a client without approval.
 - `agency-kit-playbook-learns`: strategist corrections go back into the playbook.
 
-Brand: `brand/BRAND.md` and `brand/tokens.css` hold the AI Builders palette,
-type and voice for anything the pack renders for a student. The agency's own
+Brand: `brand/BRAND.md` and `brand/tokens.css` hold the HQ palette,
+type and voice for anything the pack renders for the agency's own team. The agency's own
 brand lives in its playbook and is what clients see.
 
 ## Where things go
