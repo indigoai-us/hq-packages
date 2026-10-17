@@ -140,8 +140,8 @@ struct CompositionPreview: View {
     let camera: AVCaptureSession?
     let placement: RecordingProject.WebcamPlacement
     let place: (RecordingProject.WebcamPlacement) -> Void
-    @State private var dragStart: RecordingProject.WebcamPlacement?
-    @State private var dragging: RecordingProject.WebcamPlacement?
+    @CaptureState private var dragStart: RecordingProject.WebcamPlacement?
+    @CaptureState private var dragging: RecordingProject.WebcamPlacement?
 
     var body: some View {
         GeometryReader { proxy in
