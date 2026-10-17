@@ -142,16 +142,16 @@ resolve_package() {
   package="$real"
 }
 
-# Covers every shipped app input and the build recipe itself (compile_and_sign and the
-# developer folder choice), so a pack update that only changes how the app is built
-# still rebuilds it.
+# Covers every shipped app input and the build recipe itself (compile_and_sign, the
+# shared swiftc flags and the developer folder choice), so a pack update that only
+# changes how the app is built still rebuilds it.
 build_inputs_hash() {
   (
     cd "$pack_dir/app"
     cat SOURCE Info.plist HQCapture.entitlements
     find Sources -name '*.swift' -type f -print0 | LC_ALL=C sort -z | xargs -0 cat
     cat Resources/AppIcon.icns
-    declare -f compile_and_sign developer_dir
+    declare -f compile_and_sign developer_dir swiftc_frontend_args run_swiftc
   ) | shasum -a 256 | cut -d' ' -f1
 }
 
@@ -175,38 +175,169 @@ json_string() {
   printf '"%s"' "$s"
 }
 
+# Frontend flags shared by the real build and the doctor's typecheck probe.
+swiftc_frontend_args() {
+  printf '%s\n' -parse-as-library -swift-version 6 -O -target arm64-apple-macos26.0 -framework AVKit
+}
+
+# Compiles with the same developer directory, SDK and flags as the build.
+# Extra arguments are the output and sources, or -typecheck and a probe file.
+run_swiftc() {
+  local arg args=()
+  while IFS= read -r arg; do args+=("$arg"); done < <(swiftc_frontend_args)
+  DEVELOPER_DIR="$(developer_dir)" xcrun --sdk macosx swiftc "${args[@]}" "$@"
+}
+
+# The SwiftUI and Observation features the app uses: State via SwiftUI.State
+# (not the State macro), @Observable, and a Binding.
+compile_probe_source() {
+  cat <<'SWIFT'
+import Observation
+import SwiftUI
+
+typealias CaptureState<Value> = SwiftUI.State<Value>
+
+@MainActor
+@Observable
+final class DoctorProbeModel {
+    var enabled = false
+}
+
+@MainActor
+struct DoctorProbeView: View {
+    @CaptureState private var ready = false
+    var model: DoctorProbeModel
+
+    var body: some View {
+        VStack {
+            Toggle("Ready", isOn: $ready)
+            Toggle("Enabled", isOn: Binding(
+                get: { model.enabled },
+                set: { model.enabled = $0 }
+            ))
+        }
+    }
+}
+SWIFT
+}
+
+# Typechecks the probe with the build toolchain. Prints one doctor line.
+# A passing result is cached by SDK path, Swift version, the swiftc file,
+# frontend flags and probe source. A failure is not cached, so the next
+# doctor retries it.
+compile_probe_check() {
+  local dev sdk_path sdk_ver swift_raw swift_ver swiftc_bin swiftc_id probe_src identity cache
+  local cached_id cached_ok cached_detail tmp log result detail
+  dev="$(developer_dir)"
+  sdk_path="$(DEVELOPER_DIR="$dev" xcrun --sdk macosx --show-sdk-path 2>/dev/null | head -n 1 | tr -d '[:space:]' || true)"
+  sdk_ver="$(DEVELOPER_DIR="$dev" xcrun --sdk macosx --show-sdk-version 2>/dev/null | head -n 1 | tr -d '[:space:]' || true)"
+  swift_raw="$(DEVELOPER_DIR="$dev" xcrun --sdk macosx swiftc --version 2>/dev/null || true)"
+  swift_ver="$(printf '%s\n' "$swift_raw" | sed -n 's/.*Swift version \([0-9][0-9.]*\).*/\1/p' | head -n 1 || true)"
+  swiftc_bin="$(DEVELOPER_DIR="$dev" xcrun --sdk macosx --find swiftc 2>/dev/null | head -n 1 | tr -d '[:space:]' || true)"
+  if [ -n "$swiftc_bin" ] && [ -e "$swiftc_bin" ]; then
+    swiftc_id="$(stat -f '%m:%i' "$swiftc_bin" 2>/dev/null || stat -c '%Y:%i' "$swiftc_bin" 2>/dev/null || echo missing)"
+  else
+    swiftc_id=missing
+  fi
+  [ -n "$sdk_ver" ] || sdk_ver=missing
+  [ -n "$swift_ver" ] || swift_ver=missing
+  probe_src="$(compile_probe_source)"
+  # SDK path and Swift version are the toolchain identity. The compiler file's
+  # mtime and inode catch a tools update that keeps the same version string.
+  identity="$(
+    {
+      printf '%s\n' doctor-probe-v1 "$sdk_path" "$swift_ver" "$swiftc_id"
+      swiftc_frontend_args
+      printf '%s' "$probe_src"
+    } | shasum -a 256 | awk '{print $1}'
+  )"
+  cache="$state_dir/.doctor-probe.cache"
+  if [ -f "$cache" ]; then
+    IFS=$'\t' read -r cached_id cached_ok cached_detail <"$cache" || true
+    if [ "$cached_id" = "$identity" ] && [ "$cached_ok" = true ]; then
+      printf 'compile_probe\ttrue\t%s\n' "$cached_detail"
+      return 0
+    fi
+  fi
+  tmp="$(mktemp -d "${TMPDIR:-/tmp}/hq-capture-doctor.XXXXXX")"
+  printf '%s\n' "$probe_src" >"$tmp/Probe.swift"
+  log="$tmp/probe.log"
+  if run_swiftc -typecheck "$tmp/Probe.swift" >"$log" 2>&1; then
+    result=true
+    detail="Swift ${swift_ver}, macOS SDK ${sdk_ver}"
+  else
+    result=false
+    if grep -Eq 'plugin for module .+ not found' "$log"; then
+      detail="Swift ${swift_ver}, macOS SDK ${sdk_ver}: missing Swift macro plugin (plugin for module not found)"
+    else
+      detail="Swift ${swift_ver}, macOS SDK ${sdk_ver}: the toolchain could not typecheck SwiftUI State, Observable and Binding"
+    fi
+  fi
+  rm -rf "$tmp"
+  if [ "$result" = true ] && mkdir -p "$state_dir" 2>/dev/null; then
+    printf '%s\t%s\t%s\n' "$identity" "$result" "$detail" >"$state_dir/.doctor-probe.cache.$$" \
+      && mv -f "$state_dir/.doctor-probe.cache.$$" "$cache" || true
+  fi
+  printf 'compile_probe\t%s\t%s\n' "$result" "$detail"
+}
+
 doctor_checks() {
   # Prints "name<TAB>ok<TAB>detail" lines.
-  local os arch ver dev swift_ok sdk_ok sdk_ver
+  local os arch ver dev swift_ok sdk_ok sdk_ver ready=true
   os="$(uname -s)"; arch="$(uname -m)"
   printf 'macos\t%s\t%s\n' "$([ "$os" = Darwin ] && echo true || echo false)" "$os"
   printf 'apple_silicon\t%s\t%s\n' "$([ "$arch" = arm64 ] && echo true || echo false)" "$arch"
+  [ "$arch" = arm64 ] || ready=false
   if [ "$os" = Darwin ]; then
     ver="$(sw_vers -productVersion)"
     printf 'macos_26_or_later\t%s\t%s\n' "$([ "${ver%%.*}" -ge 26 ] && echo true || echo false)" "$ver"
+    [ "${ver%%.*}" -ge 26 ] || ready=false
     # Find the developer folder before calling xcrun, which otherwise pops up the install
     # dialog, and use the same folder the build uses.
     dev="$(developer_dir)"
     swift_ok=false
     if [ -n "$dev" ] && [ -d "$dev" ] && DEVELOPER_DIR="$dev" xcrun --sdk macosx --find swiftc >/dev/null 2>&1; then swift_ok=true; fi
     printf 'command_line_tools\t%s\t%s\n' "$swift_ok" "${dev:-missing}"
+    [ "$swift_ok" = true ] || ready=false
     sdk_ok=false sdk_ver=missing
     if [ "$swift_ok" = true ]; then
       [ -d "$(DEVELOPER_DIR="$dev" xcrun --sdk macosx --show-sdk-path 2>/dev/null)/System/Library/Frameworks/ScreenCaptureKit.framework" ] && sdk_ok=true
       sdk_ver="$(DEVELOPER_DIR="$dev" xcrun --sdk macosx --show-sdk-version 2>/dev/null || echo missing)"
     fi
     printf 'macos_sdk\t%s\t%s\n' "$sdk_ok" "$sdk_ver"
+    [ "$sdk_ok" = true ] || ready=false
+    # Skip the probe when an earlier check already failed, so that failure keeps
+    # the install fix instead of a compile message about tools that are not usable.
+    if [ "$ready" = true ]; then compile_probe_check; fi
   fi
 }
 
 # Builds its JSON in bash, so the fix line still prints on a Mac without python3.
 cmd_doctor() {
-  local body="" all=true name ok detail
+  local body="" all=true name ok detail probe_failed=false others_failed=false probe_detail="" versions
   while IFS=$'\t' read -r name ok detail; do
+    [ -n "$name" ] || continue
     body+=", $(json_string "$name"): $ok, $(json_string "${name}_detail"): $(json_string "$detail")"
-    [ "$ok" = true ] || all=false
+    if [ "$ok" != true ]; then
+      all=false
+      if [ "$name" = compile_probe ]; then
+        probe_failed=true
+        probe_detail="$detail"
+      else
+        others_failed=true
+      fi
+    fi
   done < <(doctor_checks)
-  [ "$all" = true ] || body+=", \"fix\": $(json_string "Run: xcode-select --install   (installs Apple's free Command Line Tools). HQ Capture needs an Apple Silicon Mac on macOS 26 or later.")"
+  if [ "$all" != true ]; then
+    if [ "$probe_failed" = true ] && [ "$others_failed" = false ]; then
+      versions="$(printf '%s\n' "$probe_detail" | sed -n 's/^Swift \(.*\), macOS SDK \([^:]*\).*/Swift \1 and macOS SDK \2/p' | head -n 1 || true)"
+      [ -n "$versions" ] || versions="the selected Swift and macOS SDK"
+      body+=", \"message\": $(json_string "The installed Command Line Tools cannot build this version of HQ Capture.")"
+      body+=", \"fix\": $(json_string "Update the HQ Capture pack, or update the Command Line Tools with: xcode-select --install. This check used ${versions}.")"
+    else
+      body+=", \"fix\": $(json_string "Run: xcode-select --install   (installs Apple's free Command Line Tools). HQ Capture needs an Apple Silicon Mac on macOS 26 or later.")"
+    fi
+  fi
   printf '{"ok": %s%s}\n' "$all" "$body"
   [ "$all" = true ]
 }
@@ -238,9 +369,7 @@ compile_and_sign() {
   local app="$1" log="$2" bin signed key
   bin="$app/Contents/MacOS/$executable"
   mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
-  if ! DEVELOPER_DIR="$(developer_dir)" xcrun --sdk macosx swiftc \
-      -parse-as-library -swift-version 6 -O -target arm64-apple-macos26.0 \
-      -framework AVKit -o "$bin" "$app_src"/*.swift >>"$log" 2>&1; then
+  if ! run_swiftc -o "$bin" "$app_src"/*.swift >>"$log" 2>&1; then
     echo build-failed; return 1
   fi
   # SwiftUI's VideoPlayer subclasses AVKit's AVPlayerView. Without AVKit itself the player
@@ -434,6 +563,17 @@ acquire_start_lock() {
   done
 }
 
+# A missing Swift macro plugin means these Command Line Tools cannot build this
+# pack. Name that cause. Other failures still point at the build log.
+build_failed_message() {
+  local log="$1"
+  if grep -Eq 'plugin for module .+ not found' "$log" 2>/dev/null; then
+    printf '%s\n' "The installed Command Line Tools cannot build this version of HQ Capture. Update the HQ Capture pack, or update the Command Line Tools with: xcode-select --install. Details: $log"
+  else
+    printf '%s\n' "HQ Capture did not compile. Details: $log"
+  fi
+}
+
 build_app() {
   local force="${1:-false}" want
   want="$(build_inputs_hash)"
@@ -452,7 +592,7 @@ build_app() {
   if [ -n "${HQ_RECORDER_COMPILE:-}" ]; then
     # shellcheck disable=SC2086
     $HQ_RECORDER_COMPILE "$tmp/HQ Capture.app" >>"$log" 2>&1 \
-      || { rm -rf "$tmp"; fail build-failed "HQ Capture did not compile. Details: $log"; }
+      || { rm -rf "$tmp"; fail build-failed "$(build_failed_message "$log")"; }
   else
     if ! cmd_doctor >/dev/null; then
       rm -rf "$tmp"; cmd_doctor; exit 1
@@ -465,7 +605,7 @@ build_app() {
       case "$reason" in
         sign-failed) fail sign-failed "Signing the locally built app failed. Details: $log" ;;
         check-failed) fail build-check-failed "The built app failed a post-build check. Details: $log" ;;
-        *) fail build-failed "HQ Capture did not compile. Details: $log" ;;
+        *) fail build-failed "$(build_failed_message "$log")" ;;
       esac
     fi
   fi

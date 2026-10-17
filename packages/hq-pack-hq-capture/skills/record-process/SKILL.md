@@ -63,8 +63,10 @@ recording for any other company.
 ## 2. Check the Mac and open HQ Capture
 
 1. Run `doctor`. If `ok` is false, give the user the `fix` line in plain
-   words (usually `xcode-select --install`, a one-time Apple download). Do not
-   install it yourself.
+   words. Do not install anything yourself. A missing tools install says to
+   run `xcode-select --install`. If the fix says the installed Command Line
+   Tools cannot build this version, the tools are present but cannot compile
+   this pack: update the HQ Capture pack, or update the Command Line Tools.
 2. Run `start`. The first run, and the first run after a pack update, builds
    the app on this Mac (about a minute); say so first. `start` returns
    `state: "awaiting-start"`: the window is open and nothing is recording yet.

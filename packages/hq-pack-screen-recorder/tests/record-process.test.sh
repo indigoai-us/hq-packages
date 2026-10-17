@@ -695,4 +695,197 @@ expect "doctor exits 1 when a check fails" "$(set +e; PATH="$nopy" bash "$R" doc
 check "doctor prints the fix line without python3" \
   'j["ok"] is False and j["apple_silicon"] is False and j["apple_silicon_detail"]=="x86_64" and j["fix"].startswith("Run: xcode-select --install")' "$doc"
 
+# Compile probe and the missing-macro build message. A fake xcrun/swiftc stands in for the
+# toolchain, so these checks do not need Command Line Tools. They call the pack script, not the
+# copy sed changed above (that copy's -O flag was rewritten to -Osize).
+src_script="$here/../scripts/hq-record-process.sh"
+probe_home="$tmp/probe-home"
+probe_bin="$tmp/probe-bin"
+probe_dev="$tmp/probe-dev"
+probe_sdk="$tmp/probe-sdk"
+probe_state="$tmp/probe-state"
+PROBE_XCRUN_LOG="$tmp/probe-xcrun.log"
+PROBE_SRC_COPY="$tmp/probe-source.swift"
+mkdir -p "$probe_home" "$probe_bin" "$probe_dev" "$probe_state" \
+  "$probe_sdk/System/Library/Frameworks/ScreenCaptureKit.framework"
+cat >"$probe_bin/uname" <<'EOF'
+#!/bin/sh
+case "${1:-}" in
+  -m) echo arm64 ;;
+  *) echo Darwin ;;
+esac
+EOF
+cat >"$probe_bin/sw_vers" <<'EOF'
+#!/bin/sh
+echo 26.1
+EOF
+cat >"$probe_bin/xcode-select" <<'EOF'
+#!/bin/sh
+echo "${PROBE_DEV:-/missing}"
+EOF
+cat >"$probe_bin/codesign" <<'EOF'
+#!/bin/sh
+echo "codesign invoked" >>"$PROBE_XCRUN_LOG"
+exit 99
+EOF
+cat >"$probe_bin/open" <<'EOF'
+#!/bin/sh
+echo "open invoked" >>"$PROBE_XCRUN_LOG"
+exit 99
+EOF
+cat >"$probe_bin/xcrun" <<'EOF'
+#!/bin/bash
+printf '%s\n' "$*" >>"$PROBE_XCRUN_LOG"
+if [ "${1:-}" = "--sdk" ] && [ "${3:-}" = "--find" ]; then
+  [ "${PROBE_FIND_FAIL:-}" = 1 ] && exit 1
+  echo /fake/swiftc
+  exit 0
+fi
+if [ "${1:-}" = "--sdk" ] && [ "${3:-}" = "--show-sdk-path" ]; then
+  echo "$PROBE_SDK"
+  exit 0
+fi
+if [ "${1:-}" = "--sdk" ] && [ "${3:-}" = "--show-sdk-version" ]; then
+  echo 27.0
+  exit 0
+fi
+if [ "${1:-}" = "--sdk" ] && [ "${3:-}" = "swiftc" ] && [ "${4:-}" = "--version" ]; then
+  echo "Apple Swift version ${PROBE_SWIFT_VERSION} (swiftlang-test)"
+  exit 0
+fi
+if [ "${1:-}" = "--sdk" ] && [ "${3:-}" = "swiftc" ]; then
+  prev="" src=""
+  for a in "$@"; do
+    [ "$prev" = "-typecheck" ] && src="$a"
+    prev="$a"
+  done
+  [ -n "$src" ] && [ -n "${PROBE_SRC_COPY:-}" ] && cp "$src" "$PROBE_SRC_COPY"
+  if [ "${PROBE_SWIFTC_FAIL:-}" = 1 ]; then
+    echo "error: plugin for module 'SwiftUIMacros' not found" >&2
+    exit 1
+  fi
+  if [ "${PROBE_SWIFTC_FAIL:-}" = other ]; then
+    echo "error: cannot find 'Missing' in scope" >&2
+    exit 1
+  fi
+  exit 0
+fi
+echo "unexpected xcrun: $*" >&2
+exit 1
+EOF
+chmod +x "$probe_bin"/*
+probe_typechecks() {
+  if [ -f "$PROBE_XCRUN_LOG" ]; then
+    grep -c -- '-typecheck' "$PROBE_XCRUN_LOG" || true
+  else
+    echo 0
+  fi
+}
+run_probe_doctor() {
+  HOME="$probe_home" \
+  HQ_RECORDER_HOME="$probe_state" \
+  DEVELOPER_DIR="$probe_dev" \
+  PATH="$probe_bin:$PATH" \
+  PROBE_XCRUN_LOG="$PROBE_XCRUN_LOG" \
+  PROBE_SDK="$probe_sdk" \
+  PROBE_DEV="$probe_dev" \
+  PROBE_SRC_COPY="$PROBE_SRC_COPY" \
+  PROBE_SWIFT_VERSION="${PROBE_SWIFT_VERSION:-6.4}" \
+  PROBE_SWIFTC_FAIL="${PROBE_SWIFTC_FAIL:-}" \
+  PROBE_FIND_FAIL="${PROBE_FIND_FAIL:-}" \
+  bash "$src_script" doctor 2>>"$tmp/probe-doctor.err"
+}
+
+: >"$PROBE_XCRUN_LOG"
+: >"$tmp/probe-doctor.err"
+export PROBE_SWIFT_VERSION=6.4 PROBE_SWIFTC_FAIL= PROBE_FIND_FAIL=
+doc="$(run_probe_doctor)"
+check "doctor compile probe passes on a fake toolchain" \
+  'j["ok"] is True and j["compile_probe"] is True and j["compile_probe_detail"]=="Swift 6.4, macOS SDK 27.0" and "fix" not in j and "message" not in j' \
+  "$doc"
+probe_line="$(grep -- '-typecheck' "$PROBE_XCRUN_LOG" | head -n 1)"
+case "$probe_line" in
+  "--sdk macosx swiftc -parse-as-library -swift-version 6 -O -target arm64-apple-macos26.0 -framework AVKit -typecheck "*)
+    pass=$((pass + 1)) ;;
+  *) printf 'FAIL: probe flags: %s\n' "$probe_line" >&2; exit 1 ;;
+esac
+case "$probe_line" in
+  *" -o "*|*-o\ *) printf 'FAIL: probe emitted a binary flag: %s\n' "$probe_line" >&2; exit 1 ;;
+  *) pass=$((pass + 1)) ;;
+esac
+grep -q 'typealias CaptureState<Value> = SwiftUI.State<Value>' "$PROBE_SRC_COPY" \
+  && pass=$((pass + 1)) || { echo "FAIL: probe source does not use SwiftUI.State" >&2; exit 1; }
+grep -q '@Observable' "$PROBE_SRC_COPY" \
+  && pass=$((pass + 1)) || { echo "FAIL: probe source does not use @Observable" >&2; exit 1; }
+grep -q 'Binding(' "$PROBE_SRC_COPY" \
+  && pass=$((pass + 1)) || { echo "FAIL: probe source does not use Binding" >&2; exit 1; }
+if grep -E 'codesign invoked|open invoked' "$PROBE_XCRUN_LOG"; then
+  echo "FAIL: doctor invoked codesign or open" >&2; exit 1
+fi
+pass=$((pass + 1))
+expect "a passing probe is cached for the same toolchain" "$(probe_typechecks)" "1"
+doc="$(run_probe_doctor)"
+check "a cached probe still passes without another typecheck" \
+  'j["ok"] is True and j["compile_probe"] is True and j["compile_probe_detail"]=="Swift 6.4, macOS SDK 27.0"' \
+  "$doc"
+expect "the cached probe did not typecheck again" "$(probe_typechecks)" "1"
+PROBE_SWIFT_VERSION=6.5
+doc="$(run_probe_doctor)"
+check "a new Swift version invalidates the probe cache" \
+  'j["ok"] is True and j["compile_probe_detail"]=="Swift 6.5, macOS SDK 27.0"' "$doc"
+expect "a new Swift version typechecks again" "$(probe_typechecks)" "2"
+[ -f "$probe_state/.doctor-probe.cache" ] && pass=$((pass + 1)) \
+  || { echo "FAIL: probe cache was not written under the recorder state dir" >&2; exit 1; }
+[ ! -e "$probe_home/Library/Application Support/HQ Capture/.doctor-probe.cache" ] && pass=$((pass + 1)) \
+  || { echo "FAIL: probe cache escaped into HOME" >&2; exit 1; }
+
+rm -rf "$probe_state"; mkdir -p "$probe_state"
+: >"$PROBE_XCRUN_LOG"
+PROBE_SWIFT_VERSION=6.4 PROBE_SWIFTC_FAIL=1
+doc="$(run_probe_doctor || true)"
+check "a missing macro plugin fails the doctor probe" \
+  'j["ok"] is False and j["compile_probe"] is False and j["message"]=="The installed Command Line Tools cannot build this version of HQ Capture." and j["fix"]=="Update the HQ Capture pack, or update the Command Line Tools with: xcode-select --install. This check used Swift 6.4 and macOS SDK 27.0." and j["compile_probe_detail"]=="Swift 6.4, macOS SDK 27.0: missing Swift macro plugin (plugin for module not found)"' \
+  "$doc"
+expect "a failed probe is not cached" "$(probe_typechecks)" "1"
+expect "doctor exits 1 when the compile probe fails" "$(set +e; PROBE_SWIFTC_FAIL=1 run_probe_doctor >/dev/null; echo $?)" "1"
+expect "a failed probe typechecks again on the next doctor" "$(probe_typechecks)" "2"
+
+rm -rf "$probe_state"; mkdir -p "$probe_state"
+: >"$PROBE_XCRUN_LOG"
+PROBE_SWIFTC_FAIL=other
+doc="$(run_probe_doctor || true)"
+check "any other probe failure names the toolchain and the features" \
+  'j["ok"] is False and j["compile_probe"] is False and j["message"]=="The installed Command Line Tools cannot build this version of HQ Capture." and j["compile_probe_detail"]=="Swift 6.4, macOS SDK 27.0: the toolchain could not typecheck SwiftUI State, Observable and Binding"' \
+  "$doc"
+
+rm -rf "$probe_state"; mkdir -p "$probe_state"
+: >"$PROBE_XCRUN_LOG"
+PROBE_SWIFTC_FAIL= PROBE_FIND_FAIL=1
+doc="$(run_probe_doctor || true)"
+check "doctor skips the probe when the tools are missing and keeps the install fix" \
+  'j["ok"] is False and j["command_line_tools"] is False and "compile_probe" not in j and j["fix"].startswith("Run: xcode-select --install")' \
+  "$doc"
+expect "a missing compiler does not typecheck" "$(probe_typechecks)" "0"
+PROBE_FIND_FAIL=
+
+cat >"$tmp/plugin-fail-compile.sh" <<'EOF'
+#!/bin/sh
+echo "error: External macro implementation type 'SwiftUIMacros.StateMacro' could not be found for macro 'State'; plugin for module 'SwiftUIMacros' not found" >&2
+exit 1
+EOF
+cat >"$tmp/plain-fail-compile.sh" <<'EOF'
+#!/bin/sh
+echo "error: cannot find 'Missing' in scope" >&2
+exit 1
+EOF
+chmod +x "$tmp/plugin-fail-compile.sh" "$tmp/plain-fail-compile.sh"
+out="$(HQ_RECORDER_COMPILE="$tmp/plugin-fail-compile.sh" run build --force)"
+check "a missing macro plugin names the Command Line Tools in the build error" \
+  "j['ok'] is False and j['error']=='build-failed' and j['message']=='The installed Command Line Tools cannot build this version of HQ Capture. Update the HQ Capture pack, or update the Command Line Tools with: xcode-select --install. Details: $HQ_RECORDER_HOME/build.log'" \
+  "$out"
+out="$(HQ_RECORDER_COMPILE="$tmp/plain-fail-compile.sh" run build --force)"
+check "other build failures still point at the build log" \
+  'j["error"]=="build-failed" and j["message"].startswith("HQ Capture did not compile. Details: ")' \
+  "$out"
+
 echo "record-process launcher: $pass checks passed"

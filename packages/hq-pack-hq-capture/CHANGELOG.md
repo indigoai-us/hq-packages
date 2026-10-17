@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- `doctor` typechecks a small SwiftUI sample with the same Command Line Tools
+  and compiler flags as the real build, and reports the Swift version and
+  macOS SDK it used. If that check fails, doctor says the installed Command
+  Line Tools cannot build this version and tells you to update the pack or
+  the tools. A build that fails because a Swift macro plugin is missing says
+  the same thing, instead of only pointing at the build log. The check does
+  not ask for a permission.
+
 - Keep local builds working with Command Line Tools and macOS SDK 27. Use the
   existing SwiftUI State property wrapper explicitly so the new State macro
   does not require the Xcode-only SwiftUIMacros plugin. No Xcode install is needed.
