@@ -822,7 +822,7 @@ if [ "${1:-}" = "--sdk" ] && [ "${3:-}" = "--show-sdk-path" ]; then
   exit 0
 fi
 if [ "${1:-}" = "--sdk" ] && [ "${3:-}" = "--show-sdk-version" ]; then
-  echo 27.0
+  echo "${PROBE_SDK_VERSION:-27.0}"
   exit 0
 fi
 if [ "${1:-}" = "--sdk" ] && [ "${3:-}" = "swiftc" ] && [ "${4:-}" = "--version" ]; then
@@ -843,6 +843,11 @@ if [ "${1:-}" = "--sdk" ] && [ "${3:-}" = "swiftc" ]; then
   if [ "${PROBE_SWIFTC_FAIL:-}" = other ]; then
     echo "error: cannot find 'Missing' in scope" >&2
     exit 1
+  fi
+  if [ "${PROBE_SWIFTC_FAIL:-}" = hang ]; then
+    echo $$ >"${PROBE_HANG_PID:-/dev/null}"
+    sleep 60
+    exit 0
   fi
   exit 0
 fi
@@ -867,14 +872,17 @@ run_probe_doctor() {
   PROBE_DEV="$probe_dev" \
   PROBE_SRC_COPY="$PROBE_SRC_COPY" \
   PROBE_SWIFT_VERSION="${PROBE_SWIFT_VERSION:-6.4}" \
+  PROBE_SDK_VERSION="${PROBE_SDK_VERSION:-27.0}" \
   PROBE_SWIFTC_FAIL="${PROBE_SWIFTC_FAIL:-}" \
   PROBE_FIND_FAIL="${PROBE_FIND_FAIL:-}" \
+  PROBE_HANG_PID="${PROBE_HANG_PID:-}" \
+  HQ_RECORDER_PROBE_TIMEOUT="${HQ_RECORDER_PROBE_TIMEOUT:-30}" \
   bash "$src_script" doctor 2>>"$tmp/probe-doctor.err"
 }
 
 : >"$PROBE_XCRUN_LOG"
 : >"$tmp/probe-doctor.err"
-export PROBE_SWIFT_VERSION=6.4 PROBE_SWIFTC_FAIL= PROBE_FIND_FAIL=
+export PROBE_SWIFT_VERSION=6.4 PROBE_SDK_VERSION=27.0 PROBE_SWIFTC_FAIL= PROBE_FIND_FAIL= HQ_RECORDER_PROBE_TIMEOUT=30
 doc="$(run_probe_doctor)"
 check "doctor compile probe passes on a fake toolchain" \
   'j["ok"] is True and j["compile_probe"] is True and j["compile_probe_detail"]=="Swift 6.4, macOS SDK 27.0" and "fix" not in j and "message" not in j' \
@@ -915,12 +923,40 @@ expect "a new Swift version typechecks again" "$(probe_typechecks)" "2"
 [ ! -e "$probe_home/Library/Application Support/HQ Capture/.doctor-probe.cache" ] && pass=$((pass + 1)) \
   || { echo "FAIL: probe cache escaped into HOME" >&2; exit 1; }
 
+sdk_a="$tmp/sdk-real-a"
+sdk_b="$tmp/sdk-real-b"
+sdk_link="$tmp/sdk-link"
+mkdir -p "$sdk_a/System/Library/Frameworks/ScreenCaptureKit.framework" \
+  "$sdk_b/System/Library/Frameworks/ScreenCaptureKit.framework"
+ln -sfn "$sdk_a" "$sdk_link"
+probe_sdk="$sdk_link"
+PROBE_SWIFT_VERSION=6.4 PROBE_SDK_VERSION=27.0
+sdk_before="$(probe_typechecks)"
+doc="$(run_probe_doctor)"
+check "an SDK symlink path typechecks and passes" \
+  'j["ok"] is True and j["compile_probe_detail"]=="Swift 6.4, macOS SDK 27.0"' "$doc"
+expect "the first resolved SDK typechecks" "$(probe_typechecks)" "$((sdk_before + 1))"
+doc="$(run_probe_doctor)"
+expect "the same resolved SDK is cached" "$(probe_typechecks)" "$((sdk_before + 1))"
+ln -sfn "$sdk_b" "$sdk_link"
+doc="$(run_probe_doctor)"
+check "a new SDK directory behind the same path invalidates the cache" \
+  'j["ok"] is True and j["compile_probe_detail"]=="Swift 6.4, macOS SDK 27.0"' "$doc"
+expect "retargeting the SDK symlink typechecks again" "$(probe_typechecks)" "$((sdk_before + 2))"
+PROBE_SDK_VERSION=27.1
+doc="$(run_probe_doctor)"
+check "an SDK version change invalidates the cache" \
+  'j["ok"] is True and j["compile_probe_detail"]=="Swift 6.4, macOS SDK 27.1"' "$doc"
+expect "a new SDK version typechecks again" "$(probe_typechecks)" "$((sdk_before + 3))"
+probe_sdk="$tmp/probe-sdk"
+PROBE_SDK_VERSION=27.0
+
 rm -rf "$probe_state"; mkdir -p "$probe_state"
 : >"$PROBE_XCRUN_LOG"
 PROBE_SWIFT_VERSION=6.4 PROBE_SWIFTC_FAIL=1
 doc="$(run_probe_doctor || true)"
 check "a missing macro plugin fails the doctor probe" \
-  'j["ok"] is False and j["compile_probe"] is False and j["message"]=="The installed Command Line Tools cannot build this version of HQ Capture." and j["fix"]=="Update the HQ Capture pack, or update the Command Line Tools with: xcode-select --install. This check used Swift 6.4 and macOS SDK 27.0." and j["compile_probe_detail"]=="Swift 6.4, macOS SDK 27.0: missing Swift macro plugin (plugin for module not found)"' \
+  'j["ok"] is False and j["compile_probe"] is False and j["message"]=="The installed Command Line Tools cannot build this version of HQ Capture." and j["fix"]=="Update HQ Capture with: hq install hq-capture. If it still fails, update the Command Line Tools in System Settings > General > Software Update." and j["compile_probe_detail"]=="Swift 6.4, macOS SDK 27.0: missing Swift macro plugin (plugin for module not found)"' \
   "$doc"
 expect "a failed probe is not cached" "$(probe_typechecks)" "1"
 expect "doctor exits 1 when the compile probe fails" "$(set +e; PROBE_SWIFTC_FAIL=1 run_probe_doctor >/dev/null; echo $?)" "1"
@@ -931,7 +967,7 @@ rm -rf "$probe_state"; mkdir -p "$probe_state"
 PROBE_SWIFTC_FAIL=other
 doc="$(run_probe_doctor || true)"
 check "any other probe failure names the toolchain and the features" \
-  'j["ok"] is False and j["compile_probe"] is False and j["message"]=="The installed Command Line Tools cannot build this version of HQ Capture." and j["compile_probe_detail"]=="Swift 6.4, macOS SDK 27.0: the toolchain could not typecheck SwiftUI State, Observable and Binding"' \
+  'j["ok"] is False and j["compile_probe"] is False and j["message"]=="The installed Command Line Tools cannot build this version of HQ Capture." and j["compile_probe_detail"].startswith("Swift 6.4, macOS SDK 27.0: the toolchain could not typecheck SwiftUI State, Observable and Binding") and "cannot find" in j["compile_probe_detail"] and "Missing" in j["compile_probe_detail"] and "in scope" in j["compile_probe_detail"]' \
   "$doc"
 
 rm -rf "$probe_state"; mkdir -p "$probe_state"
@@ -957,11 +993,119 @@ EOF
 chmod +x "$tmp/plugin-fail-compile.sh" "$tmp/plain-fail-compile.sh"
 out="$(HQ_RECORDER_COMPILE="$tmp/plugin-fail-compile.sh" run build --force)"
 check "a missing macro plugin names the Command Line Tools in the build error" \
-  "j['ok'] is False and j['error']=='build-failed' and j['message']=='The installed Command Line Tools cannot build this version of HQ Capture. Update the HQ Capture pack, or update the Command Line Tools with: xcode-select --install. Details: $HQ_RECORDER_HOME/build.log'" \
+  "j['ok'] is False and j['error']=='build-failed' and j['message']=='The installed Command Line Tools cannot build this version of HQ Capture. Update HQ Capture with: hq install hq-capture. If it still fails, update the Command Line Tools in System Settings > General > Software Update. Details: $HQ_RECORDER_HOME/build.log'" \
   "$out"
 out="$(HQ_RECORDER_COMPILE="$tmp/plain-fail-compile.sh" run build --force)"
 check "other build failures still point at the build log" \
   'j["error"]=="build-failed" and j["message"].startswith("HQ Capture did not compile. Details: ")' \
   "$out"
+
+rm -rf "$probe_state"; mkdir -p "$probe_state"
+: >"$PROBE_XCRUN_LOG"
+PROBE_SWIFTC_FAIL=hang
+PROBE_HANG_PID="$tmp/hang.pid"
+rm -f "$PROBE_HANG_PID"
+HQ_RECORDER_PROBE_TIMEOUT=1
+hang_rc=0
+doc="$(run_probe_doctor)" || hang_rc=$?
+check "a hung compiler is reported as a timed out check" \
+  'j["ok"] is False and j["compile_probe"] is False and j["message"]=="The compile check timed out." and "check timed out" in j["compile_probe_detail"] and j["compile_probe_detail"].startswith("Swift 6.4, macOS SDK 27.0:") and j["fix"]=="Update HQ Capture with: hq install hq-capture. If it still fails, update the Command Line Tools in System Settings > General > Software Update."' \
+  "$doc"
+expect "a hung compiler makes doctor exit 1" "$hang_rc" "1"
+expect "a timed out probe is not cached" "$(probe_typechecks)" "1"
+if [ -f "$PROBE_HANG_PID" ] && kill -0 "$(cat "$PROBE_HANG_PID")" 2>/dev/null; then
+  kill -KILL "$(cat "$PROBE_HANG_PID")" 2>/dev/null || true
+  echo "FAIL: timed out compiler was still running" >&2
+  exit 1
+fi
+pass=$((pass + 1))
+hang_rc=0
+doc="$(run_probe_doctor)" || hang_rc=$?
+expect "a timed out probe typechecks again" "$(probe_typechecks)" "2"
+expect "the retry of a timed out probe still exits 1" "$hang_rc" "1"
+
+rm -rf "$probe_state"; mkdir -p "$probe_state"
+: >"$PROBE_XCRUN_LOG"
+interrupt_root="$tmp/interrupt-tmp"
+mkdir -p "$interrupt_root"
+PROBE_HANG_PID="$tmp/interrupt-hang.pid"
+rm -f "$PROBE_HANG_PID"
+HQ_RECORDER_PROBE_TIMEOUT=30
+# A job started with & ignores SIGINT, and bash will not trap that signal.
+# Reset it so doctor sees the same interrupt a foreground Ctrl-C delivers.
+TMPDIR="$interrupt_root" \
+  HOME="$probe_home" \
+  HQ_RECORDER_HOME="$probe_state" \
+  DEVELOPER_DIR="$probe_dev" \
+  PATH="$probe_bin:$PATH" \
+  PROBE_XCRUN_LOG="$PROBE_XCRUN_LOG" \
+  PROBE_SDK="$probe_sdk" \
+  PROBE_DEV="$probe_dev" \
+  PROBE_SRC_COPY="$PROBE_SRC_COPY" \
+  PROBE_SWIFT_VERSION=6.4 \
+  PROBE_SDK_VERSION=27.0 \
+  PROBE_SWIFTC_FAIL=hang \
+  PROBE_HANG_PID="$PROBE_HANG_PID" \
+  HQ_RECORDER_PROBE_TIMEOUT=30 \
+  perl -e '$SIG{INT} = "DEFAULT"; exec @ARGV or die $!' \
+  bash "$src_script" doctor >"$tmp/interrupt.out" 2>>"$tmp/probe-doctor.err" &
+interrupt_pid=$!
+started=0
+for _ in $(seq 1 50); do
+  if grep -q -- '-typecheck' "$PROBE_XCRUN_LOG"; then started=1; break; fi
+  sleep 0.1
+done
+[ "$started" = 1 ] || { echo "FAIL: interrupt test never started the probe" >&2; kill -KILL "$interrupt_pid" 2>/dev/null || true; exit 1; }
+kill -INT "$interrupt_pid" 2>/dev/null || true
+stopped=0
+for _ in $(seq 1 50); do
+  if ! kill -0 "$interrupt_pid" 2>/dev/null; then stopped=1; break; fi
+  sleep 0.1
+done
+if [ "$stopped" != 1 ]; then
+  kill -KILL "$interrupt_pid" 2>/dev/null || true
+  echo "FAIL: interrupt did not stop doctor" >&2
+  exit 1
+fi
+wait "$interrupt_pid" 2>/dev/null || true
+if find "$interrupt_root" -name 'hq-capture-doctor.*' -print -quit | grep -q .; then
+  echo "FAIL: probe temp dir survived interrupt" >&2
+  exit 1
+fi
+pass=$((pass + 1))
+if [ -f "$PROBE_HANG_PID" ] && kill -0 "$(cat "$PROBE_HANG_PID")" 2>/dev/null; then
+  kill -KILL "$(cat "$PROBE_HANG_PID")" 2>/dev/null || true
+  echo "FAIL: interrupt left the compiler running" >&2
+  exit 1
+fi
+pass=$((pass + 1))
+
+rm -rf "$probe_state"; mkdir -p "$probe_state"
+: >"$PROBE_XCRUN_LOG"
+PROBE_SWIFTC_FAIL=1
+HQ_RECORDER_PROBE_TIMEOUT=30
+PROBE_HANG_PID=
+build_rc=0
+# The suite exports a stub compiler. build skips doctor while that is set.
+build_doc="$(
+  HOME="$probe_home" \
+  HQ_RECORDER_HOME="$probe_state" \
+  DEVELOPER_DIR="$probe_dev" \
+  PATH="$probe_bin:$PATH" \
+  PROBE_XCRUN_LOG="$PROBE_XCRUN_LOG" \
+  PROBE_SDK="$probe_sdk" \
+  PROBE_DEV="$probe_dev" \
+  PROBE_SWIFT_VERSION=6.4 \
+  PROBE_SDK_VERSION=27.0 \
+  PROBE_SWIFTC_FAIL=1 \
+  HQ_RECORDER_COMPILE= \
+  bash "$src_script" build --force 2>>"$tmp/probe-doctor.err"
+)" || build_rc=$?
+check "build prints the doctor result when the probe fails" \
+  'j["ok"] is False and j["compile_probe"] is False and "message" in j' \
+  "$build_doc"
+expect "build exits 1 when doctor fails" "$build_rc" "1"
+expect "build runs the probe once" "$(probe_typechecks)" "1"
+PROBE_SWIFTC_FAIL=
 
 echo "record-process launcher: $pass checks passed"

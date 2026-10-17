@@ -221,13 +221,106 @@ struct DoctorProbeView: View {
 SWIFT
 }
 
+# What a customer runs to replace this pack. `hq install` treats a bare slug as
+# the marketplace id, and this product's slug is hq-capture. `xcode-select
+# --install` refuses when Command Line Tools are already present, and a tools
+# update does not add the Xcode-only Swift macro plugin.
+capture_update_fix() {
+  printf '%s\n' 'Update HQ Capture with: hq install hq-capture. If it still fails, update the Command Line Tools in System Settings > General > Software Update.'
+}
+
+# xcrun --show-sdk-path is usually the MacOSX.sdk symlink. pwd -P is the
+# versioned directory that link points at.
+resolve_sdk_path() {
+  local p="$1" resolved=""
+  if [ -n "$p" ] && [ -d "$p" ]; then
+    resolved="$(cd "$p" && pwd -P)" || resolved=""
+  fi
+  if [ -n "$resolved" ]; then
+    printf '%s\n' "$resolved"
+  else
+    printf '%s\n' "${p:-missing}"
+  fi
+}
+
+# Last lines of a probe log, as one line. Doctor records are tab-separated,
+# so a newline in the detail would split the record.
+probe_log_tail() {
+  local log="$1" text
+  [ -s "$log" ] || return 0
+  text="$(tail -n 40 "$log" | tr '\n\t\r' '   ' | sed 's/[[:space:]]*$//')"
+  printf '%s' "$text"
+}
+
+# Typecheck with the build toolchain, bounded so a hung swiftc cannot hold the
+# build lock. macOS has no timeout(1). Exit 124 means the limit was reached.
+# The compiler runs in its own process group and is killed on alarm.
+run_probe_typecheck() {
+  local limit="${HQ_RECORDER_PROBE_TIMEOUT:-30}" arg args=()
+  case "$limit" in
+    ''|*[!0-9]*) limit=30 ;;
+  esac
+  if [ "$limit" -lt 1 ]; then limit=30; fi
+  while IFS= read -r arg; do args+=("$arg"); done < <(swiftc_frontend_args)
+  perl -MPOSIX -MErrno=EINTR -e '
+    my $limit = shift @ARGV;
+    my $pid = fork();
+    die "fork: $!" unless defined $pid;
+    if ($pid == 0) {
+      setpgid(0, 0);
+      exec @ARGV or die "exec: $!";
+    }
+    setpgid($pid, $pid);
+    my $timed_out = 0;
+    $SIG{ALRM} = sub { $timed_out = 1; kill "TERM", -$pid; };
+    $SIG{TERM} = sub { kill "TERM", -$pid; exit 143; };
+    $SIG{INT}  = sub { kill "TERM", -$pid; exit 130; };
+    alarm $limit;
+    my $got = waitpid($pid, 0);
+    while ($got == -1 && $! == EINTR && !$timed_out) {
+      $got = waitpid($pid, 0);
+    }
+    alarm 0;
+    if ($timed_out) {
+      kill "KILL", -$pid;
+      exit 124;
+    }
+    my $status = $?;
+    exit 1 if $got < 0;
+    exit($status >> 8) if ($status & 127) == 0;
+    exit(128 + ($status & 127));
+  ' "$limit" \
+    env "DEVELOPER_DIR=$(developer_dir)" \
+    xcrun --sdk macosx swiftc "${args[@]}" -typecheck "$@"
+}
+
+# Interrupt during the probe: kill the compiler and remove the temp dir.
+# Exiting lets the build lock's EXIT trap release the lock.
+cleanup_probe_signal() {
+  local status="$1"
+  if [ -n "${HQ_DOCTOR_PROBE_PID:-}" ]; then
+    kill -TERM "$HQ_DOCTOR_PROBE_PID" 2>/dev/null || true
+    wait "$HQ_DOCTOR_PROBE_PID" 2>/dev/null || true
+  fi
+  if [ -n "${HQ_DOCTOR_PROBE_TMP:-}" ]; then
+    rm -rf "$HQ_DOCTOR_PROBE_TMP"
+    HQ_DOCTOR_PROBE_TMP=
+  fi
+  if [ -n "${HQ_DOCTOR_LINES:-}" ]; then
+    rm -f "$HQ_DOCTOR_LINES"
+    HQ_DOCTOR_LINES=
+  fi
+  exit "$status"
+}
+
 # Typechecks the probe with the build toolchain. Prints one doctor line.
-# A passing result is cached by SDK path, Swift version, the swiftc file,
-# frontend flags and probe source. A failure is not cached, so the next
-# doctor retries it.
+# A passing result is cached by the reported SDK path, the resolved SDK
+# directory, the SDK version, the Swift version, the swiftc file, the frontend
+# flags and the probe source. A failure is not cached, so the next doctor
+# retries it.
 compile_probe_check() {
-  local dev sdk_path sdk_ver swift_raw swift_ver swiftc_bin swiftc_id probe_src identity cache
-  local cached_id cached_ok cached_detail tmp log result detail
+  local dev sdk_path sdk_real sdk_ver swift_raw swift_ver swiftc_bin swiftc_id probe_src identity cache
+  local cached_id cached_ok cached_detail tmp log result detail probe_rc evidence
   dev="$(developer_dir)"
   sdk_path="$(DEVELOPER_DIR="$dev" xcrun --sdk macosx --show-sdk-path 2>/dev/null | head -n 1 | tr -d '[:space:]' || true)"
   sdk_ver="$(DEVELOPER_DIR="$dev" xcrun --sdk macosx --show-sdk-version 2>/dev/null | head -n 1 | tr -d '[:space:]' || true)"
@@ -239,14 +332,17 @@ compile_probe_check() {
   else
     swiftc_id=missing
   fi
+  [ -n "$sdk_path" ] || sdk_path=missing
+  sdk_real="$(resolve_sdk_path "$sdk_path")"
   [ -n "$sdk_ver" ] || sdk_ver=missing
   [ -n "$swift_ver" ] || swift_ver=missing
   probe_src="$(compile_probe_source)"
-  # SDK path and Swift version are the toolchain identity. The compiler file's
-  # mtime and inode catch a tools update that keeps the same version string.
+  # The reported SDK path stays the MacOSX.sdk symlink across a tools update.
+  # The resolved directory and the SDK version change when that link moves.
+  # The compiler file's mtime and inode catch a tools update that keeps both.
   identity="$(
     {
-      printf '%s\n' doctor-probe-v1 "$sdk_path" "$swift_ver" "$swiftc_id"
+      printf '%s\n' doctor-probe-v2 "$sdk_path" "$sdk_real" "$sdk_ver" "$swift_ver" "$swiftc_id"
       swiftc_frontend_args
       printf '%s' "$probe_src"
     } | shasum -a 256 | awk '{print $1}'
@@ -260,20 +356,41 @@ compile_probe_check() {
     fi
   fi
   tmp="$(mktemp -d "${TMPDIR:-/tmp}/hq-capture-doctor.XXXXXX")"
+  HQ_DOCTOR_PROBE_TMP="$tmp"
+  trap 'cleanup_probe_signal 130' INT
+  trap 'cleanup_probe_signal 143' TERM
   printf '%s\n' "$probe_src" >"$tmp/Probe.swift"
   log="$tmp/probe.log"
-  if run_swiftc -typecheck "$tmp/Probe.swift" >"$log" 2>&1; then
+  probe_rc=0
+  HQ_DOCTOR_PROBE_PID=
+  # Background plus wait, so an interrupt runs the trap instead of sitting
+  # inside a foreground swiftc until it exits.
+  run_probe_typecheck "$tmp/Probe.swift" >"$log" 2>&1 &
+  HQ_DOCTOR_PROBE_PID=$!
+  wait "$HQ_DOCTOR_PROBE_PID" || probe_rc=$?
+  HQ_DOCTOR_PROBE_PID=
+  if [ "$probe_rc" -eq 0 ]; then
     result=true
     detail="Swift ${swift_ver}, macOS SDK ${sdk_ver}"
   else
     result=false
-    if grep -Eq 'plugin for module .+ not found' "$log"; then
+    evidence="$(probe_log_tail "$log")"
+    if [ "$probe_rc" -eq 124 ]; then
+      detail="Swift ${swift_ver}, macOS SDK ${sdk_ver}: check timed out"
+    elif grep -Eq 'plugin for module .+ not found' "$log"; then
       detail="Swift ${swift_ver}, macOS SDK ${sdk_ver}: missing Swift macro plugin (plugin for module not found)"
     else
       detail="Swift ${swift_ver}, macOS SDK ${sdk_ver}: the toolchain could not typecheck SwiftUI State, Observable and Binding"
     fi
+    # Keep the compiler's own output unless it is the plugin error, which
+    # already has a stable explanation. A timeout with no output stays short.
+    if ! grep -Eq 'plugin for module .+ not found' "$log" && [ -n "$evidence" ]; then
+      detail="$detail: $evidence"
+    fi
   fi
   rm -rf "$tmp"
+  HQ_DOCTOR_PROBE_TMP=
+  trap - INT TERM
   if [ "$result" = true ] && mkdir -p "$state_dir" 2>/dev/null; then
     printf '%s\t%s\t%s\n' "$identity" "$result" "$detail" >"$state_dir/.doctor-probe.cache.$$" \
       && mv -f "$state_dir/.doctor-probe.cache.$$" "$cache" || true
@@ -284,6 +401,7 @@ compile_probe_check() {
 doctor_checks() {
   # Prints "name<TAB>ok<TAB>detail" lines.
   local os arch ver dev swift_ok sdk_ok sdk_ver ready=true
+  HQ_DOCTOR_PROBE_READY=false
   os="$(uname -s)"; arch="$(uname -m)"
   printf 'macos\t%s\t%s\n' "$([ "$os" = Darwin ] && echo true || echo false)" "$os"
   printf 'apple_silicon\t%s\t%s\n' "$([ "$arch" = arm64 ] && echo true || echo false)" "$arch"
@@ -308,13 +426,22 @@ doctor_checks() {
     [ "$sdk_ok" = true ] || ready=false
     # Skip the probe when an earlier check already failed, so that failure keeps
     # the install fix instead of a compile message about tools that are not usable.
-    if [ "$ready" = true ]; then compile_probe_check; fi
+    # The probe itself runs in cmd_doctor. An interrupt is delivered to that
+    # process; a process substitution would keep the temp dir in a child.
+    if [ "$ready" = true ]; then HQ_DOCTOR_PROBE_READY=true; fi
   fi
 }
 
 # Builds its JSON in bash, so the fix line still prints on a Mac without python3.
 cmd_doctor() {
-  local body="" all=true name ok detail probe_failed=false others_failed=false probe_detail="" versions
+  local body="" all=true name ok detail probe_failed=false others_failed=false probe_detail="" message
+  local lines
+  lines="$(mktemp "${TMPDIR:-/tmp}/hq-capture-doctor-lines.XXXXXX")"
+  HQ_DOCTOR_LINES="$lines"
+  doctor_checks >"$lines"
+  if [ "${HQ_DOCTOR_PROBE_READY:-false}" = true ]; then
+    compile_probe_check >>"$lines"
+  fi
   while IFS=$'\t' read -r name ok detail; do
     [ -n "$name" ] || continue
     body+=", $(json_string "$name"): $ok, $(json_string "${name}_detail"): $(json_string "$detail")"
@@ -327,13 +454,18 @@ cmd_doctor() {
         others_failed=true
       fi
     fi
-  done < <(doctor_checks)
+  done <"$lines"
+  rm -f "$lines"
+  HQ_DOCTOR_LINES=
   if [ "$all" != true ]; then
     if [ "$probe_failed" = true ] && [ "$others_failed" = false ]; then
-      versions="$(printf '%s\n' "$probe_detail" | sed -n 's/^Swift \(.*\), macOS SDK \([^:]*\).*/Swift \1 and macOS SDK \2/p' | head -n 1 || true)"
-      [ -n "$versions" ] || versions="the selected Swift and macOS SDK"
-      body+=", \"message\": $(json_string "The installed Command Line Tools cannot build this version of HQ Capture.")"
-      body+=", \"fix\": $(json_string "Update the HQ Capture pack, or update the Command Line Tools with: xcode-select --install. This check used ${versions}.")"
+      if printf '%s\n' "$probe_detail" | grep -q 'check timed out'; then
+        message="The compile check timed out."
+      else
+        message="The installed Command Line Tools cannot build this version of HQ Capture."
+      fi
+      body+=", \"message\": $(json_string "$message")"
+      body+=", \"fix\": $(json_string "$(capture_update_fix)")"
     else
       body+=", \"fix\": $(json_string "Run: xcode-select --install   (installs Apple's free Command Line Tools). HQ Capture needs an Apple Silicon Mac on macOS 26 or later.")"
     fi
@@ -568,7 +700,7 @@ acquire_start_lock() {
 build_failed_message() {
   local log="$1"
   if grep -Eq 'plugin for module .+ not found' "$log" 2>/dev/null; then
-    printf '%s\n' "The installed Command Line Tools cannot build this version of HQ Capture. Update the HQ Capture pack, or update the Command Line Tools with: xcode-select --install. Details: $log"
+    printf '%s\n' "The installed Command Line Tools cannot build this version of HQ Capture. $(capture_update_fix) Details: $log"
   else
     printf '%s\n' "HQ Capture did not compile. Details: $log"
   fi
@@ -586,7 +718,7 @@ build_app() {
     release_lock "$lock_dir"
     return 0
   fi
-  local log="$state_dir/build.log" tmp="$state_dir/.build-$$" reason
+  local log="$state_dir/build.log" tmp="$state_dir/.build-$$" reason doctor_out
   : >"$log"
   rm -rf "$tmp"; mkdir -p "$tmp"
   if [ -n "${HQ_RECORDER_COMPILE:-}" ]; then
@@ -594,8 +726,12 @@ build_app() {
     $HQ_RECORDER_COMPILE "$tmp/HQ Capture.app" >>"$log" 2>&1 \
       || { rm -rf "$tmp"; fail build-failed "$(build_failed_message "$log")"; }
   else
-    if ! cmd_doctor >/dev/null; then
-      rm -rf "$tmp"; cmd_doctor; exit 1
+    # One doctor run. A second call would typecheck again, because a failure
+    # is not cached, and would hold the build lock for that long.
+    if ! doctor_out="$(cmd_doctor)"; then
+      rm -rf "$tmp"
+      printf '%s\n' "$doctor_out"
+      exit 1
     fi
     if ! reason="$(source_guards)"; then
       rm -rf "$tmp"; fail source-guard "The pack's app source failed a safety check: $reason"
