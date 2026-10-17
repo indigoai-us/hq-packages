@@ -68,7 +68,7 @@ struct HQGlassSurface<S: InsettableShape>: ViewModifier {
     var interactive = false
     var tint: Color?
     private let access = HQAccessibility()
-    @State private var hovering = false
+    @CaptureState private var hovering = false
 
     func body(content: Content) -> some View {
         if access.reduceTransparency {
@@ -118,8 +118,8 @@ struct HQGlassButton: ViewModifier {
     let prominent: Bool
     let circle: Bool
     private let access = HQAccessibility()
-    @State private var hovering = false
-    @State private var pressed = false
+    @CaptureState private var hovering = false
+    @CaptureState private var pressed = false
 
     func body(content: Content) -> some View {
         styled(content)

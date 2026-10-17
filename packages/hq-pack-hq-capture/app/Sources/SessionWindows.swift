@@ -219,8 +219,8 @@ final class TeleprompterModel {
 
 struct TeleprompterView: View {
     @Bindable var model: TeleprompterModel
-    @State private var editing: Bool
-    @State private var lastTick: Date?
+    @CaptureState private var editing: Bool
+    @CaptureState private var lastTick: Date?
     @Namespace private var glass
     @Environment(\.colorScheme) private var colorScheme
     private let access = HQAccessibility()
