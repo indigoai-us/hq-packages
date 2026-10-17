@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Keep local builds working with Command Line Tools and macOS SDK 27. Use the
+  existing SwiftUI State property wrapper explicitly so the new State macro
+  does not require the Xcode-only SwiftUIMacros plugin. No Xcode install is needed.
+
 - Read the active company with `hq core hq-session get company_slug`, with no
   shell-script fallback. The package requires hq-core 15.0.179 or newer, whose
   CLI floor includes hq-cli 5.99.0.

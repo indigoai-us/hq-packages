@@ -811,7 +811,7 @@ struct WorkspaceView: View {
     let session: SessionController
     @Namespace private var glass
     @Namespace private var stage
-    @State private var copied = false
+    @CaptureState private var copied = false
     private let access = HQAccessibility()
 
     var body: some View {

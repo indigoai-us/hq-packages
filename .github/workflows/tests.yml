@@ -5,6 +5,19 @@ on:
   push:
     branches: [main]
 jobs:
+  capture-clt:
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
+    name: capture-clt (${{ matrix.pack }})
+    runs-on: macos-26
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        pack: [hq-pack-hq-capture, hq-pack-screen-recorder]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and run with Command Line Tools only
+        run: bash "packages/${{ matrix.pack }}/tests/build-clt-macos.sh"
   shell-tests:
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     name: shell-tests
