@@ -4,7 +4,7 @@
 
 - `doctor` typechecks a small SwiftUI sample with the same Command Line Tools
   and compiler flags as the real build, and reports the Swift version and
-  macOS SDK it used. The check stops after 30 seconds if the compiler hangs.
+  macOS SDK it used. The check stops after two minutes if the compiler hangs.
   A passing result is remembered for that SDK, including the real directory
   behind the MacOSX.sdk link, and is checked again when the SDK or Swift
   version changes. If the check fails, doctor says the installed Command

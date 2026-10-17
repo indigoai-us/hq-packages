@@ -260,19 +260,24 @@ probe_log_tail() {
 
 # Typecheck with the build toolchain, bounded so a hung swiftc cannot hold the
 # build lock. macOS has no timeout(1). Exit 124 means the limit was reached.
-# The compiler runs in its own process group and is killed on alarm.
+# 120s: a cold swiftc on the GitHub macOS runner was still running at 30s.
+# The compiler is its own process group so the alarm can kill it, and it
+# ignores SIGTTIN so that group is not stopped by a terminal.
+# exec replaces this process so the caller's probe pid is perl.
 run_probe_typecheck() {
-  local limit="${HQ_RECORDER_PROBE_TIMEOUT:-30}" arg args=()
+  local limit="${HQ_RECORDER_PROBE_TIMEOUT:-120}" arg args=()
   case "$limit" in
-    ''|*[!0-9]*) limit=30 ;;
+    ''|*[!0-9]*) limit=120 ;;
   esac
-  if [ "$limit" -lt 1 ]; then limit=30; fi
+  if [ "$limit" -lt 1 ]; then limit=120; fi
   while IFS= read -r arg; do args+=("$arg"); done < <(swiftc_frontend_args)
-  perl -MPOSIX -MErrno=EINTR -e '
+  exec perl -MPOSIX -MErrno=EINTR -e '
     my $limit = shift @ARGV;
     my $pid = fork();
     die "fork: $!" unless defined $pid;
     if ($pid == 0) {
+      $SIG{TTIN} = "IGNORE";
+      $SIG{TTOU} = "IGNORE";
       setpgid(0, 0);
       exec @ARGV or die "exec: $!";
     }
@@ -302,10 +307,21 @@ run_probe_typecheck() {
 
 # Interrupt during the probe: kill the compiler and remove the temp dir.
 # Exiting lets the build lock's EXIT trap release the lock.
+# TERM the probe and every descendant. Killing only the top pid leaves the
+# compiler running when a shell sits between this process and perl.
+kill_probe_tree() {
+  local pid="$1" child
+  [ -n "$pid" ] || return 0
+  for child in $(ps -ax -o pid=,ppid= | awk -v p="$pid" '$2 == p { print $1 }'); do
+    kill_probe_tree "$child"
+  done
+  kill -TERM "$pid" 2>/dev/null || true
+}
+
 cleanup_probe_signal() {
   local status="$1"
   if [ -n "${HQ_DOCTOR_PROBE_PID:-}" ]; then
-    kill -TERM "$HQ_DOCTOR_PROBE_PID" 2>/dev/null || true
+    kill_probe_tree "$HQ_DOCTOR_PROBE_PID"
     wait "$HQ_DOCTOR_PROBE_PID" 2>/dev/null || true
   fi
   if [ -n "${HQ_DOCTOR_PROBE_TMP:-}" ]; then
