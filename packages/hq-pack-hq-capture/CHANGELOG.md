@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- `build` and `doctor` now prefer a full Xcode over the Command Line Tools.
+  Order: `$DEVELOPER_DIR`, xcode-select's Xcode, `/Applications/Xcode.app`,
+  then the Command Line Tools. Each candidate must type-check a SwiftUI
+  `@State` probe; the first that passes is used. This fixes builds on Macs
+  whose Command Line Tools ship the macOS 27 SDK, where `@State` is a macro
+  and the SwiftUIMacros plugin is missing. `doctor` adds a `swiftui_macros`
+  check, and when no installed tools can build SwiftUI its `fix` says to
+  install Xcode. The change rebuilds the app once.
+
 - Read the active company with `hq core hq-session get company_slug`, with no
   shell-script fallback. The package requires hq-core 15.0.179 or newer, whose
   CLI floor includes hq-cli 5.99.0.

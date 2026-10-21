@@ -771,4 +771,73 @@ expect "doctor exits 1 when a check fails" "$(set +e; PATH="$nopy" bash "$R" doc
 check "doctor prints the fix line without python3" \
   'j["ok"] is False and j["apple_silicon"] is False and j["apple_silicon_detail"]=="x86_64" and j["fix"].startswith("Run: xcode-select --install")' "$doc"
 
+# Toolchain choice. Fake xcrun and xcode-select read marker files in $DEVELOPER_DIR: swiftc (a
+# compiler is there), sdk-version, and macros (SwiftUI's @State macro plugin is there; without it
+# the probe fails as Command Line Tools with the macOS 27 SDK do). Only doctor_checks on macOS
+# reads the toolchain, so these run on macOS only.
+if [ "$(uname -s)" = Darwin ]; then
+  tc="$tmp/toolchains"; fakebin="$tc/bin"
+  mkdir -p "$fakebin"
+  cat >"$fakebin/xcrun" <<'EOF'
+#!/bin/bash
+d="${DEVELOPER_DIR:?}"
+case "$*" in
+  "--sdk macosx --find swiftc") [ -e "$d/swiftc" ] ;;
+  "--sdk macosx --show-sdk-path") echo "$d/sdk" ;;
+  "--sdk macosx --show-sdk-version") cat "$d/sdk-version" ;;
+  "--sdk macosx swiftc "*-typecheck*)
+    [ -e "$d/macros" ] || { echo "error: external macro implementation type 'SwiftUIMacros.StateMacro' could not be found for macro 'State()'; plugin for module 'SwiftUIMacros' not found" >&2; exit 1; } ;;
+  *) exit 2 ;;
+esac
+EOF
+  printf '#!/bin/sh\n[ -n "$FAKE_XCODE_SELECT" ] || exit 2\necho "$FAKE_XCODE_SELECT"\n' >"$fakebin/xcode-select"
+  chmod +x "$fakebin/xcrun" "$fakebin/xcode-select"
+  # make_toolchain <dir> <sdk version> <macros: yes|no>
+  make_toolchain() {
+    mkdir -p "$1/sdk/System/Library/Frameworks/ScreenCaptureKit.framework"
+    touch "$1/swiftc"; echo "$2" >"$1/sdk-version"
+    if [ "$3" = yes ]; then touch "$1/macros"; else rm -f "$1/macros"; fi
+  }
+  clt="$tc/CommandLineTools" xcode="$tc/Xcode.app/Contents/Developer"
+  tdoctor() { # tdoctor <xcode-select answer> [DEVELOPER_DIR]
+    env -u DEVELOPER_DIR PATH="$fakebin:$PATH" FAKE_XCODE_SELECT="$1" ${2:+DEVELOPER_DIR="$2"} \
+      HQ_RECORDER_CLT_DIR="$clt" HQ_RECORDER_XCODE_DIR="$xcode" bash "$R" doctor 2>/dev/null || true
+  }
+
+  make_toolchain "$clt" 27.0 no; make_toolchain "$xcode" 27.0 yes
+  check "doctor prefers a full Xcode over Command Line Tools that lack SwiftUI macros" \
+    'j["ok"] and j["swiftui_macros"] and j["command_line_tools_detail"].endswith("/Xcode.app/Contents/Developer")' "$(tdoctor "$clt")"
+  check "doctor prefers /Applications Xcode when xcode-select is unset" \
+    'j["ok"] and j["command_line_tools_detail"].endswith("/Xcode.app/Contents/Developer")' "$(tdoctor "")"
+  check "doctor falls back from a DEVELOPER_DIR that lacks SwiftUI macros to Xcode" \
+    'j["ok"] and j["command_line_tools_detail"].endswith("/Xcode.app/Contents/Developer")' "$(tdoctor "$clt" "$clt")"
+  make_toolchain "$clt" 26.5 yes
+  check "DEVELOPER_DIR wins when it can build SwiftUI" \
+    'j["ok"] and j["command_line_tools_detail"].endswith("/CommandLineTools")' "$(tdoctor "$xcode" "$clt")"
+
+  rm -rf "$tc/Xcode.app"
+  check "Command Line Tools alone still work when their SDK needs no plugin" \
+    'j["ok"] and j["swiftui_macros"] and j["command_line_tools_detail"].endswith("/CommandLineTools")' "$(tdoctor "$clt")"
+  make_toolchain "$clt" 27.0 no
+  doc="$(tdoctor "$clt")"
+  check "doctor fails when no toolchain can build SwiftUI macros" \
+    'j["ok"] is False and j["command_line_tools"] and j["swiftui_macros"] is False and j["swiftui_macros_detail"].endswith("/CommandLineTools")' "$doc"
+  check "the fix says to install Xcode and names the missing plugin and SDK" \
+    '"Install Xcode from the App Store" in j["fix"] and "SwiftUIMacros" in j["fix"] and "27.0" in j["fix"]' "$doc"
+  # build refuses before compiling, with the same plain fix, and installs nothing.
+  tapp="$tc/apps/HQ Capture.app"
+  doc="$(env -u DEVELOPER_DIR -u HQ_RECORDER_COMPILE PATH="$fakebin:$PATH" FAKE_XCODE_SELECT="$clt" \
+    HQ_RECORDER_CLT_DIR="$clt" HQ_RECORDER_XCODE_DIR="$xcode" HQ_RECORDER_HOME="$tc/state" \
+    HQ_RECORDER_APP="$tapp" bash "$R" build --force 2>/dev/null || true)"
+  check "build without a SwiftUI-capable toolchain fails with the Xcode fix" \
+    'j["ok"] is False and j["swiftui_macros"] is False and "Install Xcode" in j["fix"]' "$doc"
+  installed=no; [ -e "$tapp" ] && installed=yes
+  expect "build without a SwiftUI-capable toolchain installs nothing" "$installed" "no"
+
+  rm -rf "$clt"
+  doc="$(tdoctor "")"
+  check "doctor with no developer tools gives the Command Line Tools fix" \
+    'j["ok"] is False and j["command_line_tools"] is False and j["fix"].startswith("Run: xcode-select --install")' "$doc"
+fi
+
 echo "record-process launcher: $pass checks passed"

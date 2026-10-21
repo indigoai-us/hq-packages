@@ -2,7 +2,8 @@
 # hq-record-process — launch and control HQ Capture for /record-process.
 #
 # HQ Capture is built on this Mac from the Swift sources shipped in this pack
-# (app/Sources) with Apple's Command Line Tools, then ad-hoc signed. Nothing is
+# (app/Sources) with Apple's developer tools (a full Xcode when one is installed, else
+# the Command Line Tools), then ad-hoc signed. Nothing is
 # downloaded and no Apple developer account is needed. The build is redone when
 # app/SOURCE or any shipped source, plist, entitlement or icon changes, so a
 # pack update rebuilds the app.
@@ -157,20 +158,60 @@ build_inputs_hash() {
     cat SOURCE Info.plist HQCapture.entitlements
     find Sources -name '*.swift' -type f -print0 | LC_ALL=C sort -z | xargs -0 cat
     cat Resources/AppIcon.icns
-    declare -f compile_and_sign developer_dir
+    declare -f compile_and_sign developer_dir_candidates toolchain_builds_swiftui select_developer_dir
   ) | shasum -a 256 | cut -d' ' -f1
 }
 
-# The developer folder used for the build and checked by doctor: Command Line Tools when
-# installed, else $DEVELOPER_DIR, else whatever xcode-select points at. Empty when none.
-developer_dir() {
-  if [ -d /Library/Developer/CommandLineTools ]; then
-    echo /Library/Developer/CommandLineTools
-  elif [ -n "${DEVELOPER_DIR:-}" ]; then
-    printf '%s\n' "$DEVELOPER_DIR"
-  else
-    xcode-select -p 2>/dev/null || true
-  fi
+# Developer folders to try, best first, one per line: $DEVELOPER_DIR when set, then a full
+# Xcode (xcode-select's choice when it is not the Command Line Tools, then
+# /Applications/Xcode.app), then the Command Line Tools. A full Xcode comes first because some
+# Command Line Tools releases ship a macOS SDK whose SwiftUI needs a compiler plugin
+# (SwiftUIMacros) that only Xcode includes. HQ_RECORDER_XCODE_DIR and HQ_RECORDER_CLT_DIR
+# override the two fixed paths for tests.
+developer_dir_candidates() {
+  local clt="${HQ_RECORDER_CLT_DIR:-/Library/Developer/CommandLineTools}"
+  local xcode="${HQ_RECORDER_XCODE_DIR:-/Applications/Xcode.app/Contents/Developer}"
+  local selected
+  selected="$(xcode-select -p 2>/dev/null || true)"
+  {
+    [ -z "${DEVELOPER_DIR:-}" ] || printf '%s\n' "$DEVELOPER_DIR"
+    [ -z "$selected" ] || [ "$selected" = "$clt" ] || printf '%s\n' "$selected"
+    printf '%s\n%s\n' "$xcode" "$clt"
+  } | awk 'NF && !seen[$0]++'
+}
+
+# True when the developer folder $1 can compile a SwiftUI view that uses @State, which is a
+# macro in newer macOS SDKs and fails without the SwiftUIMacros plugin.
+toolchain_builds_swiftui() {
+  local probe rc=0
+  probe="$(mktemp -d)" || return 1
+  printf '%s\n' 'import SwiftUI' 'struct Probe: View {' '  @State private var n = 0' \
+    '  var body: some View { Text("\(n)") }' '}' >"$probe/Probe.swift"
+  DEVELOPER_DIR="$1" xcrun --sdk macosx swiftc -parse-as-library -swift-version 6 \
+    -target arm64-apple-macos26.0 -typecheck "$probe/Probe.swift" >/dev/null 2>&1 || rc=1
+  rm -rf "$probe"
+  return "$rc"
+}
+
+# Picks the developer folder that doctor checks and the build uses: the first candidate with a
+# Swift compiler that can build SwiftUI. When none can, the first one with a Swift compiler, so
+# doctor can say what it lacks. Sets dev_dir (empty when no compiler was found) and dev_swiftui.
+# Runs once per launcher call. Folders are checked to exist before xcrun runs, because xcrun
+# otherwise pops up the install dialog.
+dev_dir="" dev_swiftui=false dev_selected=false
+select_developer_dir() {
+  [ "$dev_selected" = true ] && return 0
+  dev_selected=true
+  local dev first=""
+  while IFS= read -r dev; do
+    { [ -d "$dev" ] && DEVELOPER_DIR="$dev" xcrun --sdk macosx --find swiftc >/dev/null 2>&1; } || continue
+    [ -n "$first" ] || first="$dev"
+    if toolchain_builds_swiftui "$dev"; then
+      dev_dir="$dev" dev_swiftui=true
+      return 0
+    fi
+  done < <(developer_dir_candidates)
+  dev_dir="$first"
 }
 
 # Prints a JSON string literal for $1. doctor uses this so it works without python3.
@@ -190,11 +231,10 @@ doctor_checks() {
   if [ "$os" = Darwin ]; then
     ver="$(sw_vers -productVersion)"
     printf 'macos_26_or_later\t%s\t%s\n' "$([ "${ver%%.*}" -ge 26 ] && echo true || echo false)" "$ver"
-    # Find the developer folder before calling xcrun, which otherwise pops up the install
-    # dialog, and use the same folder the build uses.
-    dev="$(developer_dir)"
+    # The same folder the build uses, picked by select_developer_dir in cmd_doctor.
+    dev="$dev_dir"
     swift_ok=false
-    if [ -n "$dev" ] && [ -d "$dev" ] && DEVELOPER_DIR="$dev" xcrun --sdk macosx --find swiftc >/dev/null 2>&1; then swift_ok=true; fi
+    [ -n "$dev" ] && swift_ok=true
     printf 'command_line_tools\t%s\t%s\n' "$swift_ok" "${dev:-missing}"
     sdk_ok=false sdk_ver=missing
     if [ "$swift_ok" = true ]; then
@@ -202,17 +242,27 @@ doctor_checks() {
       sdk_ver="$(DEVELOPER_DIR="$dev" xcrun --sdk macosx --show-sdk-version 2>/dev/null || echo missing)"
     fi
     printf 'macos_sdk\t%s\t%s\n' "$sdk_ok" "$sdk_ver"
+    printf 'swiftui_macros\t%s\t%s\n' "$dev_swiftui" "${dev:-missing}"
   fi
 }
 
 # Builds its JSON in bash, so the fix line still prints on a Mac without python3.
 cmd_doctor() {
-  local body="" all=true name ok detail
+  local body="" all=true name ok detail failed="" fix sdk_ver=""
+  [ "$(uname -s)" = Darwin ] && select_developer_dir
   while IFS=$'\t' read -r name ok detail; do
     body+=", $(json_string "$name"): $ok, $(json_string "${name}_detail"): $(json_string "$detail")"
-    [ "$ok" = true ] || all=false
+    [ "$name" = macos_sdk ] && sdk_ver="$detail"
+    [ "$ok" = true ] || { all=false; failed+=" $name"; }
   done < <(doctor_checks)
-  [ "$all" = true ] || body+=", \"fix\": $(json_string "Run: xcode-select --install   (installs Apple's free Command Line Tools). HQ Capture needs an Apple Silicon Mac on macOS 26 or later.")"
+  if [ "$all" != true ]; then
+    if [ "$failed" = " swiftui_macros" ]; then
+      fix="The developer tools at $dev_dir (macOS SDK $sdk_ver) cannot build HQ Capture: they lack SwiftUI's macro plugin (SwiftUIMacros), which only a full Xcode includes. Install Xcode from the App Store, open it once, then run build again. HQ Capture uses /Applications/Xcode.app automatically, or set DEVELOPER_DIR to another Xcode's Contents/Developer folder."
+    else
+      fix="Run: xcode-select --install   (installs Apple's free Command Line Tools). HQ Capture needs an Apple Silicon Mac on macOS 26 or later."
+    fi
+    body+=", \"fix\": $(json_string "$fix")"
+  fi
   printf '{"ok": %s%s}\n' "$all" "$body"
   [ "$all" = true ]
 }
@@ -244,7 +294,8 @@ compile_and_sign() {
   local app="$1" log="$2" bin signed key
   bin="$app/Contents/MacOS/$executable"
   mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
-  if ! DEVELOPER_DIR="$(developer_dir)" xcrun --sdk macosx swiftc \
+  select_developer_dir
+  if ! DEVELOPER_DIR="$dev_dir" xcrun --sdk macosx swiftc \
       -parse-as-library -swift-version 6 -O -target arm64-apple-macos26.0 \
       -framework AVKit -o "$bin" "$app_src"/*.swift >>"$log" 2>&1; then
     echo build-failed; return 1
@@ -471,7 +522,11 @@ build_app() {
       case "$reason" in
         sign-failed) fail sign-failed "Signing the locally built app failed. Details: $log" ;;
         check-failed) fail build-check-failed "The built app failed a post-build check. Details: $log" ;;
-        *) fail build-failed "HQ Capture did not compile. Details: $log" ;;
+        *)
+          if grep -q "plugin for module 'SwiftUIMacros' not found" "$log"; then
+            fail build-failed "HQ Capture did not compile: the developer tools at $dev_dir lack SwiftUI's macro plugin (SwiftUIMacros), which only a full Xcode includes. Install Xcode from the App Store, open it once, then run build again. Details: $log"
+          fi
+          fail build-failed "HQ Capture did not compile. Details: $log" ;;
       esac
     fi
   fi
