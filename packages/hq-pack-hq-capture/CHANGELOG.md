@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.4
 
 - `build` and `doctor` move to a full Xcode when the Command Line Tools
   cannot build the app. Order: `$DEVELOPER_DIR`, xcode-select's choice, the
@@ -13,7 +13,6 @@
   requires SDK 26 or newer, and the `fix` line names the actual problem: the
   missing plugin (install Xcode), an old SDK, or another compiler error such
   as an unaccepted Xcode license. The change rebuilds the app once.
-
 - Read the active company with `hq core hq-session get company_slug`, with no
   shell-script fallback. The package requires hq-core 15.0.179 or newer, whose
   CLI floor includes hq-cli 5.99.0.
