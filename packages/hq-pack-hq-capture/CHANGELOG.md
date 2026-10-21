@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- `build` and `doctor` move to a full Xcode when the Command Line Tools
+  cannot build the app. Order: `$DEVELOPER_DIR`, xcode-select's choice, the
+  Command Line Tools, then `/Applications/Xcode.app`. A candidate is used
+  only when its macOS SDK is 26 or newer and it type-checks a SwiftUI probe
+  that uses `@State` and Liquid Glass. This fixes builds on Macs whose
+  Command Line Tools ship the macOS 27 SDK, where `@State` is a macro and
+  the SwiftUIMacros plugin is missing, and never picks an older Xcode with a
+  macOS 15 SDK. `doctor` adds a `swiftui_macros` check, `macos_sdk` now
+  requires SDK 26 or newer, and the `fix` line names the actual problem: the
+  missing plugin (install Xcode), an old SDK, or another compiler error such
+  as an unaccepted Xcode license. The change rebuilds the app once.
+
 - Read the active company with `hq core hq-session get company_slug`, with no
   shell-script fallback. The package requires hq-core 15.0.179 or newer, whose
   CLI floor includes hq-cli 5.99.0.

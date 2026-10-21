@@ -14,7 +14,8 @@ session was interrupted, HQ Capture gives you a prompt to paste into a new
 session to pick up the same recording.
 
 The app's Swift source ships in `app/`. The pack compiles it on the user's Mac
-with Apple's Command Line Tools and signs it locally, so there is no prebuilt
+with Apple's developer tools (the Command Line Tools, or Xcode when they
+cannot build it) and signs it locally, so there is no prebuilt
 binary to download and no notarization step.
 
 ## Status

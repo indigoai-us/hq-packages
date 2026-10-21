@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# macOS end-to-end check: build HQ Capture from this pack's source with the Command Line
-# Tools, confirm the bundle (name, icon, signature, entitlements), open it for a company,
+# macOS end-to-end check: build HQ Capture from this pack's source with the developer tools
+# the launcher picks (the Command Line Tools, or Xcode when they cannot build it), confirm the bundle (name, icon, signature, entitlements), open it for a company,
 # confirm it reports awaiting-start without writing a recording, stop it, confirm a second
 # start reuses the build, and confirm the 0.1.0 app is removed after the build. Opens a real
 # window. Not part of the any-OS suite (it needs macOS 26 and Command Line Tools).

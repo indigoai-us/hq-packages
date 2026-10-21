@@ -63,8 +63,9 @@ recording for any other company.
 ## 2. Check the Mac and open HQ Capture
 
 1. Run `doctor`. If `ok` is false, give the user the `fix` line in plain
-   words (usually `xcode-select --install`, a one-time Apple download). Do not
-   install it yourself.
+   words (usually `xcode-select --install`, a one-time Apple download, or
+   installing Xcode from the App Store when the Command Line Tools cannot
+   build SwiftUI). Do not install it yourself.
 2. Run `start`. The first run, and the first run after a pack update, builds
    the app on this Mac (about a minute); say so first. `start` returns
    `state: "awaiting-start"`: the window is open and nothing is recording yet.
