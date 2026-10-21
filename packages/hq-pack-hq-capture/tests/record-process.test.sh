@@ -772,8 +772,9 @@ check "doctor prints the fix line without python3" \
   'j["ok"] is False and j["apple_silicon"] is False and j["apple_silicon_detail"]=="x86_64" and j["fix"].startswith("Run: xcode-select --install")' "$doc"
 
 # Toolchain choice. Fake xcrun and xcode-select read marker files in $DEVELOPER_DIR: swiftc (a
-# compiler is there), sdk-version, and macros (SwiftUI's @State macro plugin is there; without it
-# the probe fails as Command Line Tools with the macOS 27 SDK do). Only doctor_checks on macOS
+# compiler is there), sdk-version, macros (the probe compiles; without it the probe fails as
+# Command Line Tools with the macOS 27 SDK do; an older SDK whose @State is not a macro also has
+# it) and license (the probe fails as an Xcode with an unaccepted license does). Only doctor_checks on macOS
 # reads the toolchain, so these run on macOS only.
 if [ "$(uname -s)" = Darwin ]; then
   tc="$tmp/toolchains"; fakebin="$tc/bin"
@@ -786,6 +787,7 @@ case "$*" in
   "--sdk macosx --show-sdk-path") echo "$d/sdk" ;;
   "--sdk macosx --show-sdk-version") cat "$d/sdk-version" ;;
   "--sdk macosx swiftc "*-typecheck*)
+    [ ! -e "$d/license" ] || { echo "You have not agreed to the Xcode license agreements." >&2; exit 69; }
     [ -e "$d/macros" ] || { echo "error: external macro implementation type 'SwiftUIMacros.StateMacro' could not be found for macro 'State()'; plugin for module 'SwiftUIMacros' not found" >&2; exit 1; } ;;
   *) exit 2 ;;
 esac
@@ -800,20 +802,47 @@ EOF
   }
   clt="$tc/CommandLineTools" xcode="$tc/Xcode.app/Contents/Developer"
   tdoctor() { # tdoctor <xcode-select answer> [DEVELOPER_DIR]
-    env -u DEVELOPER_DIR PATH="$fakebin:$PATH" FAKE_XCODE_SELECT="$1" ${2:+DEVELOPER_DIR="$2"} \
+    local dd=()
+    [ -z "${2:-}" ] || dd=("DEVELOPER_DIR=$2")
+    env -u DEVELOPER_DIR PATH="$fakebin:$PATH" FAKE_XCODE_SELECT="$1" ${dd[@]+"${dd[@]}"} \
       HQ_RECORDER_CLT_DIR="$clt" HQ_RECORDER_XCODE_DIR="$xcode" bash "$R" doctor 2>/dev/null || true
   }
 
   make_toolchain "$clt" 27.0 no; make_toolchain "$xcode" 27.0 yes
-  check "doctor prefers a full Xcode over Command Line Tools that lack SwiftUI macros" \
+  check "doctor moves to Xcode when the Command Line Tools lack SwiftUI macros" \
     'j["ok"] and j["swiftui_macros"] and j["command_line_tools_detail"].endswith("/Xcode.app/Contents/Developer")' "$(tdoctor "$clt")"
-  check "doctor prefers /Applications Xcode when xcode-select is unset" \
+  check "doctor moves to /Applications Xcode when xcode-select is unset" \
     'j["ok"] and j["command_line_tools_detail"].endswith("/Xcode.app/Contents/Developer")' "$(tdoctor "")"
   check "doctor falls back from a DEVELOPER_DIR that lacks SwiftUI macros to Xcode" \
     'j["ok"] and j["command_line_tools_detail"].endswith("/Xcode.app/Contents/Developer")' "$(tdoctor "$clt" "$clt")"
   make_toolchain "$clt" 26.5 yes
   check "DEVELOPER_DIR wins when it can build SwiftUI" \
     'j["ok"] and j["command_line_tools_detail"].endswith("/CommandLineTools")' "$(tdoctor "$xcode" "$clt")"
+  check "working Command Line Tools come before /Applications Xcode" \
+    'j["ok"] and j["command_line_tools_detail"].endswith("/CommandLineTools")' "$(tdoctor "$clt")"
+  # An older Xcode (macOS 15 SDK, where @State is not a macro, so its probe compiles) next to
+  # current Command Line Tools: the Command Line Tools must be used, whichever is selected.
+  make_toolchain "$xcode" 15.5 yes
+  check "an Xcode with a macOS 15 SDK is not chosen over Command Line Tools 26" \
+    'j["ok"] and j["command_line_tools_detail"].endswith("/CommandLineTools") and j["macos_sdk_detail"]=="26.5"' "$(tdoctor "")"
+  check "an Xcode with a macOS 15 SDK is skipped even when xcode-select picks it" \
+    'j["ok"] and j["command_line_tools_detail"].endswith("/CommandLineTools")' "$(tdoctor "$xcode")"
+  make_toolchain "$clt" 15.5 yes
+  doc="$(tdoctor "$clt")"
+  check "doctor fails when every SDK is older than macOS 26" \
+    'j["ok"] is False and j["macos_sdk"] is False and j["macos_sdk_detail"]=="15.5"' "$doc"
+  check "the old-SDK fix names the SDK and asks for macOS 26" \
+    '"macOS 26 SDK or newer" in j["fix"] and "15.5" in j["fix"]' "$doc"
+  # A probe that fails for another reason gets a generic message, not the plugin one.
+  make_toolchain "$clt" 27.0 no; make_toolchain "$xcode" 27.0 yes; touch "$xcode/license"
+  doc="$(tdoctor "$clt")"
+  check "the plugin message is kept when the first new-SDK tools hit the plugin error" \
+    'j["ok"] is False and j["swiftui_macros"] is False and "SwiftUIMacros" in j["fix"]' "$doc"
+  rm -rf "$clt"; make_toolchain "$xcode" 27.0 yes; touch "$xcode/license"
+  doc="$(tdoctor "$xcode")"
+  check "a probe failure without the plugin error gets the generic toolchain fix" \
+    'j["ok"] is False and j["swiftui_macros"] is False and "license" in j["fix"] and "macro plugin" not in j["fix"]' "$doc"
+  rm -f "$xcode/license"; make_toolchain "$clt" 26.5 yes
 
   rm -rf "$tc/Xcode.app"
   check "Command Line Tools alone still work when their SDK needs no plugin" \

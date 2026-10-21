@@ -16,10 +16,10 @@ the existing build is used as is.
 - Apple Command Line Tools (install them once with `xcode-select --install`),
   or a full Xcode. Some Command Line Tools releases ship a macOS SDK whose
   SwiftUI needs a compiler plugin (SwiftUIMacros) that only Xcode includes;
-  the macOS 27 SDK is one. The build uses Xcode when it is installed and falls
-  back to the Command Line Tools. `hq-record-process.sh doctor` checks that
-  the chosen tools can build SwiftUI and says to install Xcode when they
-  cannot.
+  the macOS 27 SDK is one. The build uses the selected tools or the Command
+  Line Tools when they work, and moves to Xcode when they do not. The tools
+  used need a macOS 26 or newer SDK. `hq-record-process.sh doctor` checks
+  this and says what to install when nothing works.
 - No Apple developer account, certificate or download from Indigo. The app is
   built on the Mac and signed locally ("ad-hoc"), so macOS does not need a
   notarized copy.
