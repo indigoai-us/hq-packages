@@ -63,8 +63,17 @@ recording for any other company.
 ## 2. Check the Mac and open HQ Capture
 
 1. Run `doctor`. If `ok` is false, give the user the `fix` line in plain
-   words (usually `xcode-select --install`, a one-time Apple download). Do not
-   install it yourself.
+   words. Do not install anything yourself. A missing tools install says to
+   run `xcode-select --install`. If the fix says the installed Command Line
+   Tools cannot build this version, or that the compile check timed out, the
+   tools are present but this check did not succeed: tell the user to update
+   HQ Capture with `hq install hq-capture`. If it still fails, they update
+   the Command Line Tools in System Settings > General > Software Update.
+   Do not run `xcode-select --install` for that case. It refuses when the
+   tools are already installed, and a tools update does not add the missing
+   Swift macro plugin.
+   Doctor may use an already-installed Xcode when the selected tools cannot
+   pass the feature check. Never install Xcode or change xcode-select automatically.
 2. Run `start`. The first run, and the first run after a pack update, builds
    the app on this Mac (about a minute); say so first. `start` returns
    `state: "awaiting-start"`: the window is open and nothing is recording yet.

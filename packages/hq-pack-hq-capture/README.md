@@ -20,7 +20,7 @@ binary to download and no notarization step.
 
 ## Status
 
-0.3.0. Verified:
+The pack version is declared in `package.yaml` and `package.json`. Verified behavior:
 
 - The pack builds "HQ Capture.app" on a Mac with only Command Line Tools,
   with its icon, ad-hoc signature, and camera and microphone entitlements.
