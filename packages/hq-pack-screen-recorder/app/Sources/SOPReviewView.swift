@@ -243,7 +243,7 @@ final class SOPReviewModel {
 /// Inline review: editable steps beside the recording, screenshots, approval and export.
 struct SOPReviewSection: View {
     let model: SOPReviewModel
-    @State private var newPrerequisite = ""
+    @CaptureState private var newPrerequisite = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -401,7 +401,7 @@ struct CropSurface: View {
     let image: NSImage
     let crop: SOPReviewDocument.Crop?
     let onCrop: (SOPReviewDocument.Crop) -> Void
-    @State private var drag: CGRect?
+    @CaptureState private var drag: CGRect?
 
     var body: some View {
         GeometryReader { geo in

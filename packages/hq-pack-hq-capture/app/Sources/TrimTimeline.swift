@@ -225,7 +225,7 @@ final class TrimModel {
 struct TrimTimeline: View {
     let model: TrimModel
     /// The placement while the camera is being dragged, before it is saved.
-    @State private var dragging: RecordingProject.WebcamPlacement?
+    @CaptureState private var dragging: RecordingProject.WebcamPlacement?
 
     private var playerSize: CGSize {
         let screen = model.screenSize

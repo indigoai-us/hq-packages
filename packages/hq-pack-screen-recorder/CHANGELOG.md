@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+- Integrate CLT-compatible state wrappers with bounded, cached feature-based developer-tool selection; preserve installed-Xcode fallback, diagnose macOS/SDK prerequisites accurately, and document tool update discovery.
+
+
+- `doctor` typechecks a small SwiftUI sample with the selected developer tools
+  and compiler flags as the real build, and reports the Swift version and
+  macOS SDK it used. The check stops after two minutes if the compiler hangs.
+  A passing result is remembered for that SDK, including the real directory
+  behind the MacOSX.sdk link, and is checked again when the SDK or Swift
+  version changes. If the check fails, doctor says the installed Command
+  Line Tools cannot build this version, or that the check timed out, and
+  tells you to update HQ Capture with `hq install hq-capture`. If it still
+  fails, update the Command Line Tools in System Settings > General >
+  Software Update. A build that fails because a Swift macro plugin is missing
+  says the same thing, instead of only pointing at the build log. The check
+  does not ask for a permission.
+
+- Keep local builds working with Command Line Tools and macOS SDK 27. Use the
+  existing SwiftUI State property wrapper explicitly so the new State macro
+  does not require the Xcode-only SwiftUIMacros plugin. No Xcode install is needed.
+
 - Read the active company with `hq core hq-session get company_slug`, with no
   shell-script fallback. The package requires hq-core 15.0.179 or newer, whose
   CLI floor includes hq-cli 5.99.0.

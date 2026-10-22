@@ -2,17 +2,31 @@
 
 ## Unreleased
 
-- `build` and `doctor` move to a full Xcode when the Command Line Tools
-  cannot build the app. Order: `$DEVELOPER_DIR`, xcode-select's choice, the
-  Command Line Tools, then `/Applications/Xcode.app`. A candidate is used
-  only when its macOS SDK is 26 or newer and it type-checks a SwiftUI probe
-  that uses `@State` and Liquid Glass. This fixes builds on Macs whose
-  Command Line Tools ship the macOS 27 SDK, where `@State` is a macro and
-  the SwiftUIMacros plugin is missing, and never picks an older Xcode with a
-  macOS 15 SDK. `doctor` adds a `swiftui_macros` check, `macos_sdk` now
-  requires SDK 26 or newer, and the `fix` line names the actual problem: the
-  missing plugin (install Xcode), an old SDK, or another compiler error such
-  as an unaccepted Xcode license. The change rebuilds the app once.
+- Integrate CLT-compatible state wrappers with bounded, cached feature-based developer-tool selection; preserve installed-Xcode fallback, diagnose macOS/SDK prerequisites accurately, and document tool update discovery.
+
+
+- Preserve feature-based developer-tool fallback: try `$DEVELOPER_DIR`,
+  xcode-select's choice, Command Line Tools and an installed Xcode in order.
+  Each candidate needs SDK 26 or newer and must pass the bounded probe using
+  CaptureState, Observation, Binding and Liquid Glass. Doctor and build use
+  that same selection; Xcode is optional rather than a prerequisite for CLT27.
+  The existing `swiftui_macros` diagnostic remains alongside `compile_probe`.
+- `doctor` typechecks a small SwiftUI sample with the selected developer tools
+  and compiler flags as the real build, and reports the Swift version and
+  macOS SDK it used. The check stops after two minutes if the compiler hangs.
+  A passing result is remembered for that SDK, including the real directory
+  behind the MacOSX.sdk link, and is checked again when the SDK or Swift
+  version changes. If the check fails, doctor says the installed Command
+  Line Tools cannot build this version, or that the check timed out, and
+  tells you to update HQ Capture with `hq install hq-capture`. If it still
+  fails, update the Command Line Tools in System Settings > General >
+  Software Update. A build that fails because a Swift macro plugin is missing
+  says the same thing, instead of only pointing at the build log. The check
+  does not ask for a permission.
+
+- Keep local builds working with Command Line Tools and macOS SDK 27. Use the
+  existing SwiftUI State property wrapper explicitly so the new State macro
+  does not require the Xcode-only SwiftUIMacros plugin. No Xcode install is needed.
 
 - Read the active company with `hq core hq-session get company_slug`, with no
   shell-script fallback. The package requires hq-core 15.0.179 or newer, whose

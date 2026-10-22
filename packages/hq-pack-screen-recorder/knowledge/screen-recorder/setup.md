@@ -14,10 +14,23 @@ the existing build is used as is.
 
 - Apple Silicon Mac running macOS 26 or later.
 - Apple Command Line Tools. Install them once with `xcode-select --install`.
-  Full Xcode is not needed. `hq-record-process.sh doctor` checks for them.
+  Full Xcode is not needed. `hq-record-process.sh doctor` checks for them
+  and typechecks a small sample of the SwiftUI features the app uses. The
+  check stops if the compiler does not finish. It does not ask for Screen
+  Recording, Camera or Microphone permission. If it fails, update HQ Capture
+  with `hq install hq-capture`. If it still fails, update the Command Line
+  Tools in System Settings > General > Software Update.
 - No Apple developer account, certificate or download from Indigo. The app is
   built on the Mac and signed locally ("ad-hoc"), so macOS does not need a
   notarized copy.
+
+## Toolchain troubleshooting
+
+HQ Capture needs macOS 26 or later, not merely newer Command Line Tools. On macOS 15, upgrade macOS first; installing tools alone cannot satisfy that requirement.
+
+The build and doctor use the same bounded SwiftUI/Observation/Binding check. They try the selected developer tools, Command Line Tools and an installed Xcode in order, retaining a working toolchain. Full Xcode is optional: supported CLT SDKs build the explicit SwiftUI.State property wrapper without SwiftUIMacros.
+
+If an installed CLT update is missing from Software Update, Apple's install-on-demand listing may depend on `/tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress`. Ask the operator to use Apple's developer downloads or review enabling that listing; do not create system markers, install tools or change xcode-select automatically. A failed compile check first recommends updating HQ Capture, then checking the installed developer tools.
 
 ## Permissions
 
