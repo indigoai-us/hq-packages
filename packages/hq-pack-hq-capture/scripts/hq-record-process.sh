@@ -427,7 +427,13 @@ compile_probe_check() {
   swift_ver="$(printf '%s\n' "$swift_raw" | sed -n 's/.*Swift version \([0-9][0-9.]*\).*/\1/p' | head -n 1 || true)"
   swiftc_bin="$(DEVELOPER_DIR="$dev" xcrun --sdk macosx --find swiftc 2>/dev/null | head -n 1 | tr -d '[:space:]' || true)"
   if [ -n "$swiftc_bin" ] && [ -e "$swiftc_bin" ]; then
-    swiftc_id="$(stat -f '%m:%i' "$swiftc_bin" 2>/dev/null || stat -c '%Y:%i' "$swiftc_bin" 2>/dev/null || echo missing)"
+    # GNU stat can print filesystem data before rejecting the BSD format.
+    # Discard output from a failed attempt instead of contaminating identity.
+    if swiftc_id="$(stat -f '%m:%i' "$swiftc_bin" 2>/dev/null)"; then
+      :
+    else
+      swiftc_id="$(stat -c '%Y:%i' "$swiftc_bin" 2>/dev/null || echo missing)"
+    fi
   else
     swiftc_id=missing
   fi

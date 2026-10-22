@@ -68,6 +68,14 @@ for pack in hq-pack-hq-capture hq-pack-screen-recorder; do
   [ "$(wc -l <"$TEST_COMPILER_CALLS" | tr -d ' ')" = 1 ]; pass=$((pass + 1))
   grep -Fq -- '-parse-as-library -swift-version 6 -O -target arm64-apple-macos26.0 -framework AVKit' "$TEST_COMPILER_CALLS"; pass=$((pass + 1))
 
+  # Preserve the old inode so replacement cannot reuse it. An unchanged path
+  # with a new compiler must invalidate the previously successful CLT cache.
+  mv "$clt/swiftc" "$clt/previous-swiftc"
+  make_dev "$clt" 27.0 fail
+  doc="$(doctor)"
+  assert_json "$doc" 'j["ok"] and j["compile_probe"] and j["command_line_tools_detail"].endswith("/Xcode")'
+  [ "$(wc -l <"$TEST_COMPILER_CALLS" | tr -d ' ')" = 3 ]; pass=$((pass + 1))
+
   # An actual capability refusal chooses the existing Xcode candidate; no SDK downgrade.
   rm -rf "$state"; make_dev "$clt" 27.0 fail
   doc="$(doctor)"
