@@ -1,9 +1,6 @@
 # Changelog
 
-## Unreleased
-
-- Integrate CLT-compatible state wrappers with bounded, cached feature-based developer-tool selection; preserve installed-Xcode fallback, diagnose macOS/SDK prerequisites accurately, and document tool update discovery.
-
+## 0.1.4
 
 - Preserve feature-based developer-tool fallback: try `$DEVELOPER_DIR`,
   xcode-select's choice, Command Line Tools and an installed Xcode in order.
@@ -23,11 +20,9 @@
   Software Update. A build that fails because a Swift macro plugin is missing
   says the same thing, instead of only pointing at the build log. The check
   does not ask for a permission.
-
 - Keep local builds working with Command Line Tools and macOS SDK 27. Use the
   existing SwiftUI State property wrapper explicitly so the new State macro
   does not require the Xcode-only SwiftUIMacros plugin. No Xcode install is needed.
-
 - Read the active company with `hq core hq-session get company_slug`, with no
   shell-script fallback. The package requires hq-core 15.0.179 or newer, whose
   CLI floor includes hq-cli 5.99.0.
