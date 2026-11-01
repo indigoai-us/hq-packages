@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.2.0
+
+- HQ Capture now ships inside the HQ desktop app (macOS 26 or later), and
+  `/record-process` uses that copy. The pack no longer ships the app's source
+  or builds, signs or installs an app: `build`, the developer-tools checks
+  and the `open -n` launch are gone, with their tests.
+- `start` asks the HQ desktop app to open the recorder through
+  `hq-desktop://record/<company>`, so macOS holds HQ responsible for Screen
+  Recording, camera and microphone and HQ asks in its own permission window.
+  When a permission is missing `start` reports `waiting-permission` (exit 0)
+  and `wait` follows it until the recorder opens. HQ's refusal is reported
+  as `desktop-refused`, no answer as `no-answer`, and a desktop app pointed at
+  another HQ folder as `destination-mismatch`.
+- `run` starts the HQ Capture inside the desktop app for the agent modes.
+  Recordings made with the standalone app keep working.
+- Without the HQ desktop app, `start`, `run` and `doctor` print the install
+  link (https://hqforwork.com/install) and start nothing
+  (`needs-desktop-app`); a desktop app without HQ Capture asks for an update
+  (`desktop-app-outdated`); below macOS 26, `macos-too-old`.
+- `doctor` reports macOS, the HQ desktop app and its HQ Capture.
+- `record` creates the state folder before taking its lock, which the build
+  used to do.
+- Requires the HQ desktop app release that bundles HQ Capture and answers
+  `hq-desktop://record/<company>`.
+
 ## 0.1.4
 
 - Preserve feature-based developer-tool fallback: try `$DEVELOPER_DIR`,

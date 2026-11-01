@@ -4,51 +4,44 @@ HQ Capture is the local Mac app behind `/record-process`. It only records.
 Summaries, trimming, camera placement, video export and step-by-step guides
 happen in the HQ session that opened it, through the agent.
 
-This pack ships the app's Swift source in `app/`. The first time
-`/record-process` runs, the pack compiles the app on the Mac and stores it at
-`~/Library/Application Support/HQ Capture/HQ Capture.app`. It rebuilds
-automatically when a pack update changes the source. While HQ Capture is open,
-the existing build is used as is.
+HQ Capture ships inside the HQ desktop app, at
+`HQ.app/Contents/Helpers/HQ Capture.app`. The desktop app builds, signs and
+updates it; this pack builds nothing. `/record-process` asks the desktop app
+to open the recorder through its `hq-desktop://record/<company>` link, and the
+editing commands run the HQ Capture inside it.
 
 ## Requirements
 
-- Apple Silicon Mac running macOS 26 or later.
-- Apple Command Line Tools. Install them once with `xcode-select --install`.
-  Full Xcode is not needed. `hq-record-process.sh doctor` checks for them
-  and typechecks a small sample of the SwiftUI features the app uses. The
-  check stops if the compiler does not finish. It does not ask for Screen
-  Recording, Camera or Microphone permission. If it fails, update HQ Capture
-  with `hq install hq-capture`. If it still fails, update the Command Line
-  Tools in System Settings > General > Software Update.
-- No Apple developer account, certificate or download from Indigo. The app is
-  built on the Mac and signed locally ("ad-hoc"), so macOS does not need a
-  notarized copy.
-
-## Toolchain troubleshooting
-
-HQ Capture needs macOS 26 or later, not merely newer Command Line Tools. On macOS 15, upgrade macOS first; installing tools alone cannot satisfy that requirement.
-
-The build and doctor use the same bounded SwiftUI/Observation/Binding check. They try the selected developer tools, Command Line Tools and an installed Xcode in order, retaining a working toolchain. Full Xcode is optional: supported CLT SDKs build the explicit SwiftUI.State property wrapper without SwiftUIMacros.
-
-If an installed CLT update is missing from Software Update, Apple's install-on-demand listing may depend on `/tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress`. Ask the operator to use Apple's developer downloads or review enabling that listing; do not create system markers, install tools or change xcode-select automatically. A failed compile check first recommends updating HQ Capture, then checking the installed developer tools.
+- A Mac on macOS 26 or later.
+- The HQ desktop app, installed and opened once. Install it from
+  https://hqforwork.com/install (direct download for Mac:
+  https://github.com/indigoai-us/hq-desktop-app/releases/latest/download/HQ.dmg).
+  Without it, `/record-process` prints that link and starts nothing.
+  `hq-record-process.sh doctor` checks macOS, finds the desktop app (in
+  /Applications, ~/Applications, by Spotlight, or the running one) and the HQ
+  Capture inside it. An older desktop app without HQ Capture is updated from
+  its HQ menu (Check for updates).
+- No developer tools, Apple developer account or certificate.
 
 ## Permissions
 
-macOS asks for each permission the first time the app uses it. Approve:
+HQ asks macOS for each permission, in its own permission window, the first
+time a recording needs it:
 
 - **Screen Recording**, for the screen layer.
 - **Camera**, for the separate camera layer.
 - **Microphone**, for narration.
 
-For Screen Recording, macOS asks you to choose **Quit and Reopen**. The
-reopened app keeps its company binding for 10 minutes, so you can carry on
-without going back to the HQ session. The session keeps following the app
-while it reopens. After 10 minutes, run `/record-process` again.
+macOS lists them under **HQ** in System Settings → Privacy & Security, because
+HQ starts HQ Capture. HQ Capture itself never asks: when you press a
+permission repair in its window, HQ's permission window opens. If Screen
+Recording is off when you start, HQ shows its steps first and opens HQ Capture
+once access is on; the session sees `waiting-permission` meanwhile. For Screen
+Recording, macOS asks you to choose **Quit and Reopen** for HQ; HQ reopens HQ
+Capture for the same company by itself.
 
-You can review the permissions in System Settings → Privacy & Security.
-Because the app is built and signed on your Mac, macOS can treat an updated
-build as a new app and ask for Screen Recording permission again after a pack
-update. Approve it again when asked.
+Grants given to the standalone HQ Capture that older versions of this pack
+built do not carry over; HQ asks once.
 
 ## Where recordings go
 
@@ -101,17 +94,31 @@ Continue my HQ Capture recording for <company> at <absolute path to .hqrec>: sho
 The agent checks that the company matches the session and that the path is a
 recording in that company's `recordings/` folder before it continues.
 
-## Updating from 0.1.0
+## Updating from 0.1.x
 
-Version 0.1.0 built an app called HQ Recorder (or LocalScreenRecorder) in
-`~/Library/Application Support/HQ Recorder/`. After HQ Capture builds, the
-launcher removes that old app. Recordings are not stored there and are not
-affected.
+Versions 0.1.0 to 0.1.4 of this pack built HQ Capture on the Mac, in
+`~/Library/Application Support/HQ Capture/HQ Capture.app` (and 0.1.0 in
+`~/Library/Application Support/HQ Recorder/`). From 0.2.0 that app is not
+used, rebuilt or removed; you can delete it. Recordings are not stored there:
+the ones it made stay in each company's `recordings/` folder and open,
+export and draft guides with the HQ Capture in the desktop app.
 
 ## Control channel
 
-The HQ session and the app talk through files in
-`~/Library/Application Support/HQ Capture/active/`:
+The HQ session, the HQ desktop app and HQ Capture talk through files in
+`~/Library/Application Support/HQ Capture/active/`. `start` clears the folder,
+then sends `hq-desktop://record/<company>` to the desktop app (with `open -a`
+and the desktop app's path, so the installed HQ is the one that answers). HQ
+checks the company exists in its HQ folder, and its HQ Capture service starts
+the recorder as its own child, so start, status and stop never start HQ Capture
+from the shell:
+
+- `launch.json` is written by the desktop app before the recorder reports:
+  `state` is `waiting-permission` (with `missing`, while its permission
+  window is open), `opening`, `open`, or `refused` (with `reason` and
+  `message`). `status` and `wait` report `waiting-permission` and `refused`
+  from it until `status.json` appears; a waiting note older than five
+  minutes is ignored.
 
 - `status.json` is written by the app. Fields: `schema`, `state`
   (`awaiting-start`, `recording`, `finalizing`, `saved`, `failed`, `closed`,
@@ -143,7 +150,10 @@ does not match the recording, with `kind`, `relativePath`, `timelineSeconds`,
 from the first media issue's message.
 
 The agent's editing commands (`hq-record-process.sh run <mode> <recording>`)
-run the same app headless, without a window. They work only on recordings
+run the HQ Capture inside the desktop app headless, without a window. They
+read and write saved recordings only and touch no screen, camera or
+microphone; transcription uses Apple's on-device speech model on the saved
+narration file. They work only on recordings
 inside the session company's `recordings/` folder.
 
 ## What stays on the Mac

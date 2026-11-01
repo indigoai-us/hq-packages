@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Launcher tests for hq-record-process.sh. Safe on any OS: the compiler is replaced by a
-# stub that writes a fake HQ Capture.app whose executable echoes its arguments, and the
-# opener is replaced by a stub that speaks the same file control channel as the real app
-# (status.json, start.request and stop.request). The real macOS build and launch are covered by
-# tests/e2e-macos.sh.
+# Launcher tests for hq-record-process.sh. Safe on any OS: a fake HQ desktop app carries an HQ
+# Capture executable that echoes its arguments, and the desktop opener is replaced by a stub that
+# answers hq-desktop://record/<company> the way HQ does: it opens a stub recorder that speaks the
+# same file control channel as the real app (status.json, start.request and stop.request), or
+# writes HQ's launch.json (waiting for a permission, refused). Nothing is compiled or installed.
+# The real desktop app is covered by tests/e2e-macos.sh.
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -14,9 +15,9 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# A copy of the pack, so the test can change app/SOURCE.
+# A copy of the pack's script.
 mkdir -p "$tmp/pack"
-cp -R "$here/../app" "$here/../scripts" "$tmp/pack/"
+cp -R "$here/../scripts" "$tmp/pack/"
 R="$tmp/pack/scripts/hq-record-process.sh"
 
 # Fake HQ root with two companies. The CLI shim supplies the current session company.
@@ -44,21 +45,21 @@ session() {
   printf '%s' "$1" >"$hq/core/scripts/session-company"
 }
 
-# Stub compiler: writes an app whose executable prints its arguments as JSON and exits
-# with $STUB_EXIT (default 0). Each build appends a line to builds.log.
-cat >"$tmp/stub-compile.sh" <<'EOF'
-#!/usr/bin/env bash
-app="$1"
-mkdir -p "$app/Contents/MacOS"
-cat >"$app/Contents/MacOS/LocalScreenRecorder" <<'BIN'
+# A fake HQ desktop app: its bundle id, and an HQ Capture executable inside it that prints its
+# arguments as JSON and exits with $STUB_EXIT (default 0).
+desk="$tmp/Applications/HQ.app"
+capture_bin="$desk/Contents/Helpers/HQ Capture.app/Contents/MacOS/HQ Capture"
+mkdir -p "$(dirname "$capture_bin")"
+cat >"$desk/Contents/Info.plist" <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict><key>CFBundleIdentifier</key><string>ai.indigo.hq-sync-menubar</string></dict></plist>
+EOF
+cat >"$capture_bin" <<'BIN'
 #!/usr/bin/env bash
 python3 -I -c 'import json,sys; print(json.dumps({"argv": sys.argv[1:]}))' "$@"
 exit "${STUB_EXIT:-0}"
 BIN
-chmod +x "$app/Contents/MacOS/LocalScreenRecorder"
-echo built >>"$(dirname "$0")/builds.log"
-EOF
-chmod +x "$tmp/stub-compile.sh"
+chmod +x "$capture_bin"
 
 # Stub opener: records the app's argv, writes awaiting-start, switches to recording when
 # go.record appears, and on stop.request saves (if recording) or closes. At save, media.issue
@@ -167,21 +168,52 @@ echo $! >"$(dirname "$app")/stub.pid"
 EOF
 chmod +x "$tmp/stub-open.sh"
 
-mkdir -p "$tmp/apps" "$tmp/legacy/HQ Recorder.app/Contents" "$tmp/state/LocalScreenRecorder.app/Contents"
-touch "$tmp/legacy/build.stamp" "$tmp/legacy/keep.txt"
+# Stub desktop opener: HQ's side of hq-desktop://record/<company>. It logs the app and the link,
+# then opens the stub recorder for that company with the control folder and destination HQ uses.
+# desktop.waiting makes it answer as HQ does when Screen Recording is off (launch.json says
+# waiting-permission and no recorder opens), desktop.refuse as HQ does when it refuses,
+# desktop.silent makes it say nothing, and desktop.elsewhere makes it open the recorder for a
+# different HQ folder.
+cat >"$tmp/stub-desktop.sh" <<'EOF'
+#!/usr/bin/env bash
+d="$(dirname "$0")"
+printf '%s %s\n' "$1" "$2" >>"$d/desktop.log"
+company="${2#hq-desktop://record/}"
+ctl="$HQ_RECORDER_HOME/active"
+note() {
+  mkdir -p "$ctl"
+  printf '{"schema":1,"company":"%s","state":"%s"%s,"updatedAtMs":1}\n' "$company" "$1" "$2" >"$ctl/.launch.tmp"
+  mv "$ctl/.launch.tmp" "$ctl/launch.json"
+}
+if [ -e "$d/desktop.waiting" ]; then note waiting-permission ',"missing":["screen_recording"]'; exit 0; fi
+if [ -e "$d/desktop.refuse" ]; then
+  note refused ',"reason":"busy_other_company","message":"HQ Capture is open for another company. Finish that recording first."'
+  exit 0
+fi
+[ -e "$d/desktop.silent" ] && exit 0
+root="$HQ_ROOT"
+[ -e "$d/desktop.elsewhere" ] && root="$d/elsewhere-hq"
+note open ''
+exec "$d/stub-open.sh" "$d/apps/HQ Capture.app" --args --hq-control "$ctl" --company "$company" \
+  --destination "$root/companies/$company/recordings"
+EOF
+chmod +x "$tmp/stub-desktop.sh"
+
+mkdir -p "$tmp/apps"
 export HQ_ROOT="$hq"
 export PATH="$tmp/bin:$PATH"
 export HQ_RECORDER_HOME="$tmp/state"
-export HQ_RECORDER_APP="$tmp/apps/HQ Capture.app"
-export HQ_RECORDER_OPEN="$tmp/stub-open.sh"
-export HQ_RECORDER_COMPILE="$tmp/stub-compile.sh"
-export HQ_RECORDER_LEGACY_HOME="$tmp/legacy"
+export HQ_DESKTOP_APP="$desk"
+export HQ_DESKTOP_OPEN="$tmp/stub-desktop.sh"
+export HQ_DESKTOP_WAIT=5
+# The suite runs on Linux too; this stands in for a Mac on macOS 26.
+export HQ_RECORDER_MACOS_VERSION=26.1
 # The stub app is a python3 process, so the launcher's process-name check looks for python3's
-# name here instead of LocalScreenRecorder.
+# name here instead of HQ Capture.
 HQ_RECORDER_PROCESS_NAME="$(python3 -I -c 'import os,subprocess; c=subprocess.check_output(["ps","-p",str(os.getpid()),"-o","comm="]).decode().strip(); print(os.path.basename(c))')"
 export HQ_RECORDER_PROCESS_NAME
 launches() { [ -f "$tmp/launches.log" ] && wc -l <"$tmp/launches.log" | tr -d ' ' || echo 0; }
-builds() { [ -f "$tmp/builds.log" ] && wc -l <"$tmp/builds.log" | tr -d ' ' || echo 0; }
+desktop_links() { [ -f "$tmp/desktop.log" ] && wc -l <"$tmp/desktop.log" | tr -d ' ' || echo 0; }
 
 pass=0
 check() { # check <description> <python expression over j> <json>
@@ -229,21 +261,20 @@ check "wait before any start is refused" 'j["error"]=="not-open"' "$(run wait --
 check "record before any start is refused" 'j["ok"] is False and j["error"]=="not-open"' "$(run record)"
 expect "record before any start exits 1" "$(code record)" "1"
 check "a company other than the bound one is refused" 'j["error"]=="company-mismatch"' "$(run start --company other)"
-expect "nothing was built for a refused start" "$(builds)" "0"
+expect "HQ was not asked for a refused start" "$(desktop_links)" "0"
 
-# Start builds once, binds the company and removes the 0.1.0 app.
+# Start asks the HQ desktop app once, which opens the recorder bound to the company.
 out="$(run start)"
 check "start opens HQ Capture awaiting user start" \
   'j["ok"] and j["state"]=="awaiting-start" and j["company"]=="acme" and j["destination"].endswith("/companies/acme/recordings")' "$out"
-expect "first start builds" "$(builds)" "1"
-[ -x "$HQ_RECORDER_APP/Contents/MacOS/LocalScreenRecorder" ] && pass=$((pass + 1)) \
-  || { echo "FAIL: built app has no LocalScreenRecorder executable" >&2; exit 1; }
-[ ! -e "$tmp/legacy/HQ Recorder.app" ] && [ ! -e "$tmp/state/LocalScreenRecorder.app" ] && [ ! -e "$tmp/legacy/build.stamp" ] \
-  && [ -e "$tmp/legacy/keep.txt" ] && pass=$((pass + 1)) \
-  || { echo "FAIL: old app bundles should be removed and nothing else" >&2; exit 1; }
+expect "start asks HQ once" "$(desktop_links)" "1"
+expect "start sends the record link for the session's company to the HQ desktop app" \
+  "$(cat "$tmp/desktop.log")" "$desk hq-desktop://record/acme"
+[ -z "$(find "$HQ_RECORDER_HOME" "$tmp/pack" -name '*.app' -print -quit)" ] && pass=$((pass + 1)) \
+  || { echo "FAIL: start must not build or install an app" >&2; exit 1; }
 [ -d "$hq/companies/acme/recordings" ] && [ -z "$(ls -A "$hq/companies/acme/recordings")" ] && pass=$((pass + 1)) \
   || { echo "FAIL: destination should exist and be empty" >&2; exit 1; }
-argv="$(cat "$HQ_RECORDER_APP.argv")"
+argv="$(cat "$tmp/apps/HQ Capture.app.argv")"
 grep -qx -- "--hq-control" <<<"$argv" && grep -qx -- "--company" <<<"$argv" && grep -qx "acme" <<<"$argv" \
   && grep -q '/companies/acme/recordings$' <<<"$argv" && pass=$((pass + 1)) \
   || { echo "FAIL: app did not receive the control folder, company and destination" >&2; exit 1; }
@@ -348,19 +379,10 @@ out="$(run start --record)"
 check "start --record opens HQ Capture and starts recording" 'j["ok"] and j["state"]=="recording"' "$out"
 check "stop saves the start --record recording" 'j["state"]=="saved"' "$(run stop)"
 
-# Rebuild only when the pack's app inputs change.
+# Start works again after a save.
 out="$(run start)"
 check "start works again after a save" 'j["state"]=="awaiting-start"' "$out"
-expect "an unchanged pack does not rebuild" "$(builds)" "1"
 check "stop closes HQ Capture" 'j["state"]=="closed"' "$(run stop)"
-printf 'local-screen-recorder 0000000000000000000000000000000000000000\n' >"$tmp/pack/app/SOURCE"
-check "start after a SOURCE change opens" 'j["state"]=="awaiting-start"' "$(run start)"
-expect "a SOURCE change rebuilds" "$(builds)" "2"
-check "build refuses to replace the app while it is open" 'j["error"]=="already-open"' "$(run build --force)"
-check "stop closes it" 'j["state"]=="closed"' "$(run stop)"
-check "build reports a current build without rebuilding" 'j["ok"] and j["built"] is False' "$(run build)"
-check "build --force rebuilds" 'j["ok"] and j["built"] is True' "$(run build --force)"
-expect "build --force ran the compiler" "$(builds)" "3"
 
 # A saved or failed app whose process is still running counts as open until it quits.
 alive() { kill -0 "$(cat "$tmp/apps/stub.pid")" 2>/dev/null && echo yes || echo no; }
@@ -370,7 +392,6 @@ check "a recording stopped in the window is saved" 'j["state"]=="saved" and j["r
 expect "the app stays open after saving from the window" "$(alive)" "yes"
 check "start refuses while the saved app is still open" 'j["ok"] is False and j["error"]=="already-open"' "$(run start)"
 expect "start refuses a saved app that is still open with exit 1" "$(code start)" "1"
-check "build refuses to replace a saved app that is still open" 'j["error"]=="already-open"' "$(run build --force)"
 check "status still reports the saved recording" 'j["state"]=="saved" and j["resumePrompt"].startswith("Continue my HQ Capture")' "$(run status)"
 check "stop closes the saved app and keeps the saved status" \
   'j["state"]=="saved" and j["recording"]=="companies/acme/recordings/demo.hqrec" and j["resumePrompt"].startswith("Continue my HQ Capture")' "$(run stop)"
@@ -397,7 +418,7 @@ check "a saved app that quit is still reported as saved" 'j["state"]=="saved"' "
 check "stop on a saved app that quit is a no-op" 'j["state"]=="saved"' "$(run stop)"
 check "start proceeds after a saved app quit" 'j["state"]=="awaiting-start"' "$(run start)"
 check "stop closes it again" 'j["state"]=="closed"' "$(run stop)"
-expect "none of this rebuilt the app" "$(builds)" "3"
+expect "each start asked HQ" "$(( $(desktop_links) > 10 ))" "1"
 
 # run: argument, company and package checks.
 pkg="$hq/companies/acme/recordings/demo.hqrec"
@@ -655,98 +676,143 @@ check "start proceeds once the relaunch wait has passed" 'j["state"]=="awaiting-
 check "stop closes it" 'j["state"]=="closed"' "$(run stop)"
 rm -rf "$HQ_RECORDER_HOME/active"
 
-# Build lock: a build waits for a live lock holder and clears a lock left by a dead one.
-mkdir -p "$HQ_RECORDER_HOME/.build.lock"
-sleep 60 & holder=$!
-echo "$holder" >"$HQ_RECORDER_HOME/.build.lock/pid"
-check "build refuses while another build holds the lock" 'j["ok"] is False and j["error"]=="build-busy"' \
-  "$(HQ_RECORDER_LOCK_WAIT=1 run build --force)"
-expect "nothing was built while the lock was held" "$(builds)" "3"
-kill "$holder" 2>/dev/null || true; wait "$holder" 2>/dev/null || true
-check "build clears a lock left by a process that exited" 'j["ok"] and j["built"] is True' "$(HQ_RECORDER_LOCK_WAIT=1 run build --force)"
-[ ! -e "$HQ_RECORDER_HOME/.build.lock" ] && pass=$((pass + 1)) \
-  || { echo "FAIL: build should release its lock" >&2; exit 1; }
-# A lock with no pid is waited on while it is new, and cleared once it is older than 30 seconds.
-mkdir -p "$HQ_RECORDER_HOME/.build.lock"
-check "build waits on a new lock with no pid" 'j["error"]=="build-busy"' "$(HQ_RECORDER_LOCK_WAIT=1 run build --force)"
-python3 -I -c 'import os,sys,time; t=time.time()-60; os.utime(sys.argv[1], (t, t))' "$HQ_RECORDER_HOME/.build.lock"
-check "build clears a lock with no pid older than 30 seconds" 'j["ok"] and j["built"] is True' "$(HQ_RECORDER_LOCK_WAIT=1 run build --force)"
-[ ! -e "$HQ_RECORDER_HOME/.build.lock" ] && pass=$((pass + 1)) \
-  || { echo "FAIL: build should release the lock it took over" >&2; exit 1; }
-
-# Several builds that all find the same stale lock: only one takes it over at a time. The race
-# compiler marks itself inside with mkdir, so a second build inside at once is recorded.
-cat >"$tmp/race-compile.sh" <<'EOF'
+# Start lock: several starts that all find the same stale lock take it over one at a time. The
+# race opener marks itself inside with mkdir, so a second start inside at once is recorded. It
+# says nothing back, so each start gives up at once (HQ_DESKTOP_WAIT=0) and releases the lock.
+cat >"$tmp/race-desktop.sh" <<'EOF'
 #!/usr/bin/env bash
 d="$(dirname "$0")"
 mkdir "$d/race.inside" 2>/dev/null || echo overlap >>"$d/race.log"
 sleep 0.4
 rmdir "$d/race.inside" 2>/dev/null || true
-exec "$d/stub-compile.sh" "$@"
 EOF
-chmod +x "$tmp/race-compile.sh"
+chmod +x "$tmp/race-desktop.sh"
 rm -f "$tmp/race.log"
-for round in 1 2 3; do
-  rm -rf "$HQ_RECORDER_HOME/.build.lock"; mkdir -p "$HQ_RECORDER_HOME/.build.lock"
-  echo "$gone" >"$HQ_RECORDER_HOME/.build.lock/pid"
+for _ in 1 2 3; do
+  rm -rf "$HQ_RECORDER_HOME/.start.lock"; mkdir -p "$HQ_RECORDER_HOME/.start.lock"
+  echo "$gone" >"$HQ_RECORDER_HOME/.start.lock/pid"
   pids=()
-  for i in 1 2 3 4 5 6; do
-    HQ_RECORDER_COMPILE="$tmp/race-compile.sh" HQ_RECORDER_LOCK_WAIT=30 HQ_RECORDER_TAKEOVER_PAUSE=0.3 \
-      bash "$R" build --force >/dev/null 2>&1 & pids+=($!)
+  for _ in 1 2 3 4 5 6; do
+    HQ_DESKTOP_OPEN="$tmp/race-desktop.sh" HQ_DESKTOP_WAIT=0 HQ_RECORDER_START_WAIT=30 HQ_RECORDER_TAKEOVER_PAUSE=0.3 \
+      bash "$R" start >/dev/null 2>&1 & pids+=($!)
   done
   for p in "${pids[@]}"; do wait "$p" || true; done
 done
-expect "builds racing for a stale lock never build at the same time" "$( [ -f "$tmp/race.log" ] && wc -l <"$tmp/race.log" | tr -d ' ' || echo 0)" "0"
-nested="$(find "$HQ_RECORDER_HOME" -path '*HQ Capture.app/*HQ Capture.app' -print -quit)"
-expect "racing builds never nest one app inside another" "$nested" ""
-
+expect "starts racing for a stale lock never ask HQ at the same time" "$( [ -f "$tmp/race.log" ] && wc -l <"$tmp/race.log" | tr -d ' ' || echo 0)" "0"
+[ ! -e "$HQ_RECORDER_HOME/.start.lock" ] && pass=$((pass + 1)) \
+  || { echo "FAIL: racing starts should release the lock" >&2; exit 1; }
 # A lock naming a live pid whose start time differs (the pid was reused by another program) is stale.
-mkdir -p "$HQ_RECORDER_HOME/.build.lock"
-printf '%s\n%s\n' "$$" "Thu Jan  1 00:00:00 1970" >"$HQ_RECORDER_HOME/.build.lock/pid"
-check "build clears a lock whose pid now belongs to a later process" 'j["ok"] and j["built"] is True' \
-  "$(HQ_RECORDER_LOCK_WAIT=1 run build --force)"
+rm -rf "$HQ_RECORDER_HOME/active"
+mkdir -p "$HQ_RECORDER_HOME/.start.lock"
+printf '%s\n%s\n' "$$" "Thu Jan  1 00:00:00 1970" >"$HQ_RECORDER_HOME/.start.lock/pid"
+check "start clears a lock whose pid now belongs to a later process" 'j["state"]=="awaiting-start"' \
+  "$(HQ_RECORDER_START_WAIT=1 run start)"
+check "stop closes it" 'j["state"]=="closed"' "$(run stop)"
 # A lock naming a live pid with its real start time is held.
-mkdir -p "$HQ_RECORDER_HOME/.build.lock"
+mkdir -p "$HQ_RECORDER_HOME/.start.lock"
 sleep 60 & holder=$!
-printf '%s\n%s\n' "$holder" "$(ps -p "$holder" -o lstart=)" >"$HQ_RECORDER_HOME/.build.lock/pid"
-check "build waits on a lock whose pid and start time match a live process" 'j["error"]=="build-busy"' \
-  "$(HQ_RECORDER_LOCK_WAIT=1 run build --force)"
+printf '%s\n%s\n' "$holder" "$(ps -p "$holder" -o lstart=)" >"$HQ_RECORDER_HOME/.start.lock/pid"
+check "start waits on a lock whose pid and start time match a live process" 'j["error"]=="busy"' \
+  "$(HQ_RECORDER_START_WAIT=1 run start)"
 kill "$holder" 2>/dev/null || true; wait "$holder" 2>/dev/null || true
-rm -rf "$HQ_RECORDER_HOME/.build.lock"
+# A lock with no pid is waited on while it is new, and cleared once it is older than 30 seconds.
+rm -rf "$HQ_RECORDER_HOME/.start.lock"; mkdir -p "$HQ_RECORDER_HOME/.start.lock"
+check "start waits on a new lock with no pid" 'j["error"]=="busy"' "$(HQ_RECORDER_START_WAIT=1 run start)"
+python3 -I -c 'import os,sys,time; t=time.time()-60; os.utime(sys.argv[1], (t, t))' "$HQ_RECORDER_HOME/.start.lock"
+check "start clears a lock with no pid older than 30 seconds" 'j["state"]=="awaiting-start"' "$(HQ_RECORDER_START_WAIT=1 run start)"
+check "stop closes it" 'j["state"]=="closed"' "$(run stop)"
+[ ! -e "$HQ_RECORDER_HOME/.start.lock" ] && pass=$((pass + 1)) \
+  || { echo "FAIL: start should release the lock it took over" >&2; exit 1; }
 
-# Installing the new app never moves it inside an app that appeared at the same path.
-cat >"$tmp/install-hook.sh" <<'EOF'
-#!/usr/bin/env bash
-mkdir -p "$1/Contents/MacOS" && echo intruder >"$1/Contents/MacOS/intruder"
-EOF
-chmod +x "$tmp/install-hook.sh"
-out="$(HQ_RECORDER_INSTALL_HOOK="$tmp/install-hook.sh" run build --force)"
-check "build refuses to install over an app that appeared during the install" 'j["ok"] is False and j["error"]=="install-conflict"' "$out"
-expect "the refused install nested nothing" "$(find "$HQ_RECORDER_HOME" -path '*HQ Capture.app/*HQ Capture.app' -print -quit)" ""
-check "the next build installs normally" 'j["ok"] and j["built"] is True' "$(run build --force)"
-[ ! -e "$HQ_RECORDER_HOME/HQ Capture.app/Contents/MacOS/intruder" ] && pass=$((pass + 1)) \
-  || { echo "FAIL: the next build should replace the intruding app" >&2; exit 1; }
-# A build whose lock was taken over while it compiled does not install.
-cat >"$tmp/steal-compile.sh" <<'EOF'
-#!/usr/bin/env bash
-printf '%s\n' 1 >"$HQ_RECORDER_HOME/.build.lock/pid"
-exec "$(dirname "$0")/stub-compile.sh" "$@"
-EOF
-chmod +x "$tmp/steal-compile.sh"
-check "a build that lost its lock does not install" 'j["ok"] is False and j["error"]=="build-busy"' \
-  "$(HQ_RECORDER_COMPILE="$tmp/steal-compile.sh" run build --force)"
-rm -rf "$HQ_RECORDER_HOME/.build.lock"
+# HQ answers before the recorder opens. Waiting for a permission: start says so and exits 0;
+# status and wait follow it until the recorder reports.
+rm -rf "$HQ_RECORDER_HOME/active"
+touch "$tmp/desktop.waiting"
+out="$(run start)"
+check "start reports HQ's permission steps" \
+  'j["ok"] and j["state"]=="waiting-permission" and j["missing"]==["screen_recording"] and "HQ Capture opens" in j["message"]' "$out"
+expect "a start that waits on a permission exits 0" "$(code start)" "0"
+check "status reports HQ waiting for the permission" 'j["state"]=="waiting-permission"' "$(run status)"
+out="$(set +e; bash "$R" wait --timeout 1 2>/dev/null; echo "exit=$?")"
+check "wait follows HQ waiting for the permission" 'j["event"]=="state" and j["state"]=="waiting-permission"' "$(head -n 1 <<<"$out")"
+expect "wait is still waiting at its timeout" "$(last "$out")" "exit=3"
+check "start --record waits on the permission too" 'j["state"]=="waiting-permission"' "$(run start --record)"
+rm -f "$tmp/desktop.waiting"
+# The grant: HQ opens the recorder, and wait follows it.
+"$tmp/stub-desktop.sh" "$desk" hq-desktop://record/acme
+sleep 0.3
+check "status follows the recorder HQ opened after the grant" 'j["state"]=="awaiting-start" and j["company"]=="acme"' "$(run status)"
+check "stop closes it" 'j["state"]=="closed"' "$(run stop)"
+touch "$tmp/desktop.refuse"
+out="$(run start)"
+check "start reports HQ's refusal" \
+  'j["ok"] is False and j["error"]=="desktop-refused" and j["reason"]=="busy_other_company" and "another company" in j["message"]' "$out"
+expect "a refused start exits 1" "$(code start)" "1"
+rm -f "$tmp/desktop.refuse"
+touch "$tmp/desktop.silent"
+check "start fails when HQ does not answer" 'j["error"]=="no-answer" and "HQ desktop app" in j["message"]' "$(HQ_DESKTOP_WAIT=1 run start)"
+rm -f "$tmp/desktop.silent"
+touch "$tmp/desktop.elsewhere"
+check "start refuses a recorder HQ opened for another HQ folder" 'j["error"]=="destination-mismatch"' "$(run start)"
+sleep 0.3
+check "that recorder was asked to close" 'j["state"] in ("closed", "none")' "$(run status)"
+rm -f "$tmp/desktop.elsewhere"
+rm -rf "$HQ_RECORDER_HOME/active"
 
-# The build recipe is part of the rebuild hash.
-sed -i.bak 's/-swift-version 6 -O/-swift-version 6 -Osize/' "$R" && rm -f "$R.bak"
-check "a build recipe change makes build rebuild" 'j["ok"] and j["built"] is True' "$(run build)"
-check "an unchanged recipe does not rebuild" 'j["ok"] and j["built"] is False' "$(run build)"
+# E2E (US-006): with no HQ desktop app, /record-process prints the install message and starts
+# nothing: HQ is not asked, no recorder opens, nothing is built or installed.
+links_before="$(desktop_links)"; launches_before="$(launches)"
+nowhere="$tmp/no-desktop/HQ.app"
+for sub in start "start --record"; do
+  # shellcheck disable=SC2086
+  out="$(HQ_DESKTOP_APP="$nowhere" run $sub)"
+  check "$sub without the HQ desktop app prints the install message" \
+    'j["ok"] is False and j["error"]=="needs-desktop-app" and "needs the HQ desktop app" in j["message"] and "https://hqforwork.com/install" in j["message"] and j["install"]=="https://hqforwork.com/install" and j["download"].endswith("/releases/latest/download/HQ.dmg")' "$out"
+done
+expect "start without the HQ desktop app exits 1" "$(HQ_DESKTOP_APP="$nowhere" code start)" "1"
+expect "without the HQ desktop app HQ is not asked" "$(desktop_links)" "$links_before"
+expect "without the HQ desktop app no recorder opens" "$(launches)" "$launches_before"
+[ ! -e "$HQ_RECORDER_HOME/active" ] && [ -z "$(find "$HQ_RECORDER_HOME" "$tmp/pack" -name '*.app' -print -quit)" ] && pass=$((pass + 1)) \
+  || { echo "FAIL: without the HQ desktop app nothing may be started, built or installed" >&2; exit 1; }
+check "run without the HQ desktop app prints the install message" 'j["error"]=="needs-desktop-app"' \
+  "$(HQ_DESKTOP_APP="$nowhere" run run describe "$pkg")"
+expect "run without the HQ desktop app exits 3" "$(HQ_DESKTOP_APP="$nowhere" code run describe "$pkg")" "3"
+# A desktop app with another bundle id is not HQ.
+other_app="$tmp/Other/HQ.app"
+mkdir -p "$other_app/Contents/Helpers"
+cp -R "$desk/Contents/Helpers/HQ Capture.app" "$other_app/Contents/Helpers/"
+sed 's/ai.indigo.hq-sync-menubar/com.example.other/' "$desk/Contents/Info.plist" >"$other_app/Contents/Info.plist"
+check "an app with another bundle id is not the HQ desktop app" 'j["error"]=="needs-desktop-app"' "$(HQ_DESKTOP_APP="$other_app" run start)"
+# An HQ desktop app from before HQ Capture was bundled.
+old_app="$tmp/Old/HQ.app"
+mkdir -p "$old_app/Contents"
+cp "$desk/Contents/Info.plist" "$old_app/Contents/Info.plist"
+out="$(HQ_DESKTOP_APP="$old_app" run start)"
+check "an HQ desktop app without HQ Capture asks for an update" \
+  'j["error"]=="desktop-app-outdated" and "Check for updates" in j["message"] and j["install"]=="https://hqforwork.com/install"' "$out"
+check "below macOS 26 recording is refused" 'j["error"]=="macos-too-old" and "macOS 26" in j["message"]' \
+  "$(HQ_RECORDER_MACOS_VERSION=15.6 run start)"
+expect "none of these asked HQ" "$(desktop_links)" "$links_before"
+# The pack carries no compile path and no `open -n` of an app any more.
+expect "the launcher has no compile, sign or app-open path" \
+  "$(grep -cE 'swiftc|xcrun|codesign|xcode-select|open -n|HQ_RECORDER_COMPILE' "$R" || true)" "0"
+[ ! -e "$here/../app" ] && pass=$((pass + 1)) \
+  || { echo "FAIL: the pack must not ship app sources any more" >&2; exit 1; }
 
-doc="$(bash "$R" doctor 2>/dev/null || true)"
-if [ "$(uname -s)" = Darwin ]; then
-  check "doctor reports each check on macOS" '"command_line_tools" in j and "macos_26_or_later" in j' "$doc"
-else
+doc="$(run doctor)"
+check "doctor reports macOS 26, the HQ desktop app and its HQ Capture" \
+  "j[\"ok\"] and j[\"macos_26_or_later\"] and j[\"hq_desktop_app_detail\"]==\"$desk\" and j[\"hq_capture\"]" "$doc"
+doc="$(HQ_DESKTOP_APP="$nowhere" run doctor)"
+check "doctor without the HQ desktop app gives the install link" \
+  'j["ok"] is False and j["hq_desktop_app"] is False and "https://hqforwork.com/install" in j["fix"]' "$doc"
+expect "doctor exits 1 when a check fails" "$(HQ_DESKTOP_APP="$nowhere" code doctor)" "1"
+doc="$(HQ_RECORDER_MACOS_VERSION=15.6 run doctor)"
+check "doctor below macOS 26 says so" 'j["ok"] is False and j["macos_26_or_later"] is False and "macOS 26" in j["fix"]' "$doc"
+doc="$(env -u HQ_RECORDER_MACOS_VERSION bash "$R" doctor 2>/dev/null || true)"
+if [ "$(uname -s)" != Darwin ]; then
   check "doctor fails off macOS with a fix" 'j["ok"] is False and j["macos"] is False and "fix" in j' "$doc"
+else
+  check "doctor reports each check on macOS" '"hq_desktop_app" in j and "macos_26_or_later" in j' "$doc"
 fi
 
 # doctor prints its JSON, including the fix line, on a machine without python3.
@@ -763,452 +829,7 @@ done
 hash -r
 expect "the no-python3 PATH has no python3" "$(PATH="$nopy" command -v python3 || echo none)" "none"
 doc="$(PATH="$nopy" bash "$R" doctor 2>/dev/null || true)"
-check "doctor prints valid JSON without python3" '"ok" in j and "macos" in j and "apple_silicon" in j' "$doc"
-# Force a failing check (an Intel uname) to see the fix line without python3.
-rm -f "$nopy/uname"
-printf '#!/bin/sh\n[ "$1" = -m ] && echo x86_64 || /usr/bin/uname "$@"\n' >"$nopy/uname"
-chmod +x "$nopy/uname"
-doc="$(PATH="$nopy" bash "$R" doctor 2>/dev/null || true)"
-expect "doctor exits 1 when a check fails" "$(set +e; PATH="$nopy" bash "$R" doctor >/dev/null 2>&1; echo $?)" "1"
-check "doctor prints the fix line without python3" \
-  'j["ok"] is False and j["apple_silicon"] is False and j["apple_silicon_detail"]=="x86_64" and j["fix"].startswith("Run: xcode-select --install")' "$doc"
-
-# Toolchain choice. Fake xcrun and xcode-select read marker files in $DEVELOPER_DIR: swiftc (a
-# compiler is there), sdk-version, macros (the probe compiles; without it the probe fails as
-# Command Line Tools with the macOS 27 SDK do; an older SDK whose @State is not a macro also has
-# it) and license (the probe fails as an Xcode with an unaccepted license does). Only doctor_checks on macOS
-# reads the toolchain, so these run on macOS only.
-if [ "$(uname -s)" = Darwin ]; then
-  tc="$tmp/toolchains"; fakebin="$tc/bin"
-  mkdir -p "$fakebin"
-  cat >"$fakebin/xcrun" <<'EOF'
-#!/bin/bash
-d="${DEVELOPER_DIR:?}"
-case "$*" in
-  "--sdk macosx --find swiftc") [ -e "$d/swiftc" ] && echo "$d/swiftc" ;;
-  "--sdk macosx swiftc --version") echo "Apple Swift version 6.4 (fixture)" ;;
-  "--sdk macosx --show-sdk-path") echo "$d/sdk" ;;
-  "--sdk macosx --show-sdk-version") cat "$d/sdk-version" ;;
-  "--sdk macosx swiftc "*-typecheck*)
-    [ ! -e "$d/license" ] || { echo "You have not agreed to the Xcode license agreements." >&2; exit 69; }
-    [ -e "$d/macros" ] || { echo "error: external macro implementation type 'SwiftUIMacros.StateMacro' could not be found for macro 'State()'; plugin for module 'SwiftUIMacros' not found" >&2; exit 1; } ;;
-  *) exit 2 ;;
-esac
-EOF
-  printf '#!/bin/sh\n[ -n "$FAKE_XCODE_SELECT" ] || exit 2\necho "$FAKE_XCODE_SELECT"\n' >"$fakebin/xcode-select"
-  chmod +x "$fakebin/xcrun" "$fakebin/xcode-select"
-  # make_toolchain <dir> <sdk version> <macros: yes|no>
-  make_toolchain() {
-    mkdir -p "$1/sdk/System/Library/Frameworks/ScreenCaptureKit.framework"
-    rm -f "$1/swiftc"; touch "$1/swiftc"; echo "$2" >"$1/sdk-version"
-    if [ "$3" = yes ]; then touch "$1/macros"; else rm -f "$1/macros"; fi
-  }
-  clt="$tc/CommandLineTools" xcode="$tc/Xcode.app/Contents/Developer"
-  tdoctor() { # tdoctor <xcode-select answer> [DEVELOPER_DIR]
-    local dd=()
-    [ -z "${2:-}" ] || dd=("DEVELOPER_DIR=$2")
-    env -u DEVELOPER_DIR PATH="$fakebin:$PATH" FAKE_XCODE_SELECT="$1" ${dd[@]+"${dd[@]}"} \
-      HQ_RECORDER_CLT_DIR="$clt" HQ_RECORDER_XCODE_DIR="$xcode" bash "$R" doctor 2>/dev/null || true
-  }
-
-  make_toolchain "$clt" 27.0 no; make_toolchain "$xcode" 27.0 yes
-  check "doctor moves to Xcode when the Command Line Tools lack SwiftUI macros" \
-    'j["ok"] and j["swiftui_macros"] and j["command_line_tools_detail"].endswith("/Xcode.app/Contents/Developer")' "$(tdoctor "$clt")"
-  check "doctor moves to /Applications Xcode when xcode-select is unset" \
-    'j["ok"] and j["command_line_tools_detail"].endswith("/Xcode.app/Contents/Developer")' "$(tdoctor "")"
-  check "doctor falls back from a DEVELOPER_DIR that lacks SwiftUI macros to Xcode" \
-    'j["ok"] and j["command_line_tools_detail"].endswith("/Xcode.app/Contents/Developer")' "$(tdoctor "$clt" "$clt")"
-  make_toolchain "$clt" 26.5 yes
-  check "DEVELOPER_DIR wins when it can build SwiftUI" \
-    'j["ok"] and j["command_line_tools_detail"].endswith("/CommandLineTools")' "$(tdoctor "$xcode" "$clt")"
-  check "working Command Line Tools come before /Applications Xcode" \
-    'j["ok"] and j["command_line_tools_detail"].endswith("/CommandLineTools")' "$(tdoctor "$clt")"
-  # An older Xcode (macOS 15 SDK, where @State is not a macro, so its probe compiles) next to
-  # current Command Line Tools: the Command Line Tools must be used, whichever is selected.
-  make_toolchain "$xcode" 15.5 yes
-  check "an Xcode with a macOS 15 SDK is not chosen over Command Line Tools 26" \
-    'j["ok"] and j["command_line_tools_detail"].endswith("/CommandLineTools") and j["macos_sdk_detail"]=="26.5"' "$(tdoctor "")"
-  check "an Xcode with a macOS 15 SDK is skipped even when xcode-select picks it" \
-    'j["ok"] and j["command_line_tools_detail"].endswith("/CommandLineTools")' "$(tdoctor "$xcode")"
-  make_toolchain "$clt" 15.5 yes
-  doc="$(tdoctor "$clt")"
-  check "doctor fails when every SDK is older than macOS 26" \
-    'j["ok"] is False and j["macos_sdk"] is False and j["macos_sdk_detail"]=="15.5"' "$doc"
-  check "the old-SDK fix names the SDK and asks for macOS 26" \
-    '"macOS 26 SDK or newer" in j["fix"] and "15.5" in j["fix"]' "$doc"
-  # A probe that fails for another reason gets a generic message, not the plugin one.
-  make_toolchain "$clt" 27.0 no; make_toolchain "$xcode" 27.0 yes; touch "$xcode/license"
-  doc="$(tdoctor "$clt")"
-  check "the plugin message is kept when the first new-SDK tools hit the plugin error" \
-    'j["ok"] is False and j["swiftui_macros"] is False and "missing Swift macro plugin" in j["compile_probe_detail"]' "$doc"
-  rm -rf "$clt"; make_toolchain "$xcode" 27.0 yes; touch "$xcode/license"
-  doc="$(tdoctor "$xcode")"
-  check "a probe failure without the plugin error gets the generic toolchain fix" \
-    'j["ok"] is False and j["swiftui_macros"] is False and "license" in j["compile_probe_detail"] and "macro plugin" not in j["compile_probe_detail"]' "$doc"
-  rm -f "$xcode/license"; make_toolchain "$clt" 26.5 yes
-
-  rm -rf "$tc/Xcode.app"
-  check "Command Line Tools alone still work when their SDK needs no plugin" \
-    'j["ok"] and j["swiftui_macros"] and j["command_line_tools_detail"].endswith("/CommandLineTools")' "$(tdoctor "$clt")"
-  make_toolchain "$clt" 27.0 no
-  doc="$(tdoctor "$clt")"
-  check "doctor fails when no toolchain can build SwiftUI macros" \
-    'j["ok"] is False and j["command_line_tools"] and j["swiftui_macros"] is False and j["swiftui_macros_detail"].endswith("/CommandLineTools")' "$doc"
-  check "the fix recommends the pack update and names the missing plugin and SDK" \
-    '"hq install hq-capture" in j["fix"] and "missing Swift macro plugin" in j["compile_probe_detail"] and "27.0" in j["compile_probe_detail"]' "$doc"
-  # build refuses before compiling, with the same plain fix, and installs nothing.
-  tapp="$tc/apps/HQ Capture.app"
-  doc="$(env -u DEVELOPER_DIR -u HQ_RECORDER_COMPILE PATH="$fakebin:$PATH" FAKE_XCODE_SELECT="$clt" \
-    HQ_RECORDER_CLT_DIR="$clt" HQ_RECORDER_XCODE_DIR="$xcode" HQ_RECORDER_HOME="$tc/state" \
-    HQ_RECORDER_APP="$tapp" bash "$R" build --force 2>/dev/null || true)"
-  check "build without a capable toolchain fails with the pack update fix" \
-    'j["ok"] is False and j["swiftui_macros"] is False and "hq install hq-capture" in j["fix"]' "$doc"
-  installed=no; [ -e "$tapp" ] && installed=yes
-  expect "build without a SwiftUI-capable toolchain installs nothing" "$installed" "no"
-
-  rm -rf "$clt"
-  doc="$(tdoctor "")"
-  check "doctor with no developer tools gives the Command Line Tools fix" \
-    'j["ok"] is False and j["command_line_tools"] is False and j["fix"].startswith("Run: xcode-select --install")' "$doc"
-fi
-# Compile probe and the missing-macro build message. A fake xcrun/swiftc stands in for the
-# toolchain, so these checks do not need Command Line Tools. They call the pack script, not the
-# copy sed changed above (that copy's -O flag was rewritten to -Osize).
-src_script="$here/../scripts/hq-record-process.sh"
-# Isolate this single-candidate fixture from the machine's real CLT/Xcode fallback.
-# Multi-candidate fallback is tested separately.
-export HQ_RECORDER_CLT_DIR="$tmp/no-clt" HQ_RECORDER_XCODE_DIR="$tmp/no-xcode"
-probe_home="$tmp/probe-home"
-probe_bin="$tmp/probe-bin"
-probe_dev="$tmp/probe-dev"
-probe_sdk="$tmp/probe-sdk"
-probe_state="$tmp/probe-state"
-PROBE_XCRUN_LOG="$tmp/probe-xcrun.log"
-PROBE_SRC_COPY="$tmp/probe-source.swift"
-mkdir -p "$probe_home" "$probe_bin" "$probe_dev" "$probe_state" \
-  "$probe_sdk/System/Library/Frameworks/ScreenCaptureKit.framework"
-cat >"$probe_bin/uname" <<'EOF'
-#!/bin/sh
-case "${1:-}" in
-  -m) echo arm64 ;;
-  *) echo Darwin ;;
-esac
-EOF
-cat >"$probe_bin/sw_vers" <<'EOF'
-#!/bin/sh
-echo 26.1
-EOF
-cat >"$probe_bin/xcode-select" <<'EOF'
-#!/bin/sh
-echo "${PROBE_DEV:-/missing}"
-EOF
-cat >"$probe_bin/codesign" <<'EOF'
-#!/bin/sh
-echo "codesign invoked" >>"$PROBE_XCRUN_LOG"
-exit 99
-EOF
-cat >"$probe_bin/open" <<'EOF'
-#!/bin/sh
-echo "open invoked" >>"$PROBE_XCRUN_LOG"
-exit 99
-EOF
-cat >"$probe_bin/xcrun" <<'EOF'
-#!/bin/bash
-printf '%s\n' "$*" >>"$PROBE_XCRUN_LOG"
-if [ "${1:-}" = "--sdk" ] && [ "${3:-}" = "--find" ]; then
-  [ "${PROBE_FIND_FAIL:-}" = 1 ] && exit 1
-  echo /fake/swiftc
-  exit 0
-fi
-if [ "${1:-}" = "--sdk" ] && [ "${3:-}" = "--show-sdk-path" ]; then
-  echo "$PROBE_SDK"
-  exit 0
-fi
-if [ "${1:-}" = "--sdk" ] && [ "${3:-}" = "--show-sdk-version" ]; then
-  echo "${PROBE_SDK_VERSION:-27.0}"
-  exit 0
-fi
-if [ "${1:-}" = "--sdk" ] && [ "${3:-}" = "swiftc" ] && [ "${4:-}" = "--version" ]; then
-  echo "Apple Swift version ${PROBE_SWIFT_VERSION} (swiftlang-test)"
-  exit 0
-fi
-if [ "${1:-}" = "--sdk" ] && [ "${3:-}" = "swiftc" ]; then
-  prev="" src=""
-  for a in "$@"; do
-    [ "$prev" = "-typecheck" ] && src="$a"
-    prev="$a"
-  done
-  [ -n "$src" ] && [ -n "${PROBE_SRC_COPY:-}" ] && cp "$src" "$PROBE_SRC_COPY"
-  if [ "${PROBE_SWIFTC_FAIL:-}" = 1 ]; then
-    echo "error: plugin for module 'SwiftUIMacros' not found" >&2
-    exit 1
-  fi
-  if [ "${PROBE_SWIFTC_FAIL:-}" = other ]; then
-    echo "error: cannot find 'Missing' in scope" >&2
-    exit 1
-  fi
-  if [ "${PROBE_SWIFTC_FAIL:-}" = hang ]; then
-    echo $$ >"${PROBE_HANG_PID:-/dev/null}"
-    sleep 60
-    exit 0
-  fi
-  exit 0
-fi
-echo "unexpected xcrun: $*" >&2
-exit 1
-EOF
-chmod +x "$probe_bin"/*
-probe_typechecks() {
-  if [ -f "$PROBE_XCRUN_LOG" ]; then
-    grep -c -- '-typecheck' "$PROBE_XCRUN_LOG" || true
-  else
-    echo 0
-  fi
-}
-run_probe_doctor() {
-  HOME="$probe_home" \
-  HQ_RECORDER_HOME="$probe_state" \
-  DEVELOPER_DIR="$probe_dev" \
-  PATH="$probe_bin:$PATH" \
-  PROBE_XCRUN_LOG="$PROBE_XCRUN_LOG" \
-  PROBE_SDK="$probe_sdk" \
-  PROBE_DEV="$probe_dev" \
-  PROBE_SRC_COPY="$PROBE_SRC_COPY" \
-  PROBE_SWIFT_VERSION="${PROBE_SWIFT_VERSION:-6.4}" \
-  PROBE_SDK_VERSION="${PROBE_SDK_VERSION:-27.0}" \
-  PROBE_SWIFTC_FAIL="${PROBE_SWIFTC_FAIL:-}" \
-  PROBE_FIND_FAIL="${PROBE_FIND_FAIL:-}" \
-  PROBE_HANG_PID="${PROBE_HANG_PID:-}" \
-  HQ_RECORDER_PROBE_TIMEOUT="${HQ_RECORDER_PROBE_TIMEOUT:-30}" \
-  bash "$src_script" doctor 2>>"$tmp/probe-doctor.err"
-}
-
-: >"$PROBE_XCRUN_LOG"
-: >"$tmp/probe-doctor.err"
-export PROBE_SWIFT_VERSION=6.4 PROBE_SDK_VERSION=27.0 PROBE_SWIFTC_FAIL= PROBE_FIND_FAIL= HQ_RECORDER_PROBE_TIMEOUT=30
-doc="$(run_probe_doctor)"
-check "doctor compile probe passes on a fake toolchain" \
-  'j["ok"] is True and j["compile_probe"] is True and j["compile_probe_detail"]=="Swift 6.4, macOS SDK 27.0" and "fix" not in j and "message" not in j' \
-  "$doc"
-probe_line="$(grep -- '-typecheck' "$PROBE_XCRUN_LOG" | head -n 1)"
-case "$probe_line" in
-  "--sdk macosx swiftc -parse-as-library -swift-version 6 -O -target arm64-apple-macos26.0 -framework AVKit -typecheck "*)
-    pass=$((pass + 1)) ;;
-  *) printf 'FAIL: probe flags: %s\n' "$probe_line" >&2; exit 1 ;;
-esac
-case "$probe_line" in
-  *" -o "*|*-o\ *) printf 'FAIL: probe emitted a binary flag: %s\n' "$probe_line" >&2; exit 1 ;;
-  *) pass=$((pass + 1)) ;;
-esac
-grep -q 'typealias CaptureState<Value> = SwiftUI.State<Value>' "$PROBE_SRC_COPY" \
-  && pass=$((pass + 1)) || { echo "FAIL: probe source does not use SwiftUI.State" >&2; exit 1; }
-grep -q '@Observable' "$PROBE_SRC_COPY" \
-  && pass=$((pass + 1)) || { echo "FAIL: probe source does not use @Observable" >&2; exit 1; }
-grep -q 'Binding(' "$PROBE_SRC_COPY" \
-  && pass=$((pass + 1)) || { echo "FAIL: probe source does not use Binding" >&2; exit 1; }
-if grep -E 'codesign invoked|open invoked' "$PROBE_XCRUN_LOG"; then
-  echo "FAIL: doctor invoked codesign or open" >&2; exit 1
-fi
-pass=$((pass + 1))
-expect "a passing probe is cached for the same toolchain" "$(probe_typechecks)" "1"
-doc="$(run_probe_doctor)"
-check "a cached probe still passes without another typecheck" \
-  'j["ok"] is True and j["compile_probe"] is True and j["compile_probe_detail"]=="Swift 6.4, macOS SDK 27.0"' \
-  "$doc"
-expect "the cached probe did not typecheck again" "$(probe_typechecks)" "1"
-PROBE_SWIFT_VERSION=6.5
-doc="$(run_probe_doctor)"
-check "a new Swift version invalidates the probe cache" \
-  'j["ok"] is True and j["compile_probe_detail"]=="Swift 6.5, macOS SDK 27.0"' "$doc"
-expect "a new Swift version typechecks again" "$(probe_typechecks)" "2"
-[ -f "$probe_state/.doctor-probe.cache" ] && pass=$((pass + 1)) \
-  || { echo "FAIL: probe cache was not written under the recorder state dir" >&2; exit 1; }
-[ ! -e "$probe_home/Library/Application Support/HQ Capture/.doctor-probe.cache" ] && pass=$((pass + 1)) \
-  || { echo "FAIL: probe cache escaped into HOME" >&2; exit 1; }
-
-sdk_a="$tmp/sdk-real-a"
-sdk_b="$tmp/sdk-real-b"
-sdk_link="$tmp/sdk-link"
-mkdir -p "$sdk_a/System/Library/Frameworks/ScreenCaptureKit.framework" \
-  "$sdk_b/System/Library/Frameworks/ScreenCaptureKit.framework"
-ln -sfn "$sdk_a" "$sdk_link"
-probe_sdk="$sdk_link"
-PROBE_SWIFT_VERSION=6.4 PROBE_SDK_VERSION=27.0
-sdk_before="$(probe_typechecks)"
-doc="$(run_probe_doctor)"
-check "an SDK symlink path typechecks and passes" \
-  'j["ok"] is True and j["compile_probe_detail"]=="Swift 6.4, macOS SDK 27.0"' "$doc"
-expect "the first resolved SDK typechecks" "$(probe_typechecks)" "$((sdk_before + 1))"
-doc="$(run_probe_doctor)"
-expect "the same resolved SDK is cached" "$(probe_typechecks)" "$((sdk_before + 1))"
-ln -sfn "$sdk_b" "$sdk_link"
-doc="$(run_probe_doctor)"
-check "a new SDK directory behind the same path invalidates the cache" \
-  'j["ok"] is True and j["compile_probe_detail"]=="Swift 6.4, macOS SDK 27.0"' "$doc"
-expect "retargeting the SDK symlink typechecks again" "$(probe_typechecks)" "$((sdk_before + 2))"
-PROBE_SDK_VERSION=27.1
-doc="$(run_probe_doctor)"
-check "an SDK version change invalidates the cache" \
-  'j["ok"] is True and j["compile_probe_detail"]=="Swift 6.4, macOS SDK 27.1"' "$doc"
-expect "a new SDK version typechecks again" "$(probe_typechecks)" "$((sdk_before + 3))"
-probe_sdk="$tmp/probe-sdk"
-PROBE_SDK_VERSION=27.0
-
-rm -rf "$probe_state"; mkdir -p "$probe_state"
-: >"$PROBE_XCRUN_LOG"
-PROBE_SWIFT_VERSION=6.4 PROBE_SWIFTC_FAIL=1
-doc="$(run_probe_doctor || true)"
-check "a missing macro plugin fails the doctor probe" \
-  'j["ok"] is False and j["compile_probe"] is False and j["message"]=="The installed Command Line Tools cannot build this version of HQ Capture." and j["fix"]=="Update HQ Capture with: hq install hq-capture. If it still fails, update the Command Line Tools in System Settings > General > Software Update." and j["compile_probe_detail"]=="Swift 6.4, macOS SDK 27.0: missing Swift macro plugin (plugin for module not found)"' \
-  "$doc"
-expect "a failed probe is not cached" "$(probe_typechecks)" "1"
-expect "doctor exits 1 when the compile probe fails" "$(set +e; PROBE_SWIFTC_FAIL=1 run_probe_doctor >/dev/null; echo $?)" "1"
-expect "a failed probe typechecks again on the next doctor" "$(probe_typechecks)" "2"
-
-rm -rf "$probe_state"; mkdir -p "$probe_state"
-: >"$PROBE_XCRUN_LOG"
-PROBE_SWIFTC_FAIL=other
-doc="$(run_probe_doctor || true)"
-check "any other probe failure names the toolchain and the features" \
-  'j["ok"] is False and j["compile_probe"] is False and j["message"]=="The installed Command Line Tools cannot build this version of HQ Capture." and j["compile_probe_detail"].startswith("Swift 6.4, macOS SDK 27.0: the toolchain could not typecheck SwiftUI State, Observable and Binding") and "cannot find" in j["compile_probe_detail"] and "Missing" in j["compile_probe_detail"] and "in scope" in j["compile_probe_detail"]' \
-  "$doc"
-
-rm -rf "$probe_state"; mkdir -p "$probe_state"
-: >"$PROBE_XCRUN_LOG"
-PROBE_SWIFTC_FAIL= PROBE_FIND_FAIL=1
-doc="$(run_probe_doctor || true)"
-check "doctor skips the probe when the tools are missing and keeps the install fix" \
-  'j["ok"] is False and j["command_line_tools"] is False and "compile_probe" not in j and j["fix"].startswith("Run: xcode-select --install")' \
-  "$doc"
-expect "a missing compiler does not typecheck" "$(probe_typechecks)" "0"
-PROBE_FIND_FAIL=
-
-cat >"$tmp/plugin-fail-compile.sh" <<'EOF'
-#!/bin/sh
-echo "error: External macro implementation type 'SwiftUIMacros.StateMacro' could not be found for macro 'State'; plugin for module 'SwiftUIMacros' not found" >&2
-exit 1
-EOF
-cat >"$tmp/plain-fail-compile.sh" <<'EOF'
-#!/bin/sh
-echo "error: cannot find 'Missing' in scope" >&2
-exit 1
-EOF
-chmod +x "$tmp/plugin-fail-compile.sh" "$tmp/plain-fail-compile.sh"
-out="$(HQ_RECORDER_COMPILE="$tmp/plugin-fail-compile.sh" run build --force)"
-check "a missing macro plugin names the Command Line Tools in the build error" \
-  "j['ok'] is False and j['error']=='build-failed' and j['message']=='The installed Command Line Tools cannot build this version of HQ Capture. Update HQ Capture with: hq install hq-capture. If it still fails, update the Command Line Tools in System Settings > General > Software Update. Details: $HQ_RECORDER_HOME/build.log'" \
-  "$out"
-out="$(HQ_RECORDER_COMPILE="$tmp/plain-fail-compile.sh" run build --force)"
-check "other build failures still point at the build log" \
-  'j["error"]=="build-failed" and j["message"].startswith("HQ Capture did not compile. Details: ")' \
-  "$out"
-
-rm -rf "$probe_state"; mkdir -p "$probe_state"
-: >"$PROBE_XCRUN_LOG"
-PROBE_SWIFTC_FAIL=hang
-PROBE_HANG_PID="$tmp/hang.pid"
-rm -f "$PROBE_HANG_PID"
-HQ_RECORDER_PROBE_TIMEOUT=1
-hang_rc=0
-doc="$(run_probe_doctor)" || hang_rc=$?
-check "a hung compiler is reported as a timed out check" \
-  'j["ok"] is False and j["compile_probe"] is False and j["message"]=="The compile check timed out." and "check timed out" in j["compile_probe_detail"] and j["compile_probe_detail"].startswith("Swift 6.4, macOS SDK 27.0:") and j["fix"]=="Update HQ Capture with: hq install hq-capture. If it still fails, update the Command Line Tools in System Settings > General > Software Update."' \
-  "$doc"
-expect "a hung compiler makes doctor exit 1" "$hang_rc" "1"
-expect "a timed out probe is not cached" "$(probe_typechecks)" "1"
-if [ -f "$PROBE_HANG_PID" ] && kill -0 "$(cat "$PROBE_HANG_PID")" 2>/dev/null; then
-  kill -KILL "$(cat "$PROBE_HANG_PID")" 2>/dev/null || true
-  echo "FAIL: timed out compiler was still running" >&2
-  exit 1
-fi
-pass=$((pass + 1))
-hang_rc=0
-doc="$(run_probe_doctor)" || hang_rc=$?
-expect "a timed out probe typechecks again" "$(probe_typechecks)" "2"
-expect "the retry of a timed out probe still exits 1" "$hang_rc" "1"
-
-rm -rf "$probe_state"; mkdir -p "$probe_state"
-: >"$PROBE_XCRUN_LOG"
-interrupt_root="$tmp/interrupt-tmp"
-mkdir -p "$interrupt_root"
-PROBE_HANG_PID="$tmp/interrupt-hang.pid"
-rm -f "$PROBE_HANG_PID"
-HQ_RECORDER_PROBE_TIMEOUT=30
-# A job started with & ignores SIGINT, and bash will not trap that signal.
-# Reset it so doctor sees the same interrupt a foreground Ctrl-C delivers.
-TMPDIR="$interrupt_root" \
-  HOME="$probe_home" \
-  HQ_RECORDER_HOME="$probe_state" \
-  DEVELOPER_DIR="$probe_dev" \
-  PATH="$probe_bin:$PATH" \
-  PROBE_XCRUN_LOG="$PROBE_XCRUN_LOG" \
-  PROBE_SDK="$probe_sdk" \
-  PROBE_DEV="$probe_dev" \
-  PROBE_SRC_COPY="$PROBE_SRC_COPY" \
-  PROBE_SWIFT_VERSION=6.4 \
-  PROBE_SDK_VERSION=27.0 \
-  PROBE_SWIFTC_FAIL=hang \
-  PROBE_HANG_PID="$PROBE_HANG_PID" \
-  HQ_RECORDER_PROBE_TIMEOUT=30 \
-  perl -e '$SIG{INT} = "DEFAULT"; exec @ARGV or die $!' \
-  bash "$src_script" doctor >"$tmp/interrupt.out" 2>>"$tmp/probe-doctor.err" &
-interrupt_pid=$!
-started=0
-for _ in $(seq 1 50); do
-  if grep -q -- '-typecheck' "$PROBE_XCRUN_LOG"; then started=1; break; fi
-  sleep 0.1
-done
-[ "$started" = 1 ] || { echo "FAIL: interrupt test never started the probe" >&2; kill -KILL "$interrupt_pid" 2>/dev/null || true; exit 1; }
-kill -INT "$interrupt_pid" 2>/dev/null || true
-stopped=0
-for _ in $(seq 1 50); do
-  if ! kill -0 "$interrupt_pid" 2>/dev/null; then stopped=1; break; fi
-  sleep 0.1
-done
-if [ "$stopped" != 1 ]; then
-  kill -KILL "$interrupt_pid" 2>/dev/null || true
-  echo "FAIL: interrupt did not stop doctor" >&2
-  exit 1
-fi
-wait "$interrupt_pid" 2>/dev/null || true
-if find "$interrupt_root" -name 'hq-capture-doctor.*' -print -quit | grep -q .; then
-  echo "FAIL: probe temp dir survived interrupt" >&2
-  exit 1
-fi
-pass=$((pass + 1))
-if [ -f "$PROBE_HANG_PID" ] && kill -0 "$(cat "$PROBE_HANG_PID")" 2>/dev/null; then
-  kill -KILL "$(cat "$PROBE_HANG_PID")" 2>/dev/null || true
-  echo "FAIL: interrupt left the compiler running" >&2
-  exit 1
-fi
-pass=$((pass + 1))
-
-rm -rf "$probe_state"; mkdir -p "$probe_state"
-: >"$PROBE_XCRUN_LOG"
-PROBE_SWIFTC_FAIL=1
-HQ_RECORDER_PROBE_TIMEOUT=30
-PROBE_HANG_PID=
-build_rc=0
-# The suite exports a stub compiler. build skips doctor while that is set.
-build_doc="$(
-  HOME="$probe_home" \
-  HQ_RECORDER_HOME="$probe_state" \
-  DEVELOPER_DIR="$probe_dev" \
-  PATH="$probe_bin:$PATH" \
-  PROBE_XCRUN_LOG="$PROBE_XCRUN_LOG" \
-  PROBE_SDK="$probe_sdk" \
-  PROBE_DEV="$probe_dev" \
-  PROBE_SWIFT_VERSION=6.4 \
-  PROBE_SDK_VERSION=27.0 \
-  PROBE_SWIFTC_FAIL=1 \
-  HQ_RECORDER_COMPILE= \
-  bash "$src_script" build --force 2>>"$tmp/probe-doctor.err"
-)" || build_rc=$?
-check "build prints the doctor result when the probe fails" \
-  'j["ok"] is False and j["compile_probe"] is False and "message" in j' \
-  "$build_doc"
-expect "build exits 1 when doctor fails" "$build_rc" "1"
-expect "build runs the probe once" "$(probe_typechecks)" "1"
-PROBE_SWIFTC_FAIL=
+check "doctor prints valid JSON and the fix line without python3" \
+  '"ok" in j and j["ok"] is False and "macos_26_or_later" in j and "fix" in j' "$doc"
 
 echo "record-process launcher: $pass checks passed"
