@@ -490,21 +490,49 @@ current_state() {
     echo "${launch:-none}"
     return
   fi
-  local state
-  state="$(python3 -I -c 'import json,sys;print(json.load(open(sys.argv[1]))["state"])' "$status_file")"
+  local reading state pid
+  reading="$(read_status_state)" || { echo unreadable; return; }
+  state="${reading%%$'\t'*}" pid="${reading#*$'\t'}"
   case "$state" in
     closed|saved|failed) echo "$state" ;;
     # The app quit for macOS Quit & Reopen after a Screen Recording grant. It stays relaunching
     # while that app is still quitting and for a short wait after, while macOS reopens it and the
     # reopened app writes its own status. If none does, it was a plain quit: closed.
     relaunching)
-      if is_app_process "$(status_pid)" || [ "$(status_age)" -lt "${HQ_RECORDER_RELAUNCH_WAIT:-30}" ]; then
+      if is_app_process "$pid" || [ "$(status_age)" -lt "${HQ_RECORDER_RELAUNCH_WAIT:-30}" ]; then
         echo relaunching
       else
         echo closed
       fi ;;
-    *) if is_app_process "$(status_pid)"; then echo "$state"; else echo lost; fi ;;
+    *) if is_app_process "$pid"; then echo "$state"; else echo lost; fi ;;
   esac
+}
+
+# read_status <python>: runs the python code on status.json and prints its output. A writer that
+# does not replace the file atomically can leave it empty or half written for a moment, so a
+# failed read is retried briefly; returns 1 when it is still unreadable (no reading this time).
+read_status() {
+  local attempt reading
+  for attempt in 1 2 3 4 5 6 7 8 9 10; do
+    if reading="$(python3 -I -c "$1" "$status_file" 2>/dev/null)"; then
+      printf '%s\n' "$reading"
+      return 0
+    fi
+    [ "$attempt" = 10 ] || sleep 0.05
+  done
+  return 1
+}
+
+# Prints "<state><TAB><pid>" from one read of status.json; returns 1 when it is unreadable. A
+# state that is not a non-empty string is unreadable too.
+read_status_state() {
+  read_status '
+import json, sys
+s = json.load(open(sys.argv[1]))
+state = s.get("state") if isinstance(s, dict) else None
+if not isinstance(state, str) or not state: sys.exit(1)
+pid = s.get("pid")
+print("%s\t%s" % (state, pid if isinstance(pid, int) else ""))'
 }
 
 # Seconds since status.json was last written.
@@ -522,15 +550,19 @@ app_is_open() {
   esac
 }
 
-# Prints the company status.json belongs to, or nothing.
-status_company() {
-  python3 -I -c 'import json,sys;c=json.load(open(sys.argv[1])).get("company");print(c if isinstance(c,str) else "")' "$status_file" 2>/dev/null || true
-}
-
 # True when HQ Capture's status belongs to a company other than the bound one. A status
-# with no company counts as another company's.
+# with no company counts as another company's. An unreadable status is not known to be
+# another company's: false, and current_state reports it as unreadable.
 status_for_other_company() {
-  [ -f "$status_file" ] && [ "$(status_company)" != "$company" ]
+  [ -f "$status_file" ] || return 1
+  local owner
+  owner="$(read_status '
+import json, sys
+s = json.load(open(sys.argv[1]))
+if not isinstance(s, dict): sys.exit(1)
+c = s.get("company")
+print(c if isinstance(c, str) else "")')" || return 1
+  [ "$owner" != "$company" ]
 }
 
 # True when HQ Capture is open for another company. Once that company's app has exited, its
@@ -552,6 +584,10 @@ print_status() {
   local state
   state="$(current_state)"
   if [ "$state" = none ]; then json ok true state none; return; fi
+  if [ "$state" = unreadable ]; then
+    json ok false error status-unreadable message "HQ Capture's status file can't be read right now. Run status again in a moment."
+    return
+  fi
   case "$state" in waiting-permission|opening|refused) print_launch "$state"; return ;; esac
   # After a save, mediaIssues lists the saved package's track files that are not as long as the
   # recording (from its manifest.json), and issue is the plain note HQ Capture showed.
@@ -730,10 +766,14 @@ cmd_wait() {
         sleep 1; continue ;;
       refused) print_status; return 0 ;;
       none) print_status; return 0 ;;
+      unreadable)
+        if [ "$(date +%s)" -ge "$deadline" ]; then print_status; exit 3; fi
+        sleep 0.2; continue ;;
     esac
     line="$(python3 -I -c '
 import json, sys
 s = json.load(open(sys.argv[1]))
+if not isinstance(s, dict) or not sys.argv[2]: sys.exit(1)
 out = {"event": "state", "state": sys.argv[2]}
 for key in ("paused", "durationSeconds", "recording", "reason", "issue"):
     if s.get(key) is not None: out[key] = s[key]
@@ -764,7 +804,8 @@ cmd_stop() {
   : >"$control_dir/stop.request"
   local limit="${HQ_RECORDER_STOP_WAIT:-20}" state
   for _ in $(seq 1 $((limit * 4))); do
-    app_is_open || break
+    # An unreadable status (a write in progress) is no reading: keep waiting.
+    [ "$(current_state)" = unreadable ] || app_is_open || break
     sleep 0.25
   done
   # Still open after the wait: finalizing means the files are being written, a saved or failed

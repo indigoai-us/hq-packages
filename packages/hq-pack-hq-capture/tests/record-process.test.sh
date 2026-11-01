@@ -330,7 +330,7 @@ check "wait ends with the mediaIssues from the package" \
   'j["state"]=="saved" and j["mediaIssues"][0]["kind"]=="microphone" and j["mediaIssues"][0]["fileSeconds"]==9.0 and j["issue"]==j["mediaIssues"][0]["message"]' "$(last "$out")"
 check "status lists each media issue with its file and message" \
   'j["mediaIssues"][0]["relativePath"]=="tracks/microphone-001.m4a" and "may not line up" in j["mediaIssues"][0]["message"]' "$(run status)"
-python3 -I -c 'import json,sys; p=sys.argv[1]; s=json.load(open(p)); s.pop("issue"); json.dump(s, open(p, "w"))' "$HQ_RECORDER_HOME/active/status.json"
+python3 -I -c 'import json,os,sys; p=sys.argv[1]; s=json.load(open(p)); s.pop("issue"); json.dump(s, open(p + ".t", "w")); os.replace(p + ".t", p)' "$HQ_RECORDER_HOME/active/status.json"
 check "status uses the first media issue as the note when the app gave none" \
   'j["issue"].startswith("The narration file is 9.0 seconds long") and len(j["mediaIssues"])==1' "$(run status)"
 printf 'not json' >"$hq/companies/acme/recordings/demo.hqrec/manifest.json"
@@ -403,7 +403,7 @@ check "stop closes the new app" 'j["state"]=="closed"' "$(run stop)"
 check "start opens for a failed recording" 'j["state"]=="awaiting-start"' "$(run start)"
 touch "$tmp/go.record"; sleep 0.5; touch "$tmp/user.stop"
 run wait --timeout 5 >/dev/null
-python3 -I -c 'import json,sys; p=sys.argv[1]; s=json.load(open(p)); s["state"]="failed"; json.dump(s, open(p, "w"))' "$HQ_RECORDER_HOME/active/status.json"
+python3 -I -c 'import json,os,sys; p=sys.argv[1]; s=json.load(open(p)); s["state"]="failed"; json.dump(s, open(p + ".t", "w")); os.replace(p + ".t", p)' "$HQ_RECORDER_HOME/active/status.json"
 check "start refuses while the failed app is still open" 'j["error"]=="already-open"' "$(run start)"
 check "stop closes the failed app and keeps the failed status" 'j["state"]=="failed"' "$(run stop)"
 expect "the failed app has quit after stop" "$(alive)" "no"
@@ -599,17 +599,19 @@ kill "$holder" 2>/dev/null || true; wait "$holder" 2>/dev/null || true
 check "start clears a start lock left by a process that exited" 'j["state"]=="awaiting-start"' "$(HQ_RECORDER_START_WAIT=1 run start)"
 check "stop closes it" 'j["state"]=="closed"' "$(run stop)"
 
-# fake_status <company> <state> <pid>: a status.json as the app writes it, with a saved
-# recording and resume prompt.
+# fake_status <company> <state> <pid>: a status.json as the app writes it (replaced atomically),
+# with a saved recording and resume prompt.
 fake_status() {
   python3 -I -c '
 import json, os, sys
 path, company, state, pid, dest = sys.argv[1:]
 os.makedirs(os.path.dirname(path), exist_ok=True)
+tmp = os.path.join(os.path.dirname(path), ".status.json.%d" % os.getpid())
 json.dump({"schema": 1, "state": state, "company": company, "destination": dest, "pid": int(pid),
            "recording": "companies/%s/recordings/theirs.hqrec" % company,
            "resumePrompt": "Continue my HQ Capture recording for %s at %s/theirs.hqrec: show me." % (company, dest),
-           "updatedAt": "2026-01-01T00:00:00Z"}, open(path, "w"))' \
+           "updatedAt": "2026-01-01T00:00:00Z"}, open(tmp, "w"))
+os.replace(tmp, path)' \
     "$HQ_RECORDER_HOME/active/status.json" "$1" "$2" "$3" "$hq/companies/$1/recordings"
 }
 # A pid that has exited. It is taken from a child that python3 started and reaped, not from
@@ -650,6 +652,36 @@ check "stop is refused while another company's saved app is running" 'j["error"]
 check "start is refused while another company's saved app is running" 'j["error"]=="already-open"' "$(run start)"
 kill "$live" 2>/dev/null || true; wait "$live" 2>/dev/null || true
 check "status is none once that app has exited" 'j=={"ok": True, "state": "none"}' "$(run status)"
+rm -rf "$HQ_RECORDER_HOME/active"
+
+# A status.json caught mid-write (a writer that does not replace it atomically leaves it empty or
+# half written for a moment) is no reading: wait prints no line for it, status and stop do not
+# call the app lost or closed, and wait goes on to the next complete status.
+rm -rf "$HQ_RECORDER_HOME/active"
+python3 -I -c 'import time; time.sleep(60)' & writer_app=$!
+sleep 0.3
+fake_status acme awaiting-start "$writer_app"
+printf '{"schema": 1, "sta' >"$HQ_RECORDER_HOME/active/status.json"
+check "status reports an unreadable status as unreadable, not lost" \
+  'j["ok"] is False and j["error"]=="status-unreadable"' "$(run status)"
+( python3 -I -c 'import time; time.sleep(0.8)'
+  : >"$HQ_RECORDER_HOME/active/status.json"
+  python3 -I -c 'import time; time.sleep(0.4)'
+  fake_status acme recording "$writer_app" ) &
+out="$(set +e; bash "$R" wait --timeout 3 2>/dev/null; echo "exit=$?")"
+if python3 -I -c '
+import json, sys
+lines = [l for l in sys.argv[1].splitlines() if l.startswith("{")]
+events = [json.loads(l) for l in lines if json.loads(l).get("event") == "state"]
+bad = [e for e in events if not e.get("state") or e["state"] in ("lost", "closed", "unreadable")]
+sys.exit(1 if bad or not events or events[0]["state"] != "recording" else 0)' "$out"; then
+  pass=$((pass + 1))
+else
+  printf 'FAIL: wait printed a state for a status caught mid-write\n  got: %s\n' "$out" >&2; exit 1
+fi
+expect "wait over a briefly unreadable status is still open at its timeout" "$(last "$out")" "exit=3"
+check "the next complete status is read" 'j["state"]=="recording"' "$(run status)"
+kill "$writer_app" 2>/dev/null || true; wait "$writer_app" 2>/dev/null || true
 rm -rf "$HQ_RECORDER_HOME/active"
 
 # Permission relaunch: the app quit for macOS Quit & Reopen and reported relaunching.
