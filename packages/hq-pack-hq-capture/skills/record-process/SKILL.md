@@ -12,24 +12,33 @@ description: >-
 
 # /record-process: HQ Capture
 
-HQ Capture is a small Mac app that only records. Everything after the
+HQ Capture is a small Mac app that only records. It ships inside the HQ
+desktop app (macOS 26 or later), which opens it and asks macOS for Screen
+Recording, camera and microphone access as HQ. Everything after the
 recording (summary, trimming, camera placement, export, the guide) happens
 here, in this session, through `hq-record-process.sh`. The app never changes
 the original layers; every edit is a new revision inside the recording.
+Nothing is built on this Mac: without the HQ desktop app, the script prints
+the install link and starts nothing.
 
 **Script (after install):** `core/packages/hq-pack-hq-capture/scripts/hq-record-process.sh`
 **Setup guide:** `core/knowledge/hq-capture/setup.md`
 
 ```bash
 R=core/packages/hq-pack-hq-capture/scripts/hq-record-process.sh
-bash "$R" doctor                    # can this Mac build and run HQ Capture?
-bash "$R" start                     # build if needed, open HQ Capture for the session's company
+bash "$R" doctor                    # is the HQ desktop app with HQ Capture here, on macOS 26?
+bash "$R" start                     # ask HQ to open HQ Capture for the session's company
 bash "$R" wait [--timeout 540]      # follow the recording until it is saved or closed
 bash "$R" status                    # one status read
 bash "$R" stop                      # finish the recording (saved) or close the app
 bash "$R" run <mode> <package> [args]   # headless agent command on a saved recording
 bash "$R" resume "<pasted prompt>"  # check a resume prompt and return its package
 ```
+
+`start` reaches the HQ desktop app through its `hq-desktop://record/<company>`
+link; `status`, `wait`, `record` and `stop` use the control folder HQ Capture
+shares with HQ. The `run` modes start the HQ Capture inside the HQ desktop
+app directly; they never touch the screen, camera or microphone.
 
 `start`, `wait`, `status` and `stop` print one JSON object (`wait` also
 prints one `{"event":"state",...}` line per change). `run` prints whatever
@@ -63,35 +72,48 @@ recording for any other company.
 ## 2. Check the Mac and open HQ Capture
 
 1. Run `doctor`. If `ok` is false, give the user the `fix` line in plain
-   words. Do not install anything yourself. A missing tools install says to
-   run `xcode-select --install`. If the fix says the installed Command Line
-   Tools cannot build this version, or that the compile check timed out, the
-   tools are present but this check did not succeed: tell the user to update
-   HQ Capture with `hq install hq-capture`. If it still fails, they update
-   the Command Line Tools in System Settings > General > Software Update.
-   Do not run `xcode-select --install` for that case. It refuses when the
-   tools are already installed, and a tools update does not add the missing
-   Swift macro plugin.
-   Doctor may use an already-installed Xcode when the selected tools cannot
-   pass the feature check. Never install Xcode or change xcode-select automatically.
-2. Run `start`. The first run, and the first run after a pack update, builds
-   the app on this Mac (about a minute); say so first. `start` returns
-   `state: "awaiting-start"`: the window is open and nothing is recording yet.
-   The user picks the screen, camera and microphone and presses Start.
-   When the user asks you to start the recording, run `record` instead (or
-   `start --record` to open and start in one step). It returns
-   `state: "recording"`. `start-blocked` (exit 1) carries the blocker in
-   `reason`, such as missing Screen Recording access: tell the user what to
-   fix in the HQ Capture window, then run `record` again. `start-timeout`
-   means the app did not pick up the request; run `status` and report it.
-   `start-pending` means the app took the request and is still starting; run
-   `status` after a few seconds before trying `record` again.
-3. If macOS asks for Screen Recording, Camera or Microphone access, the user
-   allows it and chooses **Quit and Reopen**. The reopened app keeps the
-   company binding for 10 minutes, so no new `start` is needed. If more than
-   10 minutes pass, run `start` again. While macOS reopens the app, `status`
-   and `wait` show `relaunching`; `wait` keeps following it until the reopened
-   app reports `awaiting-start`.
+   words. Do not install anything yourself. Recording needs macOS 26 or
+   later and the HQ desktop app with HQ Capture inside it:
+   - `needs-desktop-app` (from `start` or `run` too): the HQ desktop app is
+     not installed. Give the user the `install` link from the message
+     (https://hqforwork.com/install) and stop until they have installed and
+     opened it.
+   - `desktop-app-outdated`: the HQ desktop app is older than HQ Capture in
+     it. The user updates it (HQ menu, Check for updates) or reinstalls it.
+   - `macos-too-old`: recording needs macOS 26; nothing to try on this Mac.
+2. Run `start`. HQ opens the HQ Capture window for the company and `start`
+   returns `state: "awaiting-start"`: the window is open and nothing is
+   recording yet. The user picks the screen, camera and microphone and
+   presses Start. When the user asks you to start the recording, run
+   `record` instead (or `start --record` to open and start in one step). It
+   returns `state: "recording"`. `start-blocked` (exit 1) carries the
+   blocker in `reason`: tell the user what to fix in the HQ Capture window,
+   then run `record` again. `start-timeout` means the app did not pick up the
+   request; run `status` and report it. `start-pending` means the app took
+   the request and is still starting; run `status` after a few seconds
+   before trying `record` again.
+   - `state: "waiting-permission"` (exit 0) means HQ is showing its steps to
+     turn on a permission (`missing`, such as `screen_recording`). Tell the
+     user to follow them in the HQ window; HQ Capture opens by itself once
+     access is on. Run `wait`, which follows it until the window is open. If
+     the user asked to record right away, run `record` once `wait` shows
+     `awaiting-start`.
+   - `desktop-refused` (exit 1) is HQ saying why it did not open the window,
+     such as HQ Capture being open for another company. Tell the user the
+     `message`.
+   - `no-answer` means HQ did not answer: the user opens the HQ desktop app,
+     checks it is signed in, then you run `start` again.
+   - `destination-mismatch` means the HQ desktop app uses a different HQ
+     folder than this session. The user points HQ at this folder in its
+     Settings.
+3. Permissions are asked by HQ, never by HQ Capture. When the user presses a
+   permission repair in the HQ Capture window (camera, microphone or Screen
+   Recording), HQ's permission window opens with the steps. After a Screen
+   Recording grant macOS may ask to **Quit and Reopen** HQ; HQ reopens HQ
+   Capture for the same company by itself, so no new `start` is needed.
+   While that happens, `status` and `wait` show `relaunching` or
+   `waiting-permission`; `wait` keeps following it until HQ Capture reports
+   `awaiting-start`.
 4. `already-open` means HQ Capture is already open. Show `status` and ask
    whether to keep using it or `stop` it first.
 5. `busy` (exit 1) means another session is opening HQ Capture right now.
@@ -106,8 +128,8 @@ seconds) and exits:
 
 - **3 (still open):** the last line is the current status. Report it in one
   line (`recording`, `paused`, `durationSeconds`) and run `wait` again. Keep
-  re-arming while the state is `awaiting-start`, `recording`, `finalizing` or
-  `relaunching`.
+  re-arming while the state is `awaiting-start`, `recording`, `finalizing`,
+  `relaunching` or `waiting-permission`.
 - **0, state `saved`:** go to step 4. The status carries `recording` (the
   package path relative to HQ) and `resumePrompt`. It can also carry `issue`
   and `mediaIssues` (see below).

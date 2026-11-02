@@ -1,74 +1,71 @@
 #!/usr/bin/env bash
-# macOS end-to-end check: build HQ Capture from this pack's source with the developer tools
-# the launcher picks (the Command Line Tools, or Xcode when they cannot build it), confirm the bundle (name, icon, signature, entitlements), open it for a company,
-# confirm it reports awaiting-start without writing a recording, stop it, confirm a second
-# start reuses the build, and confirm the 0.1.0 app is removed after the build. Opens a real
-# window. Not part of the any-OS suite (it needs macOS 26 and Command Line Tools).
+# macOS end-to-end checks against the real HQ desktop app (macOS 26 or later). Not part of the
+# any-OS suite.
+#
+# 1. Recordings made with the standalone HQ Capture still work with the bundled one: for each
+#    package given, /record-process `run describe` (the HQ Capture inside the HQ desktop app)
+#    returns the same description as the standalone app's own --describe. Read-only: the package
+#    is cloned into a temporary HQ first. No window and no permission.
+#      HQ_CAPTURE_E2E_PACKAGES  .hqrec packages made by the standalone app, separated by ':'
+#      HQ_CAPTURE_STANDALONE    the standalone app (default:
+#                               ~/Library/Application Support/HQ Capture/HQ Capture.app)
+#      HQ_DESKTOP_APP           the HQ desktop app (default: the installed one)
+# 2. With HQ_CAPTURE_E2E_LIVE=1 only: start asks the HQ desktop app to open the recorder for a
+#    temporary company, which opens a real window (or HQ's permission window first), then stop
+#    closes it. Nothing is recorded.
 set -euo pipefail
 [ "$(uname -s)" = Darwin ] || { echo "e2e-macos.sh needs macOS" >&2; exit 2; }
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 R="$here/../scripts/hq-record-process.sh"
 
 tmp="$(mktemp -d)"
-trap 'bash "$R" stop >/dev/null 2>&1 || true; rm -rf "$tmp"' EXIT
-hq="$tmp/hq"
-mkdir -p "$hq/companies/acme/recordings" "$tmp/bin" "$tmp/legacy/LocalScreenRecorder.app/Contents"
-printf 'companies:\n  acme:\n    name: Acme\n' >"$hq/companies/manifest.yaml"
+trap 'HQ_ROOT="$tmp/hq" bash "$R" stop >/dev/null 2>&1 || true; rm -rf "$tmp"' EXIT
+mkdir -p "$tmp/bin"
 cat >"$tmp/bin/hq" <<'EOF'
 #!/usr/bin/env bash
-[ "$*" = "core hq-session get company_slug" ] && printf acme
+[ "$*" = "core hq-session get company_slug" ] && cat "$HQ_E2E_COMPANY_FILE"
 EOF
 chmod +x "$tmp/bin/hq"
-export PATH="$tmp/bin:$PATH"
-export HQ_ROOT="$hq" HQ_RECORDER_HOME="$tmp/state" HQ_RECORDER_LEGACY_HOME="$tmp/legacy"
-unset HQ_RECORDER_APP HQ_RECORDER_OPEN HQ_RECORDER_COMPILE
+export PATH="$tmp/bin:$PATH" HQ_ROOT="$tmp/hq" HQ_E2E_COMPANY_FILE="$tmp/company"
 
 field() { python3 -I -c 'import json,sys; print(json.loads(sys.argv[1]).get(sys.argv[2]))' "$1" "$2"; }
 expect() { [ "$2" = "$3" ] || { echo "FAIL: $1: expected $3, got $2" >&2; exit 1; }; echo "ok: $1"; }
 
-bash "$R" doctor >/dev/null
-out="$(bash "$R" start --company acme)"
-expect "first start opens the app" "$(field "$out" state)" "awaiting-start"
-expect "bound company" "$(field "$out" company)" "acme"
-app="$tmp/state/HQ Capture.app"
-exe="$app/Contents/MacOS/LocalScreenRecorder"
-[ -x "$exe" ] && echo "ok: HQ Capture.app has the LocalScreenRecorder executable" \
-  || { echo "FAIL: HQ Capture.app has no LocalScreenRecorder executable" >&2; exit 1; }
-expect "bundle name" "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$app/Contents/Info.plist")" "HQ Capture"
-expect "bundle id" "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")" "com.indigo.local-screen-recorder"
-[ -f "$app/Contents/Resources/AppIcon.icns" ] && echo "ok: icon is in the bundle" \
-  || { echo "FAIL: the icon is missing from the bundle" >&2; exit 1; }
-otool -L "$exe" | grep -q AVKit.framework && echo "ok: links AVKit" \
-  || { echo "FAIL: the executable does not link AVKit" >&2; exit 1; }
-codesign --verify --strict "$app"
-expect "app is ad-hoc signed" "$(codesign -dv "$app" 2>&1 | sed -n 's/^Signature=//p')" "adhoc"
-ents="$(codesign -d --entitlements :- "$app" 2>/dev/null)"
-grep -q com.apple.security.device.camera <<<"$ents" && grep -q com.apple.security.device.audio-input <<<"$ents" \
-  && echo "ok: camera and microphone entitlements are signed in" \
-  || { echo "FAIL: the camera or microphone entitlement is not signed in" >&2; exit 1; }
-[ ! -e "$tmp/legacy/LocalScreenRecorder.app" ] && echo "ok: the 0.1.0 app was removed after the build" \
-  || { echo "FAIL: the 0.1.0 app was not removed after the build" >&2; exit 1; }
-pid="$(field "$out" pid)"
-kill -0 "$pid" && echo "ok: app process $pid is running" \
-  || { echo "FAIL: app process $pid is not running" >&2; exit 1; }
-expect "no recording written on open" "$(ls -A "$hq/companies/acme/recordings" | wc -l | tr -d ' ')" "0"
+doc="$(bash "$R" doctor)" || { echo "FAIL: doctor: $doc" >&2; exit 1; }
+echo "ok: doctor finds $(field "$doc" hq_capture_detail)"
 
-out="$(bash "$R" stop)"
-expect "stop closes the app" "$(field "$out" state)" "closed"
-sleep 1
-if kill -0 "$pid" 2>/dev/null; then echo "FAIL: app still running after stop" >&2; exit 1; fi
-echo "ok: app process exited"
+standalone="${HQ_CAPTURE_STANDALONE:-$HOME/Library/Application Support/HQ Capture/HQ Capture.app}"
+standalone_exe="$standalone/Contents/MacOS/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$standalone/Contents/Info.plist")"
+echo "standalone HQ Capture $(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$standalone/Contents/Info.plist")"
 
-# The headless agent commands run from the same build and stay inside the company.
-set +e
-bash "$R" run describe "$hq/companies/acme/recordings/missing.hqrec" >/dev/null 2>&1; code=$?
-set -e
-expect "run refuses a missing package" "$code" "3"
+IFS=: read -r -a packages <<<"${HQ_CAPTURE_E2E_PACKAGES:-}"
+[ "${#packages[@]}" -gt 0 ] && [ -n "${packages[0]}" ] || { echo "Set HQ_CAPTURE_E2E_PACKAGES" >&2; exit 2; }
+for given in "${packages[@]}"; do
+  company="$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["company"])' "$given/manifest.json")"
+  mkdir -p "$tmp/hq/companies/$company/recordings"
+  printf 'companies:\n  %s:\n    name: E2E\n' "$company" >"$tmp/hq/companies/manifest.yaml"
+  printf '%s' "$company" >"$tmp/company"
+  copy="$tmp/hq/companies/$company/recordings/$(basename "$given")"
+  rm -rf "$copy"
+  cp -cR "$given" "$copy" 2>/dev/null || cp -R "$given" "$copy"
+  bundled="$(bash "$R" run describe "$copy" --json)"
+  reference="$("$standalone_exe" --describe "$copy" --json)"
+  expect "$(basename "$given"): the bundled app describes it as the standalone app does" "$bundled" "$reference"
+done
 
-before="$(stat -f %m "$exe")"
-out="$(bash "$R" start)"
-expect "second start opens again" "$(field "$out" state)" "awaiting-start"
-expect "second start reuses the build" "$(stat -f %m "$exe")" "$before"
-out="$(bash "$R" stop)"
-expect "second stop closes" "$(field "$out" state)" "closed"
+if [ "${HQ_CAPTURE_E2E_LIVE:-}" = 1 ]; then
+  mkdir -p "$tmp/hq/companies/e2e-capture/recordings"
+  printf 'companies:\n  e2e-capture:\n    name: E2E\n' >"$tmp/hq/companies/manifest.yaml"
+  printf 'e2e-capture' >"$tmp/company"
+  out="$(bash "$R" start)"
+  state="$(field "$out" state)"
+  case "$state" in
+    awaiting-start|waiting-permission) echo "ok: start through the HQ desktop app: $state" ;;
+    *) echo "FAIL: start: $out" >&2; exit 1 ;;
+  esac
+  if [ "$state" = awaiting-start ]; then
+    expect "no recording written on open" "$(ls -A "$tmp/hq/companies/e2e-capture/recordings" | wc -l | tr -d ' ')" "0"
+    expect "stop closes the recorder" "$(field "$(bash "$R" stop)" state)" "closed"
+  fi
+fi
 echo "e2e-macos: passed"
