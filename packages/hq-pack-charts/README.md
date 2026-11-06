@@ -80,7 +80,6 @@ assets/chart.css               the contract
 assets/template.html           single-chart starter
 assets/galleries/{ledger,plain,signal}.html   one card per type
 assets/sheets/{one-pager,monthly,brief-card}.html
-assets/examples/               finished deliveries
 knowledge/charts/spec/         nine spec files
 knowledge/charts/types/        registry.yaml + selection table
 scripts/lint-chart.py · sync-assets.py · contact-sheet.py · test-lint.py

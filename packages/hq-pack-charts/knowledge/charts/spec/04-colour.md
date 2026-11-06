@@ -36,34 +36,42 @@ two steps, both done here; no other pack is needed.
 font value through a `--dg-*` fallback. Map the brand pack's tokens onto those
 roles:
 
-| Skin role | From the brand pack | Fallback |
+| Skin role | From the brand pack | Fallback the sample writes |
 |---|---|---|
-| `--dg-paper` | `--color-bg` | leave unset (chart.css default) |
-| `--dg-paper-raised` | `--color-surface` | `--white` |
-| `--dg-paper-sunk` | `--color-text` at about 4.5% alpha | leave unset |
-| `--dg-paper-dark` | `--color-bg-dark` (dark theme ground) | leave unset |
-| `--dg-ink` | `--color-text` | leave unset |
-| `--dg-muted` | `--color-text-muted` | leave unset |
-| `--dg-soft` | `--mid-gray` | `--color-text-muted` |
-| `--dg-rule` | `--divider` | `--color-border` at about 14% alpha |
-| `--dg-rule-strong` | `--color-border` | leave unset |
-| `--dg-positive`, `--dg-negative` | the brand's success / error colours, if it defines any | leave unset |
-| `--dg-positive-tint`, `--dg-negative-tint` | the same colours at about 12% alpha | leave unset |
-| `--dg-font-display` | `--font-display` | leave unset |
-| `--dg-font-body` | `--font-body` | leave unset |
-| `--dg-font-mono` | `--font-mono` | leave unset |
+| `--dg-paper` | `--color-bg` | none: chart.css default |
+| `--dg-paper-raised` | `--color-surface` | `var(--white)` |
+| `--dg-paper-sunk` | `--color-text` at about 4.5% alpha | not in the sample: chart.css default |
+| `--dg-paper-dark` | `--color-bg-dark` (dark theme ground) | not in the sample: chart.css default |
+| `--dg-ink` | `--color-text` | none: chart.css default |
+| `--dg-muted` | `--color-text-muted` | none: chart.css default |
+| `--dg-soft` | `--mid-gray` | `var(--color-text-muted)` |
+| `--dg-rule` | `--divider` | `--color-border` at 14% alpha |
+| `--dg-rule-strong` | `--color-border` | none: chart.css default |
+| `--dg-positive`, `--dg-negative` | the brand's success / error colours, if it defines any | not in the sample: chart.css default |
+| `--dg-positive-tint`, `--dg-negative-tint` | the same colours at about 12% alpha | not in the sample: chart.css default |
+| `--dg-font-display` | `--font-display` | none: chart.css default |
+| `--dg-font-body` | `--font-body` | none: chart.css default |
+| `--dg-font-mono` | `--font-mono` | none: chart.css default |
 
-"Leave unset" keeps the chart.css default for that role. Write "X at N% alpha" as
+"None: chart.css default" is safe for a `--dg-*` role. If the pack lacks the
+source token, the role becomes invalid and chart.css's own
+`var(--dg-x, <default>)` applies. Write "X at N% alpha" as
 `color-mix(in srgb, var(X) N%, transparent)`. Never map a brand accent
 onto `--dg-positive` or `--dg-negative`; those carry meaning.
 
 **Step 2: chart roles.** Additionally map:
 
-| Chart role | From the brand pack | Fallback |
+| Chart role | From the brand pack | Fallback the sample writes |
 |---|---|---|
-| `--ch-hero`, `--ch-data-1` | `--color-accent` | the brand's most saturated colour |
-| `--ch-data-2` … `--ch-data-6` | `--color-accent-secondary`, then tints of the accent toward paper | mono ladder |
-| `--ch-ramp-1` … `--ch-ramp-5` | five steps from paper to accent | mono ramp |
+| `--ch-hero`, `--ch-data-1` | `--color-accent` | `var(--ch-ink)`, the mono hero |
+| `--ch-data-2` | `--color-accent-secondary` | `#5b5853`, the mono data-2 |
+| `--ch-data-3` … `--ch-data-6` | tints of the accent toward paper | not in the sample: chart.css mono ladder |
+| `--ch-ramp-1` … `--ch-ramp-5` | five steps from paper to accent | not in the sample: chart.css mono ramp |
+
+Every `--ch-*` line needs a fallback. chart.css sets the chart roles directly,
+with no outer default, so a `--ch-*` line whose source token is missing renders
+its marks black. Either keep the fallback or drop the line when the pack does
+not define the source token.
 
 Paste the brand pack's `:root` tokens, then set both steps in one `:root` block
 after the generated stylesheet:
@@ -71,18 +79,18 @@ after the generated stylesheet:
 ```css
 :root {
   --dg-paper:        var(--color-bg);
-  --dg-paper-raised: var(--color-surface);
+  --dg-paper-raised: var(--color-surface, var(--white));
   --dg-ink:          var(--color-text);
   --dg-muted:        var(--color-text-muted);
-  --dg-soft:         var(--mid-gray);
-  --dg-rule:         var(--divider);
+  --dg-soft:         var(--mid-gray, var(--color-text-muted));
+  --dg-rule:         var(--divider, color-mix(in srgb, var(--color-border) 14%, transparent));
   --dg-rule-strong:  var(--color-border);
   --dg-font-display: var(--font-display);
   --dg-font-body:    var(--font-body);
   --dg-font-mono:    var(--font-mono);
-  --ch-hero:         var(--color-accent);
-  --ch-data-1:       var(--color-accent);
-  --ch-data-2:       var(--color-accent-secondary);
+  --ch-hero:         var(--color-accent, var(--ch-ink));
+  --ch-data-1:       var(--color-accent, var(--ch-ink));
+  --ch-data-2:       var(--color-accent-secondary, #5b5853);
 }
 ```
 

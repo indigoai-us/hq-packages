@@ -5,8 +5,8 @@ description: |
   self-contained HTML file with inline SVG. Three families — ledger (record-level,
   slow read), plain (familiar forms, editorial finish), signal (big numbers, fast
   read) — plus three report sheets. Token-driven (the SVG carries classes, never
-  colours), brand-bound through the same skin as /diagram, CSS-only motion, no
-  chart library, and a linter that fails colour literals, broken proportions,
+  colours), brand-bound per spec/04-colour.md, CSS-only motion, no chart
+  library, and a linter that fails colour literals, broken proportions,
   sub-floor type, and demo data. Use when the user asks for a chart, graph, plot,
   visualization, KPI tiles, dashboard, one-pager, brief, weekly or monthly report,
   or says "show me the numbers". For architecture, flow, and reasoning figures
