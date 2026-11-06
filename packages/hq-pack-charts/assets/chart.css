@@ -5,12 +5,12 @@
  *
  * The contract, in one sentence: an HQ chart's SVG carries semantic CLASSES
  * and never carries a colour. Re-skinning a chart is swapping the :root block
- * below — nothing in the SVG body changes. The same contract hq-pack-diagrams
- * uses, extended with data roles (series, ramp, hero, delta).
+ * below — nothing in the SVG body changes. Data roles (series, ramp, hero,
+ * delta) sit on top of the shared --dg-* skin roles.
  *
- * Every --ch-* surface/ink/structure token falls back to its --dg-* twin, so a
- * page that already carries a diagram skin (or a company brand pack mapped
- * through the design-styles binding formula) re-skins charts for free.
+ * Every --ch-* surface/ink/structure token falls back to a --dg-* skin role, so
+ * a page that sets those roles (or a company brand pack mapped onto them per
+ * knowledge/charts/spec/04-colour.md § Brand binding) re-skins charts for free.
  *
  * Do not add a colour literal to any SVG attribute. `scripts/lint-chart.py`
  * fails the file if you do.

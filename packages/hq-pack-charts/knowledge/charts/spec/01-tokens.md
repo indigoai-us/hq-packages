@@ -9,10 +9,9 @@ the `:root` block or flipping `data-ch-palette`; nothing in the figure changes.
 `scripts/lint-chart.py` fails any file with a colour literal in an SVG attribute
 (`CH101`), a `font-family` attribute (`CH102`), or a `style=` attribute (`CH103`).
 
-This pack shares its role vocabulary with `hq-pack-diagrams`. Every `--ch-*`
-surface, ink, structure, delta, and font token falls back to its `--dg-*` twin, so
-a page that already carries a diagram skin, or a company brand pack mapped through
-the design-styles binding formula, re-skins its charts for free.
+Every `--ch-*` surface, ink, structure, delta, and font token falls back to a
+`--dg-*` skin role, so a page that sets those roles, or a company brand pack mapped
+onto them per `04-colour.md` § Brand binding, re-skins its charts for free.
 
 ## Roles
 

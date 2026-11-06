@@ -33,9 +33,9 @@ the same file.
 <path class="ch-line ch-line--hero ch-draw" d="M 40 200 L 120 160 L 200 172"/>
 ```
 
-Every paint decision lives in `assets/chart.css`. That is the same contract as
-`hq-pack-diagrams`, and every `--ch-*` role falls back to its `--dg-*` twin, so a
-company brand pack bound for diagrams skins charts with no extra work.
+Every paint decision lives in `assets/chart.css`, and every `--ch-*` surface, ink
+and font role falls back to a `--dg-*` skin role. A company brand pack is mapped
+onto those roles per `knowledge/charts/spec/04-colour.md` § Brand binding.
 
 `scripts/lint-chart.py` makes it real: a colour literal, a `style=` attribute, an
 external script, `Math.random()`, sub-floor type, two palettes in one file, or a
@@ -80,7 +80,6 @@ assets/chart.css               the contract
 assets/template.html           single-chart starter
 assets/galleries/{ledger,plain,signal}.html   one card per type
 assets/sheets/{one-pager,monthly,brief-card}.html
-assets/examples/               finished deliveries
 knowledge/charts/spec/         nine spec files
 knowledge/charts/types/        registry.yaml + selection table
 scripts/lint-chart.py · sync-assets.py · contact-sheet.py · test-lint.py
