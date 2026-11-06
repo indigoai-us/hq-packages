@@ -53,7 +53,8 @@ roles:
 | `--dg-font-body` | `--font-body` | leave unset |
 | `--dg-font-mono` | `--font-mono` | leave unset |
 
-"Leave unset" keeps the chart.css default for that role. Never map a brand accent
+"Leave unset" keeps the chart.css default for that role. Write "X at N% alpha" as
+`color-mix(in srgb, var(X) N%, transparent)`. Never map a brand accent
 onto `--dg-positive` or `--dg-negative`; those carry meaning.
 
 **Step 2: chart roles.** Additionally map:
