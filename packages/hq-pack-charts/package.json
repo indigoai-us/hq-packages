@@ -1,6 +1,6 @@
 {
   "name": "@indigoai-us/hq-pack-charts",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "HQ content pack: editorial data charts and report sheets as self-contained HTML \u2014 token-driven, brand-bound, and linted",
   "files": [
     "cover.jpg",

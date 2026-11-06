@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.1 — 2026-11-06
+
+- Fix: the `/chart` skill and `spec/04-colour.md` pointed at
+  `core/knowledge/public/design-styles/formulas/diagram/binding.md`, which no pack
+  ships, so brand binding had no mapping to follow (feedback 1b4acf28). The
+  brand-token to `--dg-*` mapping now lives in `spec/04-colour.md` § Brand binding.
+- Dropped the recommend on `hq-pack-diagrams`, which does not exist, and the
+  `knowledge/charts/README.md` pointer to `assets/examples/`, which is not shipped.
+- Added `tests/references.test.sh`, run by CI, which fails on references outside
+  the pack, pack-relative paths that do not resolve, and recommended packs that do
+  not exist.
+
 ## 0.1.0 — 2026-09-01
 
 First cut. Wired 2 contributions: knowledge `charts`, skill `chart`.

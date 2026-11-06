@@ -28,10 +28,35 @@ palette, or return to mono. Never patch one card locally (`CH151`).
 
 ## Brand binding
 
-When a company is bound and has a brand pack, the design-styles binding formula
-(`core/knowledge/public/design-styles/formulas/diagram/binding.md`) maps its tokens
-to `--dg-*` roles. `chart.css` inherits every `--dg-*` value through its fallbacks,
-so a bound diagram skin is already a bound chart skin. Additionally map:
+A company's brand pack lives at
+`companies/{co}/knowledge/design-styles/packs/*/design-tokens.css`. Binding it is
+two steps, both done here; no other pack is needed.
+
+**Step 1: skin roles.** `chart.css` reads every surface, ink, structure, delta and
+font value through a `--dg-*` fallback. Map the brand pack's tokens onto those
+roles:
+
+| Skin role | From the brand pack | Fallback |
+|---|---|---|
+| `--dg-paper` | `--color-bg` | leave unset (chart.css default) |
+| `--dg-paper-raised` | `--color-surface` | `--white` |
+| `--dg-paper-sunk` | `--color-text` at about 4.5% alpha | leave unset |
+| `--dg-paper-dark` | `--color-bg-dark` (dark theme ground) | leave unset |
+| `--dg-ink` | `--color-text` | leave unset |
+| `--dg-muted` | `--color-text-muted` | leave unset |
+| `--dg-soft` | `--mid-gray` | `--color-text-muted` |
+| `--dg-rule` | `--divider` | `--color-border` at about 14% alpha |
+| `--dg-rule-strong` | `--color-border` | leave unset |
+| `--dg-positive`, `--dg-negative` | the brand's success / error colours, if it defines any | leave unset |
+| `--dg-positive-tint`, `--dg-negative-tint` | the same colours at about 12% alpha | leave unset |
+| `--dg-font-display` | `--font-display` | leave unset |
+| `--dg-font-body` | `--font-body` | leave unset |
+| `--dg-font-mono` | `--font-mono` | leave unset |
+
+"Leave unset" keeps the chart.css default for that role. Never map a brand accent
+onto `--dg-positive` or `--dg-negative`; those carry meaning.
+
+**Step 2: chart roles.** Additionally map:
 
 | Chart role | From the brand pack | Fallback |
 |---|---|---|
@@ -39,8 +64,28 @@ so a bound diagram skin is already a bound chart skin. Additionally map:
 | `--ch-data-2` … `--ch-data-6` | `--color-accent-secondary`, then tints of the accent toward paper | mono ladder |
 | `--ch-ramp-1` … `--ch-ramp-5` | five steps from paper to accent | mono ramp |
 
-Set them in the `:root` block after the generated stylesheet. The figure is
-untouched. Check contrast before shipping: hero on paper at least 3:1, text at
+Paste the brand pack's `:root` tokens, then set both steps in one `:root` block
+after the generated stylesheet:
+
+```css
+:root {
+  --dg-paper:        var(--color-bg);
+  --dg-paper-raised: var(--color-surface);
+  --dg-ink:          var(--color-text);
+  --dg-muted:        var(--color-text-muted);
+  --dg-soft:         var(--mid-gray);
+  --dg-rule:         var(--divider);
+  --dg-rule-strong:  var(--color-border);
+  --dg-font-display: var(--font-display);
+  --dg-font-body:    var(--font-body);
+  --dg-font-mono:    var(--font-mono);
+  --ch-hero:         var(--color-accent);
+  --ch-data-1:       var(--color-accent);
+  --ch-data-2:       var(--color-accent-secondary);
+}
+```
+
+The figure is untouched. Check contrast before shipping: hero on paper at least 3:1, text at
 least 4.5:1.
 
 A custom palette is built only from explicit brand colours or hex values. Derive

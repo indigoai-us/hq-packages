@@ -33,7 +33,7 @@ cat workspace/threads/handoff.json 2>/dev/null | grep -o '"company"[^,]*'
 
 | Situation | Do |
 |---|---|
-| A company is bound and has `companies/{co}/knowledge/design-styles/packs/*/design-tokens.css` | Map it per `core/knowledge/public/design-styles/formulas/diagram/binding.md`, then the chart additions in `spec/04-colour.md` § Brand binding |
+| A company is bound and has `companies/{co}/knowledge/design-styles/packs/*/design-tokens.css` | Map it per `spec/04-colour.md` § Brand binding: brand tokens to `--dg-*` skin roles, then the chart roles |
 | A company is bound with no brand pack | Default skin. Mention once that `/newcompany` can generate a brand pack |
 | No company bound | Default skin. Say nothing |
 

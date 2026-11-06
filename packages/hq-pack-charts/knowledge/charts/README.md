@@ -18,4 +18,4 @@ Load only what you need.
 
 Assets: `assets/chart.css` (the contract), `assets/template.html` (single chart),
 `assets/galleries/{ledger,plain,signal}.html` (one card per type),
-`assets/sheets/*.html` (report pages), `assets/examples/` (finished deliveries).
+`assets/sheets/*.html` (report pages).
