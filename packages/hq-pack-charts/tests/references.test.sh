@@ -16,8 +16,11 @@
 #   c. package.yaml recommends a pack that has no packages/<name>/package.yaml;
 #   d. a line in a README.md code fence that starts with a pack path (assets/,
 #      knowledge/, scripts/, skills/) names a file or directory that does not
-#      ship, such as the old assets/examples/ layout line. One {a,b,c} group
-#      is expanded and each alternative checked;
+#      ship, such as the old assets/examples/ layout line. On a line that lists
+#      several names separated by "·" (scripts/a.py · b.py), each name is
+#      checked, in the first path's directory unless it starts with a pack
+#      path. Every {a,b,c} group is expanded, alternatives trimmed, and each
+#      result checked;
 #   e. spec/04-colour.md has no "## Brand binding" heading, which SKILL.md,
 #      README.md, spec/01-tokens.md and chart.css all point at by name.
 #
@@ -107,12 +110,28 @@ for lineno, line in enumerate(readme.read_text(encoding="utf-8").splitlines(), 1
     tokens = line.split()
     if not tokens or not tokens[0].startswith(fence_prefixes):
         continue
-    ref = tokens[0]
-    group = brace.search(ref)
-    if group:
-        targets = [ref[: group.start()] + alt + ref[group.end():] for alt in group.group(1).split(",")]
-    else:
-        targets = [ref]
+    first = tokens[0]
+    refs = [first]
+    if "·" in line:
+        base = first.rsplit("/", 1)[0] + "/" if "/" in first.rstrip("/") else ""
+        for part in line.split("·")[1:]:
+            words = part.split()
+            if not words:
+                continue
+            name = words[0]
+            refs.append(name if name.startswith(fence_prefixes) else base + name)
+    targets = []
+    pending = refs
+    while pending:
+        ref = pending.pop(0)
+        group = brace.search(ref)
+        if group:
+            pending.extend(
+                ref[: group.start()] + alt.strip() + ref[group.end():]
+                for alt in group.group(1).split(",")
+            )
+        else:
+            targets.append(ref)
     for target in targets:
         checked += 1
         candidate = pack / target.rstrip("/")

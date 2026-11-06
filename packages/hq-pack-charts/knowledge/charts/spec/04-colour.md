@@ -45,7 +45,7 @@ roles:
 | `--dg-ink` | `--color-text` | none: chart.css default |
 | `--dg-muted` | `--color-text-muted` | none: chart.css default |
 | `--dg-soft` | `--mid-gray` | `var(--color-text-muted)` |
-| `--dg-rule` | `--divider` | `--color-border` at 14% alpha |
+| `--dg-rule` | `--divider` | `color-mix(in srgb, var(--color-border) 14%, transparent)` |
 | `--dg-rule-strong` | `--color-border` | none: chart.css default |
 | `--dg-positive`, `--dg-negative` | the brand's success / error colours, if it defines any | not in the sample: chart.css default |
 | `--dg-positive-tint`, `--dg-negative-tint` | the same colours at about 12% alpha | not in the sample: chart.css default |
@@ -64,7 +64,7 @@ onto `--dg-positive` or `--dg-negative`; those carry meaning.
 | Chart role | From the brand pack | Fallback the sample writes |
 |---|---|---|
 | `--ch-hero`, `--ch-data-1` | `--color-accent` | `var(--ch-ink)`, the mono hero |
-| `--ch-data-2` | `--color-accent-secondary` | `#5b5853`, the mono data-2 |
+| `--ch-data-2` | `--color-accent-secondary` | `#5b5853`, the mono data-2; `#b5b0a6` in the dark rule |
 | `--ch-data-3` … `--ch-data-6` | tints of the accent toward paper | not in the sample: chart.css mono ladder |
 | `--ch-ramp-1` … `--ch-ramp-5` | five steps from paper to accent | not in the sample: chart.css mono ramp |
 
@@ -74,7 +74,7 @@ its marks black. Either keep the fallback or drop the line when the pack does
 not define the source token.
 
 Paste the brand pack's `:root` tokens, then set both steps in one `:root` block
-after the generated stylesheet:
+and a dark-theme `--ch-data-2` rule, both after the generated stylesheet:
 
 ```css
 :root {
@@ -92,7 +92,22 @@ after the generated stylesheet:
   --ch-data-1:       var(--color-accent, var(--ch-ink));
   --ch-data-2:       var(--color-accent-secondary, #5b5853);
 }
+
+[data-ch-theme="dark"] {
+  --ch-data-2:       var(--color-accent-secondary, #b5b0a6);
+}
 ```
+
+The `:root` block comes after chart.css, so it also overrides the dark theme's
+`--ch-data-2`. The dark rule keeps series 2 at chart.css's dark value
+(`#b5b0a6`) when the pack has no `--color-accent-secondary`. The auto theme does
+not set `--ch-data-2`, so it needs no rule.
+
+The pasted block also overrides the `slate`, `moss` and `ember` palette presets
+(`data-ch-palette`): the brand's hero and data-2, or their fallbacks, replace the
+preset's. Do not combine a brand binding with a palette preset. Dropping a
+`--ch-*` line whose source token the pack lacks also works, and leaves
+chart.css's theme- and palette-aware value in charge.
 
 The figure is untouched. Check contrast before shipping: hero on paper at least 3:1, text at
 least 4.5:1.
