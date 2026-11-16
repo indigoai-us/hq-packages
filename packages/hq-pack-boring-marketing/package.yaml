@@ -1,0 +1,62 @@
+name: hq-pack-boring-marketing
+version: 1.0.0
+publisher: '@indigoai-us'
+access: public
+description: "Boring Marketing Skills: 32 marketing skills by James Dickerson (@boringmarketer) for research, positioning, copy, landing pages, SEO, AI search, local SEO, reviews, Google and Meta ads, email, newsletters and content, plus agency client-finding. Ported from boringmarketer/boring-marketing-skills v4.1.1 (MIT)."
+license: 'MIT'
+repository: 'https://github.com/boringmarketer/boring-marketing-skills'
+requires:
+  hqCore: '>=12.0.0'
+contributes:
+  skills:
+    - ads-incrementality-check
+    - ai-search
+    - audience-research
+    - brand-voice
+    - competitive-intel
+    - content-atomizer
+    - creative
+    - direct-response-copy
+    - email-sequences
+    - find-local-clients
+    - first-screen-check
+    - google-ads-tracking
+    - google-business-profile
+    - keyword-research
+    - landing-page
+    - lead-magnet
+    - local-seo-plan
+    - long-form-article
+    - meta-ads
+    - newsletter
+    - paid-ads
+    - performance-review
+    - pitch-the-fix
+    - positioning-angles
+    - programmatic-seo
+    - reviews
+    - seo-content
+    - service-area-pages
+    - site-audit
+    - social-content
+    - speed-to-lead
+    - start-here
+  knowledge:
+    - boring-marketing
+author:
+  uid: 'cmt_boringmarketer'
+  handle: 'boringmarketer'
+  displayName: 'James Dickerson (Boring Marketing, LLC)'
+upstream:
+  repo: 'https://github.com/boringmarketer/boring-marketing-skills'
+  ref: '4.1.1'
+  ported_commit: '7c6678c857fe514f79396ea607aa2a56ea82e676'
+  license: 'MIT'
+  ported_at: '2026-11-16T00:00:00Z'
+  kind: port
+# Derived by static inspection of skills/*/scripts. No contributes.scripts or hooks;
+# the scripts run only when a skill tells the agent to run them.
+capabilities:
+  - scripts   # Python, Node and shell helpers inside skill folders (brand_context, route, crawl_audit, suggest, ...)
+  - fs        # writes brand files, campaign drafts, crawl reports and cleaned call logs under the company's marketing folder
+  - network   # public-web fetches (Google autocomplete, Places, PageSpeed/CrUX, Firecrawl, Facebook Ad Library, Replicate model check, DNS lookups) and the Meta Graph API in meta-ads, which creates campaigns PAUSED only and dry-runs by default
