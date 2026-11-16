@@ -31,7 +31,7 @@ hq install github:indigoai-us/hq-packages#packages/hq-pack-boring-marketing
 ## What the port changed
 
 Each `SKILL.md` gets a short "Running in HQ" note after its frontmatter: brand and
-campaign files live in the active company's `knowledge/marketing/` folder, API keys come
+campaign files live in the active company's `data/marketing/` folder, API keys come
 from HQ secrets, and anything outbound waits for the user's OK. The skill text,
 references and scripts are otherwise upstream and unchanged. Details, and the list of
 upstream files left out, are in

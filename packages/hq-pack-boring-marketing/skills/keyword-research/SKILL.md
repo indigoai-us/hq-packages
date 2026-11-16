@@ -22,7 +22,7 @@ metadata:
 >
 > - **Workspace root.** Every `./brand/`, `./brands/`, `./campaigns/` and `./MARKETING.md`
 >   path in this skill is relative to the active company's marketing folder,
->   `companies/{co}/knowledge/marketing/`. Resolve the company first (the session's
+>   `companies/{co}/data/marketing/`. Resolve the company first (the session's
 >   bound company, or `hq_resolve_company`), then run helper scripts from that folder.
 >   Never read or write another company's marketing folder.
 > - **Clients.** A client that has its own HQ company uses that company's folder. Use

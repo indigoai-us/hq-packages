@@ -18,17 +18,18 @@ still resolve when the pack is installed.
 
 Upstream skills treat the current folder as a marketing workspace: `./MARKETING.md`,
 `./brand/`, `./brands/<client>/` and `./campaigns/`. In HQ that workspace is the active
-company's marketing folder:
+company's marketing folder. It sits under `data/` rather than `knowledge/`, so drafts, ad
+matrices and call logs stay out of the company's knowledge base and search index:
 
 ```
-companies/{co}/knowledge/marketing/
+companies/{co}/data/marketing/
   MARKETING.md
   brand/          brand.yaml, voice-profile.md, positioning.md, voc.md, learnings.md, ...
   campaigns/      drafts, ad matrices, content plans
   brands/<slug>/  only for prospects that have no HQ company yet
 ```
 
-Run the helper scripts from that folder, or pass `--root companies/{co}/knowledge/marketing`
+Run the helper scripts from that folder, or pass `--root companies/{co}/data/marketing`
 to the scripts that take it (`brand_context.py`). If the company already has brand
 material (for example `knowledge/brand-voice/`), `/start-here` and `/brand-voice` read it
 first and do not overwrite it.
