@@ -652,8 +652,15 @@ build_is_current() {
 # Prints the start time of process $1, or nothing.
 proc_start() { ps -p "$1" -o lstart= 2>/dev/null | sed 's/^ *//; s/ *$//' || true; }
 
+# Creates the lock directory with a single mkdir(2) call, which fails when the directory exists.
+# The mkdir command is not used: the uutils mkdir that Ubuntu 26.04 ships can report success
+# to two processes creating the same directory at once, so both would think they hold the lock.
 claim_lock() {
-  mkdir "$1" 2>/dev/null || return 1
+  python3 -I -c 'import os, sys
+try:
+    os.mkdir(sys.argv[1])
+except OSError:
+    sys.exit(1)' "$1" 2>/dev/null || return 1
   printf '%s\n%s\n' "$$" "$(proc_start $$)" >"$1/.pid.$$" && mv -f "$1/.pid.$$" "$1/pid"
   held_locks+=("$1")
   trap release_locks EXIT
@@ -663,7 +670,7 @@ claim_lock() {
 # under a kernel file lock (released by the kernel if the process dies), and the stale lock is
 # checked again inside it, so two launchers that both found it stale cannot both take it: the
 # second sees the first one's live lock. The stale lock is renamed aside (an atomic rename, checked
-# to be the same directory that was judged stale) before the new one is created with mkdir.
+# to be the same directory that was judged stale) before the new one is created with os.mkdir.
 takeover_lock() {
   python3 -I - "$1" "$$" "$(proc_start $$)" "${HQ_RECORDER_TAKEOVER_PAUSE:-0}" <<'PY'
 import fcntl, os, shutil, subprocess, sys, time, uuid
