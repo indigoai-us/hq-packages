@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Two starts at the same moment open one app again on Ubuntu 26.04, and two builds at the
+  same moment no longer build into the same app. The start and build locks used the `mkdir`
+  command, and the uutils `mkdir` on Ubuntu 26.04 can tell two processes at once that each
+  created the same directory. The locks now use a single `os.mkdir` call. A regression check
+  repeats the two-starts case with a `mkdir` that always reports success.
 - Integrate CLT-compatible state wrappers with bounded, cached feature-based developer-tool selection; preserve installed-Xcode fallback, diagnose macOS/SDK prerequisites accurately, and document tool update discovery.
 
 

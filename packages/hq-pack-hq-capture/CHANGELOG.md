@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Two starts at the same moment open one HQ Capture again on Ubuntu 26.04, and two
+  builds at the same moment no longer build into the same app. The launcher's start and
+  build locks were created with the `mkdir` command, and the uutils `mkdir` that Ubuntu
+  26.04 ships can tell two processes at once that each created the same directory. The
+  locks now use a single `os.mkdir` call, which only one process can win. A regression
+  check repeats the two-starts case with a `mkdir` that always reports success.
+
 ## 0.1.4
 
 - Preserve feature-based developer-tool fallback: try `$DEVELOPER_DIR`,
