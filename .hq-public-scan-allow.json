@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "path": "packages/hq-pack-boring-marketing/skills/brand-voice/references/ai-tells.md",
+      "rule": "deny/term",
+      "pattern": "To[n]al flatline: identical energy",
+      "reason": "Upstream MIT text; the flagged word is the ordinary English adjective for writing tone, not a company name."
+    },
+    {
+      "path": "packages/hq-pack-boring-marketing/skills/creative/references/VISUAL_INTELLIGENCE.md",
+      "rule": "deny/term",
+      "pattern": "grain, and to[n]al characteristics",
+      "reason": "Upstream MIT text; the flagged word describes photographic tone, not a company name."
+    },
+    {
+      "path": "packages/hq-pack-boring-marketing/skills/start-here/references/schemas/voice-profile.schema.json",
+      "rule": "deny/term",
+      "pattern": "\\b[Tt]o[n]al (positioning across|dimensions\\. Each|dimension, e\\.g\\.)",
+      "reason": "Upstream MIT JSON schema; the flagged word is the ordinary English adjective for voice tone, not a company name."
+    },
+    {
+      "path": "packages/hq-pack-boring-marketing/skills/meta-ads/scripts/campaign.example.json",
+      "rule": "biz/money",
+      "pattern": "3000 = \\$30\\.00/day",
+      "reason": "Upstream sample config explaining budget units for a fictional sample business."
+    },
+    {
+      "path": "packages/hq-pack-boring-marketing/skills/start-here/references/schemas/ad-matrix.schema.json",
+      "rule": "biz/money",
+      "pattern": "e\\.g\\. '\\$50/cell'",
+      "reason": "Upstream schema field description with an illustrative example value."
+    },
+    {
+      "path": "packages/hq-pack-boring-marketing/skills/start-here/references/schemas/campaign-brief.schema.json",
+      "rule": "biz/money",
+      "pattern": "'42%', '1,247', '\\$12,500'",
+      "reason": "Upstream schema field description with illustrative example values."
+    },
+    {
+      "path": "packages/hq-pack-boring-marketing/skills/site-audit/scripts/crawl_audit.py",
+      "rule": "pii/ipv4",
+      "pattern": "Chrome/131\\.0\\.0\\.0 Safari",
+      "reason": "Browser version string inside a public user-agent, not an IP address."
+    },
+    {
+      "path": "packages/hq-pack-boring-marketing/skills/site-audit/scripts/crawl_audit.py",
+      "rule": "pii/email",
+      "pattern": "compatible; Bytespider; spider-feedback@bytedance\\.com",
+      "reason": "Public contact address inside ByteDance's published crawler user-agent string."
+    }
+  ]
+}
