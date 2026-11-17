@@ -567,6 +567,33 @@ expect "the other start reports already-open or busy" "$(grep -cE '"error": "(al
 [ ! -e "$HQ_RECORDER_HOME/.start.lock" ] && pass=$((pass + 1)) \
   || { echo "FAIL: start should release its lock" >&2; exit 1; }
 check "stop closes the one app" 'j["state"]=="closed"' "$(run stop)"
+
+# The start lock must not depend on the mkdir command failing for an existing directory. Ubuntu
+# 26.04's uutils mkdir can report success to two processes creating the same directory at once.
+# This mkdir always reports success (the worst case of that race), so a lock built on it lets
+# both starts through every time.
+racy_bin="$tmp/racy-mkdir-bin"
+mkdir -p "$racy_bin"
+real_mkdir="$(command -v mkdir)"
+cat >"$racy_bin/mkdir" <<EOF
+#!/usr/bin/env bash
+args=()
+for a in "\$@"; do [ "\$a" = "-p" ] || args+=("\$a"); done
+exec "$real_mkdir" -p "\${args[@]}"
+EOF
+chmod +x "$racy_bin/mkdir"
+expect "the racy mkdir succeeds on an existing directory" \
+  "$(PATH="$racy_bin:$PATH" mkdir "$racy_bin" && echo succeeded)" "succeeded"
+before="$(launches)"
+PATH="$racy_bin:$PATH" bash "$R" start >"$tmp/start1.out" 2>/dev/null & s1=$!
+PATH="$racy_bin:$PATH" bash "$R" start >"$tmp/start2.out" 2>/dev/null & s2=$!
+wait "$s1" || true; wait "$s2" || true
+expect "two starts at once launch exactly one app when mkdir is not exclusive" "$(( $(launches) - before ))" "1"
+both="$(cat "$tmp/start1.out" "$tmp/start2.out")"
+expect "with a racy mkdir, one of two starts opens the app" "$(grep -c '"state": "awaiting-start"' <<<"$both")" "1"
+expect "with a racy mkdir, the other start reports already-open or busy" "$(grep -cE '"error": "(already-open|busy)"' <<<"$both")" "1"
+check "stop closes the one app opened with a racy mkdir" 'j["state"]=="closed"' "$(run stop)"
+
 mkdir -p "$HQ_RECORDER_HOME/.start.lock"
 sleep 60 & holder=$!
 echo "$holder" >"$HQ_RECORDER_HOME/.start.lock/pid"
